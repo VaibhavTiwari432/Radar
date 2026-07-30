@@ -1,0 +1,8 @@
+# Core (everything in the scaffold + all tests + the demo run on just this):
+numpy>=1.24
+
+# --- Optional extras, only for the learned-policy upgrade path (Rung 1-2) ---
+# torch>=2.1          # train/distil a policy and export ONNX (cogengine/policy.py)
+# gymnasium>=0.29     # if you want a standard RL env wrapper around cogengine/env.py
+# onnx>=1.15          # ONNX tooling for the MATLAB importNetworkFromONNX seam
+# matplotlib>=3.7     # plots for the benchmark sweep

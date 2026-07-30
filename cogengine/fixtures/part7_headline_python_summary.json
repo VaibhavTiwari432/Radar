@@ -1,0 +1,1957 @@
+{
+  "fs": 3200000.0,
+  "pulse_width_s": 1.2e-05,
+  "bandwidth_hz": 2000000.0,
+  "prf_hz": 50000.0,
+  "cfar_pfa": 0.0001,
+  "cfar_num_training": 20.0,
+  "cfar_num_guard": 4.0,
+  "mofn_m": 3.0,
+  "mofn_n": 5.0,
+  "frame_interval_s": 1.0,
+  "js_db_points": [
+    -6.0,
+    -3.0,
+    0.0,
+    3.0,
+    6.0,
+    9.0,
+    12.0
+  ],
+  "n_seeds": 6,
+  "intercept_noise_amplitude": 2.0,
+  "trials": [
+    {
+      "index": 0,
+      "js_db": -6.0,
+      "seed": 0,
+      "condition": "baseline",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 1,
+      "js_db": -6.0,
+      "seed": 0,
+      "condition": "engine",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -7.926291797478113,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": 3147.37195519375,
+        "blade_len_m": 0.2975996909318428
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 2,
+      "js_db": -6.0,
+      "seed": 1,
+      "condition": "baseline",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 3,
+      "js_db": -6.0,
+      "seed": 1,
+      "condition": "engine",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -29.139688696009813,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": 3924.5816191712884,
+        "blade_len_m": 0.19638965953764487
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 4,
+      "js_db": -6.0,
+      "seed": 2,
+      "condition": "baseline",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 5,
+      "js_db": -6.0,
+      "seed": 2,
+      "condition": "engine",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 52.02826697986904,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": 3431.3976777637,
+        "blade_len_m": 0.2595913468478902
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 6,
+      "js_db": -6.0,
+      "seed": 3,
+      "condition": "baseline",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 7,
+      "js_db": -6.0,
+      "seed": 3,
+      "condition": "engine",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -39.08394164787935,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": 2921.4986833737053,
+        "blade_len_m": 0.2991684660544302
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 8,
+      "js_db": -6.0,
+      "seed": 4,
+      "condition": "baseline",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 9,
+      "js_db": -6.0,
+      "seed": 4,
+      "condition": "engine",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -20.964674290269002,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": 5209.850087237016,
+        "blade_len_m": 0.31280473057918556
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 10,
+      "js_db": -6.0,
+      "seed": 5,
+      "condition": "baseline",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 11,
+      "js_db": -6.0,
+      "seed": 5,
+      "condition": "engine",
+      "amp_scale": 0.5011872336272722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -120.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.5011872336272722,
+        "rpm": 2126.116057117355,
+        "blade_len_m": 0.27106106048407735
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 12,
+      "js_db": -3.0,
+      "seed": 0,
+      "condition": "baseline",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 13,
+      "js_db": -3.0,
+      "seed": 0,
+      "condition": "engine",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 44.59700320216915,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": 3427.4288411236357,
+        "blade_len_m": 0.4
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 14,
+      "js_db": -3.0,
+      "seed": 1,
+      "condition": "baseline",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 15,
+      "js_db": -3.0,
+      "seed": 1,
+      "condition": "engine",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 29.337983827704967,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": 6000.0,
+        "blade_len_m": 0.3247117098929732
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 16,
+      "js_db": -3.0,
+      "seed": 2,
+      "condition": "baseline",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 17,
+      "js_db": -3.0,
+      "seed": 2,
+      "condition": "engine",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 38.43445401805351,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": 3213.2313166761264,
+        "blade_len_m": 0.24153631645732798
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 18,
+      "js_db": -3.0,
+      "seed": 3,
+      "condition": "baseline",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 19,
+      "js_db": -3.0,
+      "seed": 3,
+      "condition": "engine",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -65.13554367820487,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": 3192.3062686444205,
+        "blade_len_m": 0.1858066296833587
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 20,
+      "js_db": -3.0,
+      "seed": 4,
+      "condition": "baseline",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 21,
+      "js_db": -3.0,
+      "seed": 4,
+      "condition": "engine",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 89.07043749274267,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": 4218.239616380334,
+        "blade_len_m": 0.158582327616841
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 22,
+      "js_db": -3.0,
+      "seed": 5,
+      "condition": "baseline",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 23,
+      "js_db": -3.0,
+      "seed": 5,
+      "condition": "engine",
+      "amp_scale": 0.7079457843841379,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -4.61033087418536,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 0.7079457843841379,
+        "rpm": 3020.9282361836913,
+        "blade_len_m": 0.28573012374915113
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 24,
+      "js_db": 0.0,
+      "seed": 0,
+      "condition": "baseline",
+      "amp_scale": 1.0,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 25,
+      "js_db": 0.0,
+      "seed": 0,
+      "condition": "engine",
+      "amp_scale": 1.0,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -21.719245652194115,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": 2314.615710392105,
+        "blade_len_m": 0.3421112146741147
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 26,
+      "js_db": 0.0,
+      "seed": 1,
+      "condition": "baseline",
+      "amp_scale": 1.0,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 27,
+      "js_db": 0.0,
+      "seed": 1,
+      "condition": "engine",
+      "amp_scale": 1.0,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -41.81202822536566,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": 1500.0,
+        "blade_len_m": 0.18716884933354297
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 28,
+      "js_db": 0.0,
+      "seed": 2,
+      "condition": "baseline",
+      "amp_scale": 1.0,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 29,
+      "js_db": 0.0,
+      "seed": 2,
+      "condition": "engine",
+      "amp_scale": 1.0,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -32.51320827086917,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": 4655.997739996179,
+        "blade_len_m": 0.326761888974267
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 30,
+      "js_db": 0.0,
+      "seed": 3,
+      "condition": "baseline",
+      "amp_scale": 1.0,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 31,
+      "js_db": 0.0,
+      "seed": 3,
+      "condition": "engine",
+      "amp_scale": 1.0,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 10.53617248749885,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": 2942.7987587040366,
+        "blade_len_m": 0.1998467400009546
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 32,
+      "js_db": 0.0,
+      "seed": 4,
+      "condition": "baseline",
+      "amp_scale": 1.0,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 33,
+      "js_db": 0.0,
+      "seed": 4,
+      "condition": "engine",
+      "amp_scale": 1.0,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 22.71072867042318,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": 1693.9501062381396,
+        "blade_len_m": 0.2865469897089936
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 34,
+      "js_db": 0.0,
+      "seed": 5,
+      "condition": "baseline",
+      "amp_scale": 1.0,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 35,
+      "js_db": 0.0,
+      "seed": 5,
+      "condition": "engine",
+      "amp_scale": 1.0,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 83.75605066353499,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.0,
+        "rpm": 2689.2162694637627,
+        "blade_len_m": 0.33267056380146365
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 36,
+      "js_db": 3.0,
+      "seed": 0,
+      "condition": "baseline",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 37,
+      "js_db": 3.0,
+      "seed": 0,
+      "condition": "engine",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -28.692410161539737,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": 3397.5501791983497,
+        "blade_len_m": 0.2754252188271702
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 38,
+      "js_db": 3.0,
+      "seed": 1,
+      "condition": "baseline",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 39,
+      "js_db": 3.0,
+      "seed": 1,
+      "condition": "engine",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -64.351758536069,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": 1500.0,
+        "blade_len_m": 0.30700779786100835
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 40,
+      "js_db": 3.0,
+      "seed": 2,
+      "condition": "baseline",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 41,
+      "js_db": 3.0,
+      "seed": 2,
+      "condition": "engine",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 44.955414778324126,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": 3491.513487256256,
+        "blade_len_m": 0.30308693859868646
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 42,
+      "js_db": 3.0,
+      "seed": 3,
+      "condition": "baseline",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 43,
+      "js_db": 3.0,
+      "seed": 3,
+      "condition": "engine",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 70.34973234568355,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": 3149.565709322528,
+        "blade_len_m": 0.2895753351620791
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 44,
+      "js_db": 3.0,
+      "seed": 4,
+      "condition": "baseline",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 45,
+      "js_db": 3.0,
+      "seed": 4,
+      "condition": "engine",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -90.35782623662975,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": 5520.740980960738,
+        "blade_len_m": 0.24713240626480426
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 46,
+      "js_db": 3.0,
+      "seed": 5,
+      "condition": "baseline",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 47,
+      "js_db": 3.0,
+      "seed": 5,
+      "condition": "engine",
+      "amp_scale": 1.4125375446227544,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -35.30441695559096,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.4125375446227544,
+        "rpm": 4498.479428492181,
+        "blade_len_m": 0.38257617653940346
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 48,
+      "js_db": 6.0,
+      "seed": 0,
+      "condition": "baseline",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 49,
+      "js_db": 6.0,
+      "seed": 0,
+      "condition": "engine",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 55.74825005842776,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": 5724.7364406916295,
+        "blade_len_m": 0.21569465149325168
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 50,
+      "js_db": 6.0,
+      "seed": 1,
+      "condition": "baseline",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 51,
+      "js_db": 6.0,
+      "seed": 1,
+      "condition": "engine",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 73.52241156048865,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": 2850.745209833451,
+        "blade_len_m": 0.15
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 52,
+      "js_db": 6.0,
+      "seed": 2,
+      "condition": "baseline",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 53,
+      "js_db": 6.0,
+      "seed": 2,
+      "condition": "engine",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -83.85555225744886,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": 2562.986736762704,
+        "blade_len_m": 0.3215993865758743
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 54,
+      "js_db": 6.0,
+      "seed": 3,
+      "condition": "baseline",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 55,
+      "js_db": 6.0,
+      "seed": 3,
+      "condition": "engine",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 9.183523732484547,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": 2536.282171363729,
+        "blade_len_m": 0.29620628146487304
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 56,
+      "js_db": 6.0,
+      "seed": 4,
+      "condition": "baseline",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 57,
+      "js_db": 6.0,
+      "seed": 4,
+      "condition": "engine",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -8.160324484460238,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": 2160.062001715983,
+        "blade_len_m": 0.3019930041779534
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 58,
+      "js_db": 6.0,
+      "seed": 5,
+      "condition": "baseline",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 59,
+      "js_db": 6.0,
+      "seed": 5,
+      "condition": "engine",
+      "amp_scale": 1.9952623149688795,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -22.748797621745243,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 1.9952623149688795,
+        "rpm": 3339.332918009967,
+        "blade_len_m": 0.3449264773915579
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 60,
+      "js_db": 9.0,
+      "seed": 0,
+      "condition": "baseline",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 61,
+      "js_db": 9.0,
+      "seed": 0,
+      "condition": "engine",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 53.50552874549813,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": 2854.1512971521483,
+        "blade_len_m": 0.15106410411703397
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 62,
+      "js_db": 9.0,
+      "seed": 1,
+      "condition": "baseline",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 63,
+      "js_db": 9.0,
+      "seed": 1,
+      "condition": "engine",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 79.79383631976341,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": 5219.878705891992,
+        "blade_len_m": 0.2956344091490476
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 64,
+      "js_db": 9.0,
+      "seed": 2,
+      "condition": "baseline",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 65,
+      "js_db": 9.0,
+      "seed": 2,
+      "condition": "engine",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 96.81844443738615,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": 5271.924015991034,
+        "blade_len_m": 0.4
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 66,
+      "js_db": 9.0,
+      "seed": 3,
+      "condition": "baseline",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 67,
+      "js_db": 9.0,
+      "seed": 3,
+      "condition": "engine",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -78.41658486883371,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": 2626.548763535525,
+        "blade_len_m": 0.3221942497700299
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 68,
+      "js_db": 9.0,
+      "seed": 4,
+      "condition": "baseline",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 69,
+      "js_db": 9.0,
+      "seed": 4,
+      "condition": "engine",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -84.40541198867628,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": 3066.5199379478227,
+        "blade_len_m": 0.3285515394077215
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 70,
+      "js_db": 9.0,
+      "seed": 5,
+      "condition": "baseline",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 71,
+      "js_db": 9.0,
+      "seed": 5,
+      "condition": "engine",
+      "amp_scale": 2.8183829312644537,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -16.22299802507395,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 2.8183829312644537,
+        "rpm": 1956.9181675395446,
+        "blade_len_m": 0.3211765095483482
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 72,
+      "js_db": 12.0,
+      "seed": 0,
+      "condition": "baseline",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 73,
+      "js_db": 12.0,
+      "seed": 0,
+      "condition": "engine",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -43.94792846938715,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": 2965.1936326506084,
+        "blade_len_m": 0.24643188661026544
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 74,
+      "js_db": 12.0,
+      "seed": 1,
+      "condition": "baseline",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 75,
+      "js_db": 12.0,
+      "seed": 1,
+      "condition": "engine",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -51.25966771702547,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": 3790.1924601253445,
+        "blade_len_m": 0.218517038734286
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 76,
+      "js_db": 12.0,
+      "seed": 2,
+      "condition": "baseline",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 77,
+      "js_db": 12.0,
+      "seed": 2,
+      "condition": "engine",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -23.665401466429923,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": 5480.749925916221,
+        "blade_len_m": 0.3434139026292578
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 78,
+      "js_db": 12.0,
+      "seed": 3,
+      "condition": "baseline",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 79,
+      "js_db": 12.0,
+      "seed": 3,
+      "condition": "engine",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 30.366217291291186,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": 5478.348684919768,
+        "blade_len_m": 0.2525538513072576
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 80,
+      "js_db": 12.0,
+      "seed": 4,
+      "condition": "baseline",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 81,
+      "js_db": 12.0,
+      "seed": 4,
+      "condition": "engine",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": -29.574130377553224,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": 3819.7017936540637,
+        "blade_len_m": 0.26626221735917305
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 82,
+      "js_db": 12.0,
+      "seed": 5,
+      "condition": "baseline",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": null,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 0.0,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": null,
+        "blade_len_m": null
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 0,
+        "flagged_decoys": 1,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    },
+    {
+      "index": 83,
+      "js_db": 12.0,
+      "seed": 5,
+      "condition": "engine",
+      "amp_scale": 3.9810717055349722,
+      "cem_best_score": 1.0,
+      "phantom": {
+        "range_m": 1800.0,
+        "radial_vel_mps": 76.31534710491636,
+        "rcs_dbsm": 0.0,
+        "amp_scale": 3.9810717055349722,
+        "rpm": 3175.2903053924233,
+        "blade_len_m": 0.21748253928726446
+      },
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "degraded_events": 0
+      },
+      "judge_export_degraded_events": 0
+    }
+  ]
+}

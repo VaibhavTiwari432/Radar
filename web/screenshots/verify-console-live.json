@@ -1,0 +1,47 @@
+[
+  {
+    "name": "page loads and mounts",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "AC-6 no offline banner while the judge is up",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "AC-6 judge stayed online through the run",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "AC-7 RUN produced exactly N=3 phantom rows",
+    "pass": true,
+    "detail": "got 3 in 196.8s [flagged,flagged,flagged]"
+  },
+  {
+    "name": "AC-7 3D canvas rendered",
+    "pass": true,
+    "detail": "1042x590"
+  },
+  {
+    "name": "judge verdict panel populated",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "AC-9 bestScore absent from the rendered DOM",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "zero page errors",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "zero failed requests",
+    "pass": true,
+    "detail": ""
+  }
+]

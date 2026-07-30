@@ -1,0 +1,124 @@
+{
+  "fs": 3200000.0,
+  "pulse_width_s": 1.2e-05,
+  "bandwidth_hz": 2000000.0,
+  "prf_hz": 50000.0,
+  "cfar_pfa": 0.0001,
+  "cfar_num_training": 20,
+  "cfar_num_guard": 4,
+  "mofn_m": 3,
+  "mofn_n": 5,
+  "frame_interval_s": 1.0,
+  "intercept_noise_amplitude": 2.0,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "per_seed": [
+    {
+      "seed": 1,
+      "phantom": {
+        "range_m": 1890.0713056356324,
+        "radial_vel_mps": 49.2970886100695,
+        "rcs_dbsm": -3.3478146190830644,
+        "amp_scale": 1.1097374223461842,
+        "rpm": 4768.525350007258,
+        "blade_len_m": 0.3028984107727507
+      },
+      "cem_best_score": 1.0,
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "eccm_label": "real",
+        "degraded_events": []
+      },
+      "judge_export_degraded_events": []
+    },
+    {
+      "seed": 2,
+      "phantom": {
+        "range_m": 1521.0174397226965,
+        "radial_vel_mps": 46.42839520365969,
+        "rcs_dbsm": -3.5939466510117537,
+        "amp_scale": 1.7654050181289542,
+        "rpm": 4849.76338251679,
+        "blade_len_m": 0.255590215833803
+      },
+      "cem_best_score": 1.0,
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "eccm_label": "real",
+        "degraded_events": []
+      },
+      "judge_export_degraded_events": []
+    },
+    {
+      "seed": 3,
+      "phantom": {
+        "range_m": 2800.0,
+        "radial_vel_mps": -120.0,
+        "rcs_dbsm": -2.909505766371106,
+        "amp_scale": 1.7532015946380615,
+        "rpm": 3240.769546375748,
+        "blade_len_m": 0.2615251773068897
+      },
+      "cem_best_score": 1.0,
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "eccm_label": "real",
+        "degraded_events": []
+      },
+      "judge_export_degraded_events": []
+    },
+    {
+      "seed": 4,
+      "phantom": {
+        "range_m": 1341.5148660635707,
+        "radial_vel_mps": -10.483037539546629,
+        "rcs_dbsm": 3.3186199569559847,
+        "amp_scale": 2.826754281103223,
+        "rpm": 1903.4280435922724,
+        "blade_len_m": 0.27467479598925426
+      },
+      "cem_best_score": 1.0,
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "eccm_label": "real",
+        "degraded_events": []
+      },
+      "judge_export_degraded_events": []
+    },
+    {
+      "seed": 5,
+      "phantom": {
+        "range_m": 1396.0439737050722,
+        "radial_vel_mps": -47.0868213206567,
+        "rcs_dbsm": -1.2562711463270442,
+        "amp_scale": 3.680435162588755,
+        "rpm": 4056.864872825312,
+        "blade_len_m": 0.19791695849807678
+      },
+      "cem_best_score": 1.0,
+      "twin_feedback": {
+        "confirmed_tracks": 1,
+        "false_tracks_surviving": 1,
+        "flagged_decoys": 0,
+        "eccm_label": "real",
+        "degraded_events": []
+      },
+      "judge_export_degraded_events": []
+    }
+  ],
+  "fallback_trigger_count": 0,
+  "fallback_trigger_denominator_frames": 80
+}

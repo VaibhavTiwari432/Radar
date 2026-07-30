@@ -1,0 +1,77 @@
+[
+  { "frame": 1, "t": 0, "phase": "ENGINE_ACTIVE",
+    "synth": { "phantoms": [{ "id": "P1", "range": { "value": 1500, "unit": "m", "provenance": "DERIVED" }, "radialVelMps": 0 }] },
+    "truth": { "phantoms": [{ "id": "P1", "pos": [1500, 0, 0] }] },
+    "radar": {
+      "identity": {
+        "fs": { "value": 3200000, "unit": "Hz", "provenance": "DERIVED" },
+        "priUs": { "value": 20, "unit": "us", "provenance": "DERIVED" },
+        "rangeCellM": { "value": 46.8425715625, "unit": "m", "provenance": "DERIVED" },
+        "unambigRangeM": { "value": 2997.9245800000003, "unit": "m", "provenance": "DERIVED" }
+      },
+      "detection": { "cfarType": "CA", "designPfa": { "value": 0.0001, "provenance": "ASSUMED" }, "detectionsThisFrame": 1 },
+      "tracker": { "filter": "KalmanCV", "confirmMofN": [3, 5], "deleteMofN": [5, 5] },
+      "tracks": [{ "id": "T01", "state": "CONFIRMED", "ageFrames": 5, "hits": 4, "misses": 0, "eccmVerdict": "REAL", "rangeEst": 1500, "ampRangeSlopeDbDecade": -40.1, "dopplerResidualMps": 0.4 }],
+      "scoreboard": { "confirmedFalseTracks": { "value": 0, "provenance": "MEASURED" }, "deceptionRate": { "value": 0, "provenance": "MEASURED" } }
+    } },
+  { "frame": 2, "t": 1, "phase": "ENGINE_ACTIVE",
+    "synth": { "phantoms": [{ "id": "P1", "range": { "value": 1500, "unit": "m", "provenance": "DERIVED" }, "radialVelMps": 0 }] },
+    "truth": { "phantoms": [{ "id": "P1", "pos": [1500, 0, 0] }] },
+    "radar": {
+      "identity": { "fs": { "value": 3200000, "unit": "Hz", "provenance": "DERIVED" }, "priUs": { "value": 20, "unit": "us", "provenance": "DERIVED" }, "rangeCellM": { "value": 46.8425715625, "unit": "m", "provenance": "DERIVED" }, "unambigRangeM": { "value": 2997.9245800000003, "unit": "m", "provenance": "DERIVED" } },
+      "detection": { "cfarType": "CA", "designPfa": { "value": 0.0001, "provenance": "ASSUMED" }, "detectionsThisFrame": 0 },
+      "tracker": { "filter": "KalmanCV", "confirmMofN": [3, 5], "deleteMofN": [5, 5] },
+      "tracks": [{ "id": "T01", "state": "COASTING", "ageFrames": 6, "hits": 4, "misses": 1, "eccmVerdict": "UNSCREENED", "rangeEst": 1500, "ampRangeSlopeDbDecade": null, "dopplerResidualMps": null }],
+      "scoreboard": { "confirmedFalseTracks": { "value": 0, "provenance": "MEASURED" }, "deceptionRate": { "value": 0, "provenance": "MEASURED" } }
+    } },
+  { "frame": 3, "t": 2, "phase": "ENGINE_ACTIVE",
+    "synth": { "phantoms": [{ "id": "P1", "range": { "value": 1500, "unit": "m", "provenance": "DERIVED" }, "radialVelMps": 0 }] },
+    "truth": { "phantoms": [{ "id": "P1", "pos": [1500, 0, 0] }] },
+    "radar": {
+      "identity": { "fs": { "value": 3200000, "unit": "Hz", "provenance": "DERIVED" }, "priUs": { "value": 20, "unit": "us", "provenance": "DERIVED" }, "rangeCellM": { "value": 46.8425715625, "unit": "m", "provenance": "DERIVED" }, "unambigRangeM": { "value": 2997.9245800000003, "unit": "m", "provenance": "DERIVED" } },
+      "detection": { "cfarType": "CA", "designPfa": { "value": 0.0001, "provenance": "ASSUMED" }, "detectionsThisFrame": 0 },
+      "tracker": { "filter": "KalmanCV", "confirmMofN": [3, 5], "deleteMofN": [5, 5] },
+      "tracks": [{ "id": "T01", "state": "COASTING", "ageFrames": 7, "hits": 4, "misses": 2, "eccmVerdict": "UNSCREENED", "rangeEst": 1500, "ampRangeSlopeDbDecade": null, "dopplerResidualMps": null }],
+      "scoreboard": { "confirmedFalseTracks": { "value": 0, "provenance": "MEASURED" }, "deceptionRate": { "value": 0, "provenance": "MEASURED" } }
+    } },
+  { "frame": 4, "t": 3, "phase": "ENGINE_ACTIVE",
+    "synth": { "phantoms": [{ "id": "P1", "range": { "value": 1500, "unit": "m", "provenance": "DERIVED" }, "radialVelMps": 0 }] },
+    "truth": { "phantoms": [{ "id": "P1", "pos": [1500, 0, 0] }] },
+    "radar": {
+      "identity": { "fs": { "value": 3200000, "unit": "Hz", "provenance": "DERIVED" }, "priUs": { "value": 20, "unit": "us", "provenance": "DERIVED" }, "rangeCellM": { "value": 46.8425715625, "unit": "m", "provenance": "DERIVED" }, "unambigRangeM": { "value": 2997.9245800000003, "unit": "m", "provenance": "DERIVED" } },
+      "detection": { "cfarType": "CA", "designPfa": { "value": 0.0001, "provenance": "ASSUMED" }, "detectionsThisFrame": 0 },
+      "tracker": { "filter": "KalmanCV", "confirmMofN": [3, 5], "deleteMofN": [5, 5] },
+      "tracks": [{ "id": "T01", "state": "COASTING", "ageFrames": 8, "hits": 4, "misses": 3, "eccmVerdict": "UNSCREENED", "rangeEst": 1500, "ampRangeSlopeDbDecade": null, "dopplerResidualMps": null }],
+      "scoreboard": { "confirmedFalseTracks": { "value": 0, "provenance": "MEASURED" }, "deceptionRate": { "value": 0, "provenance": "MEASURED" } }
+    } },
+  { "frame": 5, "t": 4, "phase": "ENGINE_ACTIVE",
+    "synth": { "phantoms": [{ "id": "P1", "range": { "value": 1500, "unit": "m", "provenance": "DERIVED" }, "radialVelMps": 0 }] },
+    "truth": { "phantoms": [{ "id": "P1", "pos": [1500, 0, 0] }] },
+    "radar": {
+      "identity": { "fs": { "value": 3200000, "unit": "Hz", "provenance": "DERIVED" }, "priUs": { "value": 20, "unit": "us", "provenance": "DERIVED" }, "rangeCellM": { "value": 46.8425715625, "unit": "m", "provenance": "DERIVED" }, "unambigRangeM": { "value": 2997.9245800000003, "unit": "m", "provenance": "DERIVED" } },
+      "detection": { "cfarType": "CA", "designPfa": { "value": 0.0001, "provenance": "ASSUMED" }, "detectionsThisFrame": 0 },
+      "tracker": { "filter": "KalmanCV", "confirmMofN": [3, 5], "deleteMofN": [5, 5] },
+      "tracks": [{ "id": "T01", "state": "COASTING", "ageFrames": 9, "hits": 4, "misses": 4, "eccmVerdict": "UNSCREENED", "rangeEst": 1500, "ampRangeSlopeDbDecade": null, "dopplerResidualMps": null }],
+      "scoreboard": { "confirmedFalseTracks": { "value": 0, "provenance": "MEASURED" }, "deceptionRate": { "value": 0, "provenance": "MEASURED" } }
+    } },
+  { "frame": 6, "t": 5, "phase": "ENGINE_ACTIVE",
+    "synth": { "phantoms": [{ "id": "P1", "range": { "value": 1500, "unit": "m", "provenance": "DERIVED" }, "radialVelMps": 0 }] },
+    "truth": { "phantoms": [{ "id": "P1", "pos": [1500, 0, 0] }] },
+    "radar": {
+      "identity": { "fs": { "value": 3200000, "unit": "Hz", "provenance": "DERIVED" }, "priUs": { "value": 20, "unit": "us", "provenance": "DERIVED" }, "rangeCellM": { "value": 46.8425715625, "unit": "m", "provenance": "DERIVED" }, "unambigRangeM": { "value": 2997.9245800000003, "unit": "m", "provenance": "DERIVED" } },
+      "detection": { "cfarType": "CA", "designPfa": { "value": 0.0001, "provenance": "ASSUMED" }, "detectionsThisFrame": 0 },
+      "tracker": { "filter": "KalmanCV", "confirmMofN": [3, 5], "deleteMofN": [5, 5] },
+      "tracks": [{ "id": "T01", "state": "COASTING", "ageFrames": 10, "hits": 4, "misses": 5, "eccmVerdict": "UNSCREENED", "rangeEst": 1500, "ampRangeSlopeDbDecade": null, "dopplerResidualMps": null }],
+      "scoreboard": { "confirmedFalseTracks": { "value": 0, "provenance": "MEASURED" }, "deceptionRate": { "value": 0, "provenance": "MEASURED" } }
+    } },
+  { "frame": 7, "t": 6, "phase": "ENGINE_ACTIVE",
+    "synth": { "phantoms": [{ "id": "P1", "range": { "value": 1500, "unit": "m", "provenance": "DERIVED" }, "radialVelMps": 0 }] },
+    "truth": { "phantoms": [{ "id": "P1", "pos": [1500, 0, 0] }] },
+    "radar": {
+      "identity": { "fs": { "value": 3200000, "unit": "Hz", "provenance": "DERIVED" }, "priUs": { "value": 20, "unit": "us", "provenance": "DERIVED" }, "rangeCellM": { "value": 46.8425715625, "unit": "m", "provenance": "DERIVED" }, "unambigRangeM": { "value": 2997.9245800000003, "unit": "m", "provenance": "DERIVED" } },
+      "detection": { "cfarType": "CA", "designPfa": { "value": 0.0001, "provenance": "ASSUMED" }, "detectionsThisFrame": 0 },
+      "tracker": { "filter": "KalmanCV", "confirmMofN": [3, 5], "deleteMofN": [5, 5] },
+      "tracks": [{ "id": "T01", "state": "DELETED", "ageFrames": null, "hits": null, "misses": null, "eccmVerdict": "UNSCREENED", "rangeEst": null, "ampRangeSlopeDbDecade": null, "dopplerResidualMps": null }],
+      "scoreboard": { "confirmedFalseTracks": { "value": 0, "provenance": "MEASURED" }, "deceptionRate": { "value": 0, "provenance": "MEASURED" } }
+    } }
+]

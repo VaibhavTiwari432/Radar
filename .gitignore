@@ -1,0 +1,8 @@
+# Large dataset — download via data/README.md, never commit
+data/*.h5
+data/*.zip
+# Generated artifacts
+results/*
+!results/.gitkeep
+*.asv
+*.mat

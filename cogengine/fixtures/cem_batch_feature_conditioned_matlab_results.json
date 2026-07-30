@@ -1,0 +1,37 @@
+[
+  {
+    "seed": 1,
+    "confirmed_tracks": 1,
+    "false_tracks_surviving": 1,
+    "flagged_decoys": 0,
+    "eccm_label": "real"
+  },
+  {
+    "seed": 2,
+    "confirmed_tracks": 1,
+    "false_tracks_surviving": 1,
+    "flagged_decoys": 0,
+    "eccm_label": "real"
+  },
+  {
+    "seed": 3,
+    "confirmed_tracks": 1,
+    "false_tracks_surviving": 1,
+    "flagged_decoys": 0,
+    "eccm_label": "real"
+  },
+  {
+    "seed": 4,
+    "confirmed_tracks": 1,
+    "false_tracks_surviving": 1,
+    "flagged_decoys": 0,
+    "eccm_label": "real"
+  },
+  {
+    "seed": 5,
+    "confirmed_tracks": 1,
+    "false_tracks_surviving": 1,
+    "flagged_decoys": 0,
+    "eccm_label": "real"
+  }
+]

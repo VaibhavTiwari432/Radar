@@ -1,0 +1,24 @@
+{
+  "name": "mission-simulator-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Step 11 of MISSION_SIMULATOR_UI_SPEC.md -- React+three.js pitch client. Replays an exported frame log (missionsim.exportFrameLog). Contains zero physics/detection/tracking computation by design.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "verify:no-physics": "node scripts/verify-no-physics.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.475.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "puppeteer": "^25.3.0",
+    "vite": "^5.4.11"
+  }
+}
