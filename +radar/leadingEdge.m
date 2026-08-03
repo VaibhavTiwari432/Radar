@@ -51,9 +51,25 @@ function [rangeM, edgeBin] = leadingEdge(profile, C, varargin)
 %
 %   That two-return case is NOT measured here and is the next step.
 
+%   THRESHOLD REFERENCE: NOISE, NOT PEAK -- and this is the whole design.
+%   A fraction-of-PEAK threshold cannot see a skin return hiding under a
+%   stronger repeat, because the peak IS the repeat and half of it is still
+%   far above the skin echo. Measured (experiments.drfmLatency two-return
+%   case, repeat 20 dB stronger): with a 0.5-of-peak threshold the edge
+%   error equals the full skin-to-repeat separation at every bandwidth
+%   tested, i.e. the "leading edge" tracks the repeat exactly as the peak
+%   does, and the screen is worthless. Referencing the threshold to the NOISE
+%   FLOOR instead is what a real leading-edge tracker does, and it is what
+%   lets the weak-but-EARLY return be the first thing to cross.
+%   Pass 'NoiseSigma' to use it; 'Fraction' (of peak) is retained only for
+%   the single-return precision measurement, where there is nothing to hide
+%   under and the two are equivalent.
+
     p = inputParser;
-    p.addParameter('Fraction', 0.5, @(x) isscalar(x) && x > 0 && x < 1);
-    p.addParameter('PeakBin',  [],  @(x) isempty(x) || isscalar(x));
+    p.addParameter('Fraction',   0.5, @(x) isscalar(x) && x > 0 && x < 1);
+    p.addParameter('PeakBin',    [],  @(x) isempty(x) || isscalar(x));
+    p.addParameter('NoiseSigma', [],  @(x) isempty(x) || (isscalar(x) && x > 0));
+    p.addParameter('NoiseSigmas', 5,  @(x) isscalar(x) && x > 0);
     p.parse(varargin{:});
     o = p.Results;
 
@@ -65,7 +81,17 @@ function [rangeM, edgeBin] = leadingEdge(profile, C, varargin)
         pk = profile(pkBin);
     end
 
-    thresh = o.Fraction * pk;
+    if ~isempty(o.NoiseSigma)
+        % Noise-referenced: the first sample rising clear of the floor, which
+        % is the earliest RETURN rather than the earliest part of the
+        % strongest return.
+        thresh = o.NoiseSigmas * o.NoiseSigma;
+        if thresh >= pk          % nothing clears the floor; fall back rather
+            thresh = o.Fraction * pk;   % than report a noise sample as an edge
+        end
+    else
+        thresh = o.Fraction * pk;
+    end
     % Walk BACK from the peak to the last sample below threshold, then take
     % the next one -- searching forward from bin 1 would lock onto the first
     % noise excursion anywhere in the buffer instead of this target's edge.
