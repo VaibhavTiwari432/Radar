@@ -37,8 +37,9 @@ working, not a problem with it.
 | # | Claim | Status | Source |
 |---|---|---|---|
 | C1 | The monopulse co-bearing veto is total against a single-aperture jammer | **QUALIFIED** — defeated by cross-eye at ~1° phase tolerance, and it has a **two-sided** validity window (≈40 m to `R·tan(2.866°)`) | §4.8a, §9 |
-| C2 | Waveform agility costs a stale repeater **14.2 dB** and 24× range smearing | **STANDS** | `test_waveform_agility.m` |
+| C2 | Waveform agility costs a stale repeater **14.2 dB** and 24× range smearing | **STANDS** — isolated matched-filter measurement, unaffected by the drift in C3 | `test_waveform_agility.m` |
 | C3 | Agility converts the repeater from a deceiver into an unintentional noise jammer | **STANDS** — and it is a mixed result, not a win | §7.5 |
+| C3a | The agility 2×2's **absolute** cells (10/10/10/7) | **QUALIFIED — do not quote.** Re-run 4 Aug gives 8/8/8/4; every cell including the fixed/fresh baseline fell 2/10, so the drift is upstream in the shared chain. **The pattern and the relative penalty survive and strengthen** (−40 % on stale, 0 % on fresh) | §7.5, §8.7 |
 | C4 | Innovation-whiteness is a usable discriminator | **WITHDRAWN — falsified.** ρ tracks velocity, not authenticity; would flag fast *real* aircraft | §4.7 |
 
 ## D. The assurance layer

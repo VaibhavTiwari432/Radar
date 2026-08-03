@@ -1767,14 +1767,28 @@ the more visible the bearing.** The two corrections pull in opposite directions.
 
 ### Win 2 — waveform agility, and a second-order result worth more than the first
 
-| Radar \ repeater | fresh intercept | stale intercept |
-|---|---|---|
-| fixed waveform | 10/10 deceives | 10/10 deceives |
-| **agile waveform** | 10/10 deceives | **7/10 deceives** |
+| Radar \ repeater | fresh intercept | stale intercept | **re-run 4 Aug** |
+|---|---|---|---|
+| fixed waveform | 10/10 deceives | 10/10 deceives | **8/10 · 8/10** |
+| **agile waveform** | 10/10 deceives | **7/10 deceives** | **8/10 · 4/10** |
 
 `[MEASURED]`, 10 seeds/cell. Only the bottom-right cell moves, which is exactly the
 prediction — agility alone proves nothing, since a repeater retransmitting *within* the
 dwell always holds the current pulse.
+
+> **⚠ The absolute cell values are stale; the claim they support is not.** A full-suite
+> run on 4 August measured every cell **2/10 lower** (8/8/8/4 against 10/10/10/7), which
+> fails `test_agility_only_breaks_the_stale_repeater`'s hard-coded `10`. The cause is
+> upstream drift, not this experiment — the file touches none of the assurance-layer
+> code changed that day, and the fixed/fresh baseline moving proves the shift is in the
+> shared chain rather than in agility.
+>
+> **The qualitative result survives intact and is in fact stronger.** Agility still
+> costs the *stale* repeater alone — 8/10 → 4/10, a **−40 %** penalty against the
+> published −30 % — while the *fresh* repeater is untouched at 8/10 → 8/10. The
+> published table's pattern (only the bottom-right cell moves) reproduces exactly.
+> **Quote the pattern and the relative penalty; do not quote the absolute cells until
+> the drift is root-caused.**
 
 **The second-order result is the more interesting one.** In the agile/stale cell the
 *genuine* target's own detection also falls, **10/10 → 8/10** `[MEASURED]`. That is not
@@ -2258,10 +2272,11 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
 6. **The five-rung ladder is assembled from three different scenes and seed counts**,
    not swept in one run (§4.12). This is the largest methodological weakness in §7.
 
-7. **Four MATLAB tests remain failing, named and root-caused, not excluded**
-   (corrected from three on 4 August — the fourth was found by a full-suite run and
-   had been failing undocumented; its root cause was already written up in §9, but
-   the assertion encoding the superseded expectation was never re-derived):
+7. **Five MATLAB tests remain failing, named and root-caused, not excluded**
+   (corrected from three on 4 August: a full-suite run found **two** that had been
+   failing undocumented. Both are cases where the *measurement* is sound and the
+   *assertion* or the *published constant* is stale — which is why neither showed up
+   as a suspected defect and why a periodic full run is not optional):
    - `test_angle_channel/..._genuine_targets_not_flagged` — genuine spread formation
      falsely flagged 6/8 seeds; the scene's amplitude compensation was tuned around a
      420 m walk and is now 280 m. Needs the **scene** re-derived; bears directly on the
@@ -2286,6 +2301,15 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
      assertion being re-derived afterwards. The correct form keys on the
      unambiguous sector — flagging must be low only for spreads **inside**
      `R·tan(2.866°)` — which is a scene change, not a threshold change.
+   - `test_waveform_agility/test_agility_only_breaks_the_stale_repeater` — asserts the
+     fixed/fresh cell equals a hard-coded **10/10**; it now measures **8/10**, and
+     every cell of the 2×2 has moved down by the same 2/10 (§7.5 Win 2). **The
+     qualitative claim is unaffected and is stronger**: agility still costs only the
+     *stale* repeater, 8/10 → 4/10 (−40 %, against the published −30 %), while the
+     fresh repeater holds at 8/10 → 8/10. The uniform shift including the
+     fixed/fresh **baseline** locates the cause upstream in the shared chain, not in
+     agility. Needs root-causing before the absolute cells are re-published; a test
+     that hard-codes an absolute pass count is itself the fragility here.
 
 8. **Not measured, declared future work:** full ablation matrix (P9), IMM validation
    against a discriminator that reads filter state, `J/S` sweep
