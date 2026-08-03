@@ -116,11 +116,16 @@ conformal, not a bug — but it is now measured rather than anticipated.
 Every arm lands at or above nominal. The price is that the structural arm's
 threshold rises to 0.7742 and its sets widen to 1.90 of 2 — the marginal
 predictor had been *borrowing confidence from the easy arms* and paying for it
-with the structural arm's coverage. Fitting per arm is a one-line change
-(`assurance.conformalFit` per group); it is not wired into
-`conformalValidate`'s default path, because which grouping is correct at
-deployment depends on what the engine knows about its own arm at emission
-time, and that is a design question this measurement does not settle.
+with the structural arm's coverage.
+
+> **⚠ THIS TABLE IS COMPUTED ON `inline_score`, THE PREDICTOR VARIABLE THE NEXT
+> SECTION REPLACES. It does not survive that fix and must not be quoted for the
+> current pipeline — see §6.** Kept because it is what justified calling
+> Mondrian "the repair", and the correction is more informative than a silent
+> edit. Mondrian is now wired into `conformalValidate` (pass `groupCol`), and
+> the deferral recorded here — *"which grouping is correct at deployment depends
+> on what the engine knows about its own arm at emission time"* — is resolved in
+> §6: the arm is not latent, it is the generator the engine chose to run.
 
 ### Why the belief is weak: the score is degenerate
 
@@ -489,6 +494,82 @@ score tracks observer changes. A shift in the opposite direction — one that
 the side this grid never probes and is untested. And coverage holding says the
 engine's belief stays honestly calibrated **while it loses**: the survival-rate
 cost of the mis-assumed observer, roughly two thirds, is unchanged.
+
+---
+
+## 6. Mondrian conformal — wired in, and it does not repair what §1 said it would
+
+`experiments.conformalValidate('', [], [], '', 'arm')`. Default stays marginal,
+so every number in §1 reproduces bit-for-bit (89.3 % / 1.05 / 95.3 % / structural
+78.8 %, re-verified).
+
+**The deferral in §1 is resolved rather than inherited.** It said the grouping
+was a design question because it depends on what the engine knows about its arm
+at emission time. It knows: **the arm is not a latent property to be inferred, it
+is the generator the engine itself chose to run.** Conditioning on it is
+legitimate. Two groupings that would *not* be — the observer (the engine is never
+told which radar it faces, which is the entire premise of §5) and the judge's
+verdict (the label being predicted).
+
+**What forced it:** §5 measured the structural arm under-covering at **78.0 % at
+the nominal observer, before any shift**, while the pooled number read 90.3 %.
+The dominant defect in this layer is per-**arm**, not per-observer, and no amount
+of observer pooling touches it.
+
+| | marginal | **Mondrian by arm** |
+|---|---|---|
+| held-out coverage | 89.3 % [83.4, 93.3] | **92.0 % [86.5, 95.4]** |
+| mean set size | 1.05 | **1.29** |
+| **singleton rate** | **95.3 %** | **60.0 %** |
+| structural | 78.8 % @ set 1.10 | **100.0 % @ set 2.00** |
+| shaped | 91.3 % @ set 1.04 | 84.8 % @ set 0.91 |
+| stats | 98.1 % @ set 1.00 | 90.4 % @ set 0.92 |
+
+**Mondrian "repairs" the structural arm by making it refuse to answer.** Its
+coverage goes to 100.0 % at mean set size **2.00 of 2** — the whole outcome
+space, every episode, a singleton rate of zero. That is the vacuous-coverage
+failure mode this layer has warned about since §1, now occurring for real rather
+than as a caution. Across all arms the engine's ability to commit falls from
+95.3 % of emissions to 60.0 %.
+
+### Why: the belief is not miscalibrated, it is *confidently wrong* 12 % of the time
+
+Nonconformity is `1 − score` when the judge says real and `score` when it does
+not, so a value of 1.0 means the belief was **maximally** wrong — amplitude score
+0.0 on a track the judge called real, or 1.0 on one it called decoy.
+
+| arm | frac. nonconformity ≥ 1.0 | median | qhat at α = 0.1 |
+|---|---|---|---|
+| **structural** | **12.0 %** | 0.000 | **1.0000** |
+| shaped | 3.0 % | 0.000 | 0.3690 |
+| stats | 2.0 % | 0.000 | 0.0000 |
+
+With 12 % of episodes maximally wrong, **no threshold below 1.0 can reach 90 %
+coverage on the structural arm alone.** This is arithmetic, not tuning. The
+`inline_score` table in §1 showed *zero* maximally-wrong episodes for the same
+arm — because that score is compressed into [0.5, 1.0] and cannot express a
+maximally-wrong belief. Fixing the predictor variable did not create the problem;
+it made an existing one visible.
+
+**The cliff is sharp, and it is at α = 0.15**, structural arm:
+
+| nominal coverage | 95 % | 90 % | 87.5 % | **85 %** | 80 % | 75 % |
+|---|---|---|---|---|---|---|
+| qhat | 1.0000 | 1.0000 | 1.0000 | **0.8921** | 0.8222 | 0.5665 |
+| mean set size | 2.00 | 2.00 | 2.00 | **1.30** | 1.22 | 1.07 |
+
+**So on this arm the engine must choose between a 90 % guarantee and any ability
+to commit at all — there is no threshold that gives both.** Dropping the demand
+to 85 % buys back a usable predictor (set size 1.30). That is a defensible
+engineering trade, but it is a trade, and it must be stated as one rather than
+reported as Mondrian having fixed anything.
+
+**Recommendation, stated against my own earlier position:** §1's *"Mondrian
+remains its fix"* is **withdrawn** for the current predictor. The per-arm gap is
+real and Mondrian does expose it correctly — but on the corrected predictor it
+buys coverage with abstention, which is not a repair. The 12 % maximally-wrong
+rate is the thing to fix, and it lives in the amplitude screen (§3's 8-frame
+lever arm), not in the conformal layer.
 
 ---
 

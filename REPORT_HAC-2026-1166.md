@@ -1908,9 +1908,25 @@ records from the other side (Doppler-only 100.0 %, amplitude-only 13.0 %).
 **Marginal validity is real; conditional validity is not.** One pooled threshold
 over-covers the easy arms and **under-covers `structural` at 78.8 %** `[MEASURED]`.
 Quoting "90 % coverage" *for the structural generator specifically* would be wrong.
-Per-arm (Mondrian) fitting repairs every arm to ≥ 90 % and the price is visible —
-structural's threshold rises 0.5851 → 0.7742 and its sets widen to 1.90 of 2. The
-marginal predictor had been borrowing confidence from the easy arms.
+
+**Per-arm (Mondrian) conformal was expected to be the repair. Measured, it is not**
+`[MEASURED]`:
+
+| | marginal | Mondrian by arm |
+|---|---|---|
+| held-out coverage | 89.3 % | 92.0 % |
+| **singleton rate** | **95.3 %** | **60.0 %** |
+| structural | 78.8 % @ set size 1.10 | **100.0 % @ set size 2.00** |
+
+**Mondrian repairs the structural arm by making it refuse to answer** — set size
+2.00 of 2 is the whole outcome space on every episode, and coverage of 100 % bought
+that way is vacuous. The cause is arithmetic: **12.0 % of structural episodes have
+*maximally wrong* beliefs** (amplitude score 0.0 on a track the judge called real, or
+1.0 on one it called decoy), so at α = 0.1 no threshold below 1.0 reaches nominal.
+Relaxing to 85 % nominal restores a usable predictor (qhat 0.8921, set size 1.30) —
+a defensible trade, but a trade. **The 12 % figure belongs to the amplitude screen's
+8-frame lever arm (§8.3), not to the conformal layer**, and it is where the fix has
+to go.
 
 **Epistemic vs aleatoric — the actionable number.** Law of total variance over the
 structural arm's 20 (velocity, RCS) regime cells: total Bernoulli variance 0.1539 =

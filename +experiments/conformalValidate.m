@@ -1,4 +1,4 @@
-function out = conformalValidate(csvPath, alpha, splitSeed, scoreCol)
+function out = conformalValidate(csvPath, alpha, splitSeed, scoreCol, groupCol)
 %CONFORMALVALIDATE  Does the Assurance Layer's coverage claim actually hold?
 %
 %   out = experiments.conformalValidate(csvPath, alpha, splitSeed)
@@ -40,10 +40,31 @@ function out = conformalValidate(csvPath, alpha, splitSeed, scoreCol)
 %   over-cover the easy arm and
 %   under-cover the hard one while still being marginally valid. That is a
 %   property of marginal conformal, not a bug, and the honest response is to
-%   measure it rather than quote the marginal number alone. The fix if a
-%   per-arm number is needed is Mondrian (per-group) conformal: fit
-%   assurance.conformalFit once per arm. Not done here -- there is no point
-%   paying for it before the marginal number shows it is needed.
+%   measure it rather than quote the marginal number alone.
+%
+%   MONDRIAN (PER-GROUP) CONFORMAL IS THE FIX, AND IT IS NOW WIRED IN:
+%   pass groupCol (e.g. 'arm') to fit assurance.conformalFit once per group
+%   and score each held-out row against its OWN group's threshold. Default ''
+%   keeps the marginal behaviour, so every previously published number
+%   reproduces unchanged.
+%
+%   WHY IT WAS DEFERRED, AND WHY THE DEFERRAL NO LONGER HOLDS. This header
+%   previously said Mondrian was not wired in because "which grouping is
+%   correct at deployment depends on what the engine knows about its own arm
+%   at emission time, and that is a design question this measurement does not
+%   settle." That question has an answer: the ARM IS NOT A LATENT PROPERTY THE
+%   ENGINE MUST INFER -- it is the generator the engine itself chose to run
+%   (structural CV-coherent, or which trained policy). It is known at emission
+%   time by construction, so conditioning on it is legitimate rather than
+%   cheating. Two groupings that would NOT be legitimate, for contrast: the
+%   observer (the engine is never told which radar it faces -- that is the
+%   whole point of experiments.exchangeability) and the judge's own verdict
+%   (the label being predicted).
+%
+%   WHAT FORCED IT. experiments.exchangeability measured the structural arm
+%   under-covering at 78.0% AT THE NOMINAL OBSERVER, before any shift, while
+%   the pooled number read 90.3%. The dominant coverage defect in this layer
+%   is per-ARM, not per-observer, and observer pooling does not touch it.
 %
 %   EPISTEMIC vs ALEATORIC. Law of total variance over regime cells: within
 %   a cell (same arm, same commanded velocity and RCS) the only thing that
@@ -66,6 +87,7 @@ function out = conformalValidate(csvPath, alpha, splitSeed, scoreCol)
     if nargin < 2 || isempty(alpha);     alpha = 0.1;   end
     if nargin < 3 || isempty(splitSeed); splitSeed = 7; end
     if nargin < 4 || isempty(scoreCol); scoreCol = 'inline_s_amp'; end
+    if nargin < 5 || isempty(groupCol); groupCol = ''; end   % '' = marginal
 
     T = readtable(csvPath);
     if ~ismember(scoreCol, T.Properties.VariableNames)
@@ -88,8 +110,35 @@ function out = conformalValidate(csvPath, alpha, splitSeed, scoreCol)
     fprintf('  fitted on %d calibration points, qhat = %.4f%s\n', ...
         model.n, model.qhat, ternary(model.saturated, '  (SATURATED: n too small to exclude anything)', ''));
 
+    % ---- Mondrian: one threshold per group, each row scored against its own.
+    % A group with no calibration rows falls back to the pooled model rather
+    % than erroring -- and says so, because a silent fallback would report
+    % marginal coverage under a Mondrian label.
+    groups = {}; models = {};
+    if ~isempty(groupCol)
+        if ~ismember(groupCol, T.Properties.VariableNames)
+            error('experiments:conformalValidate:noGroupColumn', ...
+                  '%s has no column %s to group by.', csvPath, groupCol);
+        end
+        groups = unique(T.(groupCol), 'stable');
+        fprintf('\n  MONDRIAN by %s -- one threshold per group:\n', groupCol);
+        for g = 1:numel(groups)
+            gi = calIx(strcmp(T.(groupCol)(calIx), groups{g}));
+            if isempty(gi)
+                models{g} = model; %#ok<AGROW>
+                fprintf('    %-12s no calibration rows -- POOLED qhat %.4f used\n', groups{g}, model.qhat);
+            else
+                models{g} = assurance.conformalFit(s(gi), T.judge_real(gi), alpha); %#ok<AGROW>
+                fprintf('    %-12s n=%3d  qhat %.4f%s\n', groups{g}, models{g}.n, models{g}.qhat, ...
+                    ternary(models{g}.saturated, '  (SATURATED)', ''));
+            end
+        end
+        model = struct('groupCol', groupCol, 'groups', {groups}, 'models', {models}, ...
+                       'pooled', model, 'qhat', NaN, 'n', numel(calIx), 'saturated', false);
+    end
+
     % ---- coverage on the held-out half
-    [cov, width, singleton, covered] = localScore(model, s, T.judge_real, tstIx);
+    [cov, width, singleton, covered] = localScore(model, s, T.judge_real, tstIx, T, groupCol);
     [lo, hi] = localWilson(round(cov*numel(tstIx)), numel(tstIx));
     pass = hi >= (1 - alpha);        % nominal inside the interval's reach
     fprintf('\n  HELD-OUT (n=%d):  coverage %5.1f%% [%.1f, %.1f]   mean set size %.2f   singleton %5.1f%%   -> %s\n', ...
@@ -102,7 +151,7 @@ function out = conformalValidate(csvPath, alpha, splitSeed, scoreCol)
     for a = 1:numel(arms)
         ix = tstIx(strcmp(T.arm(tstIx), arms{a}));
         if isempty(ix); continue; end
-        [c, w, ~, ~] = localScore(model, s, T.judge_real, ix);
+        [c, w, ~, ~] = localScore(model, s, T.judge_real, ix, T, groupCol);
         all_ = strcmp(T.arm, arms{a});
         g = 100*(mean(T.inline_real(all_)) - mean(T.judge_real(all_)));
         fprintf('    %-10s n=%3d  coverage %5.1f%%   mean set size %.2f   (arm twin-judge gap %+5.1f pp)\n', ...
@@ -142,13 +191,23 @@ function out = conformalValidate(csvPath, alpha, splitSeed, scoreCol)
 end
 
 % ------------------------------------------------------------------------
-function [cov, width, singleton, covered] = localScore(model, s, y, ix)
+function [cov, width, singleton, covered] = localScore(model, s, y, ix, T, groupCol)
+%LOCALSCORE  Coverage and mean set size. Under Mondrian each row is scored
+%   against ITS OWN group's threshold -- scoring a row against a pooled qhat
+%   while calling the result Mondrian would report the defect it is meant to
+%   fix.
+    mondrian = nargin >= 6 && ~isempty(groupCol);
     covered = false(numel(ix), 1);
     sizes   = zeros(numel(ix), 1);
     single  = false(numel(ix), 1);
     for i = 1:numel(ix)
         r = ix(i);
-        [set, unc] = assurance.conformalPredict(model, s(r));
+        m = model;
+        if mondrian
+            g = find(strcmp(model.groups, T.(groupCol){r}), 1);
+            if isempty(g); m = model.pooled; else; m = model.models{g}; end
+        end
+        [set, unc] = assurance.conformalPredict(m, s(r));
         if y(r) ~= 0
             covered(i) = set(2);       % judge said real; is "real" in the set?
         else
