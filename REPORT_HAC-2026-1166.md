@@ -524,10 +524,14 @@ baseband and phase-perfect.
 The requirement is stated because it decides the feasibility of the one documented
 counter to §4.8's angle veto. **Cross-eye jamming** — two spatially separated,
 synchronised transmitters radiating with a controlled relative phase to create a false
-wavefront gradient — has a hard tolerance: **phase matched within a few degrees and
-amplitude within a fraction of a dB, maintained across the platform separation.** That
-is a hardware problem of a different order from anything in this report, and it is
-declared out of scope rather than estimated.
+wavefront gradient — has a hard tolerance. **That tolerance is now measured against this
+radar's own estimator rather than quoted from the literature: ~1° of relative phase, not
+"a few degrees"** (§4.8a). The amplitude condition is stranger than expected and is a
+property of this judge: `a` = 1 exactly is a *null*, so the pair must sit deliberately
+**off** unity (measured working at `a` = 0.99). It remains a hardware problem of a
+different order from anything else in this report — holding 1° of phase across a moving
+two-point platform is not attempted here — but it is no longer declared out of scope
+without a number: the feasibility is established and only the flight hardware is not.
 
 ## 3.10 Propagation assumptions
 
@@ -840,7 +844,10 @@ No empirical "monopulse slope" constant is used — the angle scale falls out of
 λ, both physical. Measured accuracy **< 0.001° across ±2°**; unambiguous sector
 **±2.86°** at `d` = 0.30 m, 10 GHz `[MEASURED]`, `tests/test_angle_channel.m` (4/4).
 
-**The co-bearing veto, and the physical reason it cannot be defeated (R6).** A single
+**The co-bearing veto, and the physical reason a SINGLE transmit point cannot defeat it
+(R6).** *(This heading previously read "cannot be defeated". That is too strong and is
+corrected below: a single transmit point cannot, but a two-point cross-eye pair
+measurably can — §4.8a.)* A single
 transmit point radiates **one wavefront with one angle of arrival**. The path-length
 difference between two receiving subapertures is fixed by geometry — by where the
 transmitter physically sits — and **no signal content can alter it.** Range, Doppler
@@ -859,9 +866,66 @@ The screen lives in `runJudge`, not `discriminator.m`, because it is inherently
 called once per track. It is the only screen in this system that reasons across tracks.
 
 **The only documented mechanism that addresses it is cross-eye jamming** — two
-synchronised, spatially separated transmit points creating a false wavefront gradient
-— with the tolerance stated in §3.9: phase within a few degrees, amplitude within a
-fraction of a dB. It is declared out of scope and is not claimed.
+synchronised, spatially separated transmit points creating a false wavefront gradient.
+It is no longer merely declared out of scope: it has been measured, and it works.
+
+## 4.8a Cross-eye — the veto IS defeatable, at a phase tolerance of ~1°
+
+`+experiments/crossEyeSpike.m`. Closed-form feasibility only — no scene, no CFAR, no
+tracker — but it drives **this project's own estimator verbatim**
+(`runJudge.m:299-303`), so the result is about the real judge rather than a textbook
+idealisation. Two coherent sources on a baseline `D`, amplitude ratio `a`, relative
+phase `φ_ce`; the radar sums them in both channels, so
+
+```
+    Δ/Σ = i·[ s₁·tan(φ₁/2) + s₂·tan(φ₂/2) ] / (s₁ + s₂),   s₂/s₁ = a·e^{iφ_ce}
+```
+
+| `a` | apparent bearing at `φ_ce` = 175° / 178° / 179° / 180° |
+|---|---|
+| 0.90 | 0.613 / 0.509 / 0.485 / 0.476 |
+| **0.99** | 0.758 / 0.543 / **−0.107** / **−1.871** |
+| **1.00** | **0.800 / 0.800 / 0.800 / 0.800** |
+
+`[MEASURED]`. True jammer bearing +0.800°, `D` = 1.0 m at 1800 m.
+
+**It defeats the veto with 6.7× margin.** Achievable apparent-bearing spread **2.671°**
+against the screen's own threshold of `3σ_θ` = **0.398°** at +20 dB SNR. The baseline
+subtends only **0.032°** raw, so the technique supplies roughly **84× angular gain** —
+which is the whole point of cross-eye and is why a 1 m baseline on a quadrotor is
+sufficient in principle.
+
+**The cost is phase stability, and it is tighter than this report previously assumed:**
+
+| `φ_ce` error from anti-phase | apparent offset | screen defeated? |
+|---|---|---|
+| 0.1° | 2.640° | yes |
+| 1.0° | 0.907° | yes |
+| **2.0°** | **0.257°** | **no** |
+
+**~1°, not "a few degrees"** — §3.9's figure is optimistic by about 2× against this
+radar's threshold. That is the number to quote.
+
+**A result that inverts the textbook expectation, and it is a property of THIS judge.**
+Classic cross-eye theory says gain diverges as `a → 1`; here **`a` = 1 exactly is a
+null.** The divergence lives in the *full complex* ratio, but `runJudge` uses only its
+imaginary part (`phiEst = 2·atan(imag(ratio))`), and at `a` = 1
+
+```
+    ratio = i·(t₁+t₂)/2  −  (t₂−t₁)·tan(φ_ce/2)/2
+```
+
+puts the **entire `φ_ce` dependence in the REAL part**. So `imag(ratio)` is the midpoint
+of the two elements irrespective of `φ_ce`, the apparent bearing is the jammer's own,
+and the technique does nothing — visible as the flat 0.800° row above. **The attack
+works at `a` = 0.99 and fails at `a` = 1.00.** An adversary tuning toward the textbook
+optimum would tune itself into the radar's blind spot.
+
+**What is NOT claimed.** This is a feasibility spike and is labelled one. Whether a
+quadrotor can hold 1° of phase stability in flight, and whether the induced bearings
+survive CFAR and tracking in a full scene, are both untested. The honest statement is
+that the co-bearing veto has a measured, physically grounded counter with a stated
+tolerance — not that the counter has been demonstrated end to end.
 
 ## 4.9 Waveform agility, and its measured cost to the repeater
 
@@ -1785,7 +1849,7 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
      2998 m ceiling and the search space is now 6.25× wider. Needs re-deriving.
 
 8. **Not measured, declared future work:** full ablation matrix (P9), IMM validation
-   against a discriminator that reads filter state, cross-eye feasibility, `J/S` sweep
+   against a discriminator that reads filter state, `J/S` sweep
    (P1), false-track lifetime (P3). **DRFM latency (P8) has moved off this list** — it
    is simulated and its counter measured ineffective (§4.12a); what remains unmeasured
    is the hardware latency figure on a bench, not the effect of latency.
@@ -1817,9 +1881,13 @@ algorithmic. **Whenever the monopulse angle channel is active, evasion falls fro
 100.0 % to 0.0 %** `[MEASURED]` — 4 of 4 tracks condemned in 8 of 8 seeds. **One aperture
 radiates one wavefront with one angle of arrival, and the path-length difference between
 two receiving subapertures is fixed by geometry, so no signal content can alter it.**
-That limit is set by single-aperture physics, not by the algorithm, and the only
-documented counter — cross-eye jamming with two synchronised transmitters matched to a
-few degrees of phase — is a different threat model. The radar's advantage disappears
+That limit is set by single-aperture physics, not by the algorithm — but it is a limit
+on a **single** aperture, and the counter is now measured rather than deferred:
+**cross-eye jamming defeats this veto with 6.7× margin, at a relative-phase tolerance of
+~1°** (§4.8a). It is a different threat model and a harder hardware problem, and no
+end-to-end demonstration is claimed; what has changed is that "the radar wins here" is
+now bounded by a stated adversary capability instead of by silence. The radar's
+advantage also disappears
 against genuine formations tighter than **≈ 40 m** in cross-range `[MEASURED]`, a bound
 confirmed by measurement and by an independent `σ_θ` calculation agreeing at 35.8 m.
 
