@@ -200,6 +200,26 @@ function out = exchangeability(csvPath, alpha, splitSeed, scoreCol)
             strjoin(failA, ', '));
     end
 
+    % ---- POST-HOC per-arm diagnostic, ADDED AFTER THE VERDICT WAS READ.
+    % It changes nothing above and decides nothing; it exists because the
+    % pooled number the locked rule decides on turned out to conceal two
+    % things (see LIMITATION OF THE RULE at the foot of this file): only the
+    % structural arm is exposed to the shift at all, and that arm under-covers
+    % at nominal before any shift. Printed here so both are re-runnable rather
+    % than living in a transcript.
+    arms = unique(T.arm, 'stable');
+    fprintf('\n  POST-HOC per-arm (same qhat=%.4f, not part of the verdict):\n', mdlNom.qhat);
+    fprintf('    %-11s %-14s %10s %10s %9s\n', 'arm', 'observer', 'judge real', 'coverage', 'set size');
+    for a = 1:numel(arms)
+        for i = 1:numel(obsNames)
+            ix = find(strcmp(T.arm, arms{a}) & strcmp(T.observer, obsNames{i}));
+            if isempty(ix); continue; end
+            [c, w] = localCoverage(mdlNom, s, y, ix);
+            fprintf('    %-11s %-14s %9.1f%% %9.1f%% %9.2f\n', ...
+                arms{a}, obsNames{i}, 100*mean(y(ix)), 100*c, w);
+        end
+    end
+
     out = struct('csvPath', csvPath, 'alpha', alpha, 'splitSeed', splitSeed, ...
         'scoreCol', scoreCol, 'observers', {obsNames'}, 'perObserver', perObs, ...
         'qhatNominal', mdlNom.qhat, 'qhatPooled', mdlPool.qhat, ...
@@ -244,8 +264,62 @@ function s = ternary(c, a, b)
 end
 
 %% INTERPRETATION (filled in after results)
-% A_coverage = [value from data]
-% Verdict: [result of verdict rule]
+% A_coverage = 90.3%  (worst non-nominal observer: Pfa 1e-2, set size 1.05)
+% Verdict: VALID: limit is real but not binding in this regime
 % Mechanism confirmation:
-%   [Did the score track the shift, or was it blind?
-%    Infer from whether A under-covers.]
+%   The score did NOT under-cover, so by the locked inference it TRACKED the
+%   shift rather than being blind to it. The pre-registered PREDICTION (that A
+%   under-covers) is REFUTED.
+%
+%   Full table, 1200 rows, qhat 0.6255 fitted on the nominal observer alone:
+%     nominal      judge real 8.3%   coverage 90.3%   set size 1.05
+%     Pfa 1e-2     judge real 8.3%   coverage 90.3%   set size 1.05
+%     training 10  judge real 8.3%   coverage 90.3%   set size 1.05
+%     training 32  judge real 4.7%   coverage 92.3%   set size 1.05
+%     B POOLED                       coverage 90.0%   set size 1.05
+%
+%   The sets are SHARP (1.05 of a possible 2), so this is not the vacuous
+%   case where coverage is bought by returning the whole outcome space.
+%   MATLAB (+assurance/) and the independent Python reimplementation
+%   (+reports/parse_exchangeability.py) agree to the digit.
+%
+%% LIMITATION OF THE RULE (post-hoc, added after seeing the data)
+%
+%   The rule above is NOT amended -- its verdict stands exactly as printed.
+%   What follows is a limitation OF the rule, per the amendment policy in
+%   +experiments/exchangeability_verdict_rule.txt, and it is stated because
+%   the pooled number the rule decides on conceals two things.
+%
+%   (1) THE SHIFT ONLY EXISTS ON ONE ARM. At training 32 the structural arm's
+%       judge real rate falls 19.0% -> 8.0%; `shaped` (4.0%) and `stats`
+%       (2.0%) do not move at all, at any observer. Two thirds of the rows the
+%       verdict averages over are therefore not exposed to the shift being
+%       tested, which dilutes it.
+%
+%   (2) COVERAGE DID NOT HOLD BECAUSE THE SCORE TRACKED THE SHIFT. Per arm,
+%       under that same qhat = 0.6255:
+%
+%         structural  nominal 78.0%  ...  training 32 84.0%   (set 1.12)
+%         shaped      nominal 95.0%  ...  training 32 95.0%   (set 1.04)
+%         stats       nominal 98.0%  ...  training 32 98.0%   (set 1.00)
+%
+%       The structural arm under-covers at 78.0% ALREADY AT NOMINAL, before
+%       any shift -- reproducing the marginal-vs-conditional gap
+%       ASSURANCE_LAYER_RESULTS.md measured at 78.8%, whose fix is Mondrian
+%       (per-arm) conformal, NOT pooling over observers. And the shift makes
+%       that arm's coverage BETTER, 78.0% -> 84.0%, not worse.
+%
+%       The reason is a third mechanism the pre-registered IMPLICATION could
+%       not express: the shift does not perturb the predictor's input, it
+%       moves the OUTCOME toward the label the predictor is already confident
+%       about. NumTraining 32 drives judge-real down to 8.0%, so more episodes
+%       land on "not real", which is the verdict this predictor calls well.
+%       Coverage rose for the arithmetic reason that the easy label got more
+%       common -- not because the amplitude score sensed anything.
+%
+%   CONSEQUENCE, stated plainly: the VALID verdict is correct as read, and it
+%   is NOT evidence that the amplitude score tracks observer changes. It is
+%   evidence that THIS shift happens to move outcomes in the direction the
+%   predictor already favours. A shift in the opposite direction -- one that
+%   raises the judge's real rate under a frozen belief -- is untested and
+%   would attack the coverage from the side this grid never probes.

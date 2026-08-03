@@ -2005,10 +2005,65 @@ derived from measured RCS data.
 shows the condition is violable.** The calibration set is drawn from three arms at **one**
 radar configuration; the sweep measures a configuration (`NumTraining` 32) where the
 judge's real rate falls 23.0 % → 8.0 % *while the engine's belief does not move at all*.
-That is exactly the distribution shift the 90 % guarantee is conditional on. **No
-coverage number here may be quoted for a radar whose CFAR training length is unknown**
-until the calibration set is re-collected across the observer distribution. Not done;
-it is the first follow-up and it is one loop around `calibrationLog`.
+That is exactly the distribution shift the 90 % guarantee is conditional on.
+
+### Exchangeability, measured — the prediction was refuted
+
+`experiments.exchangeability`, on a calibration set re-collected across the observer
+distribution: **1200 rows**, 3 arms × 5 seeds × 20 episodes × 4 observer configurations,
+each episode's cube written once and scored under all four, so an observer-to-observer
+difference cannot be a different noise draw. **The decision rule was committed before
+the data existed** (`+experiments/exchangeability_verdict_rule.txt`, commit `0d90d5a2`;
+the collection finished afterwards).
+
+**A SHIFTED** fits the conformal threshold on the nominal observer alone (qhat 0.6255)
+and applies it to each other observer. **B POOLED** fits on a random half of all
+observer rows `[MEASURED]`:
+
+| Observer | Judge real rate | Coverage (A SHIFTED) | Mean set size |
+|---|---|---|---|
+| nominal | 8.3 % | 90.3 % *(training coverage)* | 1.05 |
+| Pfa 1e-2 | 8.3 % | 90.3 % | 1.05 |
+| training 10 | 8.3 % | 90.3 % | 1.05 |
+| **training 32** | **4.7 %** | **92.3 %** | 1.05 |
+| **B POOLED** | — | **90.0 % [87.3, 92.2]** | 1.05 |
+
+`A_coverage = 90.3 %` → **VALID: limit is real but not binding in this regime.** The
+pre-registered prediction — that A under-covers where the real rate falls — is
+**refuted**. The sets are sharp (1.05 of a possible 2), so this is not the degenerate
+case where coverage is bought by returning the whole outcome space. MATLAB
+(`+assurance/`) and an independent Python reimplementation
+(`+reports/parse_exchangeability.py`) agree to the digit.
+
+**But the pooled verdict conceals the mechanism, and the honest reading is the
+per-arm table** — recorded as a limitation *of the locked rule*, which is not amended
+`[MEASURED]`:
+
+| Arm | nominal | training 32 | set size |
+|---|---|---|---|
+| **structural** | **78.0 %** | **84.0 %** | 1.12 |
+| shaped | 95.0 % | 95.0 % | 1.04 |
+| stats | 98.0 % | 98.0 % | 1.00 |
+
+Two things follow. **The shift exists on one arm only** — at `training 32` the
+structural arm's judge-real rate falls 19.0 % → 8.0 % while both trained agents sit
+unmoved at 4.0 % and 2.0 %, so two thirds of the rows the verdict averages over are not
+exposed to the effect under test. **And coverage did not hold because the score tracked
+the shift.** The structural arm under-covers at **78.0 % already at nominal, before any
+shift** — reproducing the marginal-vs-conditional gap measured above at 78.8 %, whose
+fix is Mondrian conformal, not observer pooling — and the shift makes that arm's
+coverage *better*, not worse.
+
+The reason is a third mechanism the pre-registration could not express: **the shift does
+not perturb the predictor's input, it moves the outcome toward the label the predictor
+is already confident about.** `NumTraining` 32 drives judge-real down to 8.0 %, so more
+episodes land on `not real`, which this predictor calls well. Coverage rose because the
+easy label got more common.
+
+**So the coverage numbers in this section are licensed across the observer grid measured
+here, and the reason is weaker than the verdict alone suggests.** A shift in the
+opposite direction — one that *raises* the judge's real rate under a frozen belief —
+attacks coverage from the side this grid never probes, and is untested.
 
 Two further boundaries: the guarantee is about the **belief**, not the deception — an
 engine that is reliably detected has excellent coverage. And the Simplex fallback is
@@ -2086,10 +2141,19 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
     inert, but CFAR `NumTraining` 20 → 32 alone costs **23.0 % → 8.0 %, Wilson intervals
     disjoint** `[MEASURED]`. **Being wrong about one observer parameter costs roughly two
     thirds of the survival rate.** The same shift invalidates the exchangeability
-    condition behind §7.9's 90 % conformal coverage, so no coverage number may be quoted
-    for a radar whose training length is unknown until the calibration set is
-    re-collected across the observer distribution — the layer's first follow-up, not
-    done.
+    condition behind §7.9's 90 % conformal coverage. **That re-collection has now been
+    run** (§7.9): 1200 rows across four observer configurations, paired cubes, decision
+    rule committed before the data. Conformal coverage **holds at 90.3 %** under the
+    shift `[MEASURED]`, so §7.9's coverage numbers are licensed across the observer grid
+    measured here — **but not for the reason the verdict suggests.** Per arm, the shift
+    touches only the structural generator, and it *improves* that arm's coverage
+    (78.0 % → 84.0 %) because it moves outcomes toward `not real`, the label the
+    predictor already calls well. The dominant coverage defect is not the observer at
+    all: the structural arm under-covers at 78.0 % **at nominal**, which is the
+    marginal-vs-conditional gap, and its fix is Mondrian conformal, not observer
+    pooling. **The survival-rate cost of the mis-assumed observer stands unchanged at
+    roughly two thirds** — coverage holding says the engine's belief stays honestly
+    calibrated while it loses, not that it stops losing.
 
 ---
 

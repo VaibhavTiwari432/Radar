@@ -223,5 +223,8 @@ def _selfcheck():
 
 
 if __name__ == "__main__":
+    # Windows console defaults to cp1252 and the rendered markdown carries
+    # arrows and em-dashes; without this the script dies on its own output.
+    sys.stdout.reconfigure(encoding="utf-8")
     _selfcheck()
     print(render(parse_exchangeability_csv()))
