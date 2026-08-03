@@ -116,15 +116,20 @@ function frameLog = buildFrameLog(scenePhantoms, S, feedback, C, onFrame)
 
         % ---- radar.detection ----
         tk = feedback.frame_log{k};
-        f.radar.detection.cfarType = 'CA';
-        f.radar.detection.designPfa = struct('value', double(S.cfar_pfa), 'provenance', 'ASSUMED');
+        % The JUDGE's own detector settings, read from the judge's own
+        % declaration -- NOT from the exported .mat, which the adversary
+        % writes and which no longer carries them at all (Phase A1).
+        cfarD = radar.cfarDefaults();
+        f.radar.detection.cfarType = cfarD.Method;
+        f.radar.detection.designPfa = struct('value', cfarD.Pfa, 'provenance', 'ASSUMED');
         f.radar.detection.detectionsThisFrame = numel(unique([tk.trackId]));
 
         % ---- radar.tracker (this project's ACTUAL configured values,
         % +track/runTracker.m -- never the spec's illustrative defaults) ----
+        trkD = track.trackerDefaults();   % same single source the tracker uses
         f.radar.tracker.filter = 'KalmanCV';
-        f.radar.tracker.confirmMofN = [3 5];
-        f.radar.tracker.deleteMofN = [5 5];
+        f.radar.tracker.confirmMofN = trkD.ConfirmationThreshold;
+        f.radar.tracker.deleteMofN = trkD.DeletionThreshold;
 
         % ---- radar.tracks: 5-state lifecycle + live ECCM ----
         tracksOut = struct('id', {}, 'state', {}, 'ageFrames', {}, 'hits', {}, ...

@@ -109,7 +109,7 @@ end
 % =====================================================================
 function cfg = defaultConfig()
     cfg.fs = 3.2e6; cfg.pulseWidth = 12e-6; cfg.bandwidth = 2e6;
-    cfg.prf = 50e3; cfg.carrier = 10e9;
+    cfg.prf = physics.Constants().PRF; cfg.carrier = 10e9;
     cfg.nFast = 400; cfg.nPulses = 32; cfg.nFrames = 8; cfg.frameDt = 1.0;
     cfg.cfarPfa = 1e-4; cfg.cfarTrain = 20; cfg.cfarGuard = 4;
     cfg.gateM = 200; cfg.confirm = [3 5]; cfg.deletion = [5 5];
@@ -608,20 +608,29 @@ end
 % =====================================================================
 function fb = judgeCube(cube, cfg)
     C = physics.Constants();
+    % The .mat DESCRIBES THE SIGNAL only. The radar's operating point is
+    % passed to the judge as explicit arguments (Phase A1) -- it must not be
+    % reachable through a file the adversary's exporter also writes.
     S = struct('rx_frames', cube, 'fs', C.fs, 'pulse_width_s', cfg.pulseWidth, ...
-        'bandwidth_hz', cfg.bandwidth, 'prf_hz', cfg.prf, 'cfar_pfa', cfg.cfarPfa, ...
-        'cfar_num_training', cfg.cfarTrain, 'cfar_num_guard', cfg.cfarGuard, ...
-        'frame_interval_s', cfg.frameDt, 'carrier_hz', cfg.carrier, ...
-        'assignment_gate_m', cfg.gateM, 'confirmation_threshold', cfg.confirm, ...
-        'deletion_threshold', cfg.deletion, 'filter_model', cfg.filterModel, ...
-        'tracker_type', cfg.trackerType);
-    if ~isempty(cfg.eccmScreens); S.eccm_screens = cfg.eccmScreens; else; S.eccm_screens = {''}; end
+        'bandwidth_hz', cfg.bandwidth, 'prf_hz', cfg.prf, ...
+        'frame_interval_s', cfg.frameDt, 'carrier_hz', cfg.carrier);
+    judgeArgs = {'Pfa', cfg.cfarPfa, 'NumTraining', cfg.cfarTrain, ...
+        'NumGuard', cfg.cfarGuard, 'AssignmentThreshold', [cfg.gateM inf], ...
+        'ConfirmationThreshold', cfg.confirm, 'DeletionThreshold', cfg.deletion, ...
+        'FilterModel', cfg.filterModel, 'TrackerType', cfg.trackerType};
+    if ~isempty(cfg.eccmScreens)
+        judgeArgs = [judgeArgs, {'EccmScreens', cfg.eccmScreens}];
+    else
+        judgeArgs = [judgeArgs, {'EccmScreens', {''}}];
+    end
     % Arms the micro-Doppler veto. Without it discriminator.m's expectMicro
     % gate is false and the screen is inert at ANY dwell length (T8).
-    if isfield(cfg, 'expectMicro') && cfg.expectMicro; S.expect_micro_doppler = true; end
+    if isfield(cfg, 'expectMicro') && cfg.expectMicro
+        judgeArgs = [judgeArgs, {'ExpectMicroDoppler', true}];
+    end
     f = [tempname '.mat']; save(f, '-struct', 'S');
     cleanup = onCleanup(@() delete(f)); %#ok<NASGU>
-    fb = engine.runJudge(f);
+    fb = engine.runJudge(f, judgeArgs{:});
 end
 
 function chirp = idealChirp(cfg, C)

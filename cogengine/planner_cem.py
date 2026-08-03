@@ -22,6 +22,12 @@ from typing import Dict, Tuple
 
 import numpy as np
 
+from cogengine.radar_params import (
+    PRF_HZ,
+    range_per_sample_m,
+    unambiguous_range_m,
+    unambiguous_velocity_mps,
+)
 from cogengine.radar_twin import TwinConfig, predict
 from cogengine.renderer import REFERENCE_RANGE_M
 from cogengine.schema import Feedback, MicroMotion, Phantom, RadarState, Scene
@@ -236,15 +242,37 @@ def _enforce_power_budget(powers_w: np.ndarray, avg_budget_w: float = None,
 
 
 DEFAULT_BOUNDS_MULTI: ParamBounds = {
-    # Range widened vs. the single-phantom DEFAULT_BOUNDS (600-2800) to
-    # leave physical room for MIN_RANGE_SEPARATION_M-apart phantoms below --
-    # 4 phantoms each >=1 margin-width apart need >=3 gaps of headroom.
-    "range_m": (600.0, 6000.0),
-    # Same validated envelope as DEFAULT_BOUNDS (see its own comment: capped
-    # at +-120 m/s because that's as far as the real judge's AssignmentThreshold
-    # gate was ever empirically verified) -- unchanged for the multi-phantom
-    # case, per phantom.
-    "radial_vel_mps": (-120.0, 120.0),
+    # PHASE C1 -- CLAMPED TO THE UNAMBIGUOUS RANGE. This was (600, 6000),
+    # widened purely to leave room for MIN_RANGE_SEPARATION_M-apart phantoms.
+    # But at this radar's declared 50 kHz PRF, R_ua = c/(2*PRF) = 2997.9 m: a
+    # phantom planned at 5000 m physically arrives looking like 2002.1 m,
+    # because the receiver re-arms its range gate every PRI. Nothing folded
+    # it, so planner and judge agreed on 5000 m only by both being wrong the
+    # same way. Searching outside the radar's own unambiguous envelope is
+    # planning in a coordinate the radar does not have.
+    #
+    # THIS HAS A COST AND IT IS NOT HIDDEN: with MIN_RANGE_SEPARATION_M ~=
+    # 1124 m (the real CA-CFAR training+guard width), the 600-2998 m window
+    # holds at most 3 separated phantoms, and comfortably only 2. N >= 4 is
+    # not feasible for THIS radar at THIS PRF -- which is a physical finding
+    # about the engagement, not a limitation of the search. See
+    # PHASE3_RESULTS.md C1.
+    "range_m": (600.0, unambiguous_range_m(PRF_HZ)),
+    # PHASE 4.1 -- NOW CLAMPED TO THE UNAMBIGUOUS VELOCITY, NOT THE TRACKER
+    # GATE. This was (-120, +120), justified by how far the judge's
+    # AssignmentThreshold had been empirically verified. That is no longer the
+    # binding constraint: at the corrected 8 kHz PRF the unambiguous velocity
+    # is only +-60 m/s, so a phantom planned at -120 m/s FOLDS IN DOPPLER and
+    # is measured by the judge as +/-something else entirely. Planning outside
+    # v_ua is planning in a coordinate the radar does not have -- the exact
+    # same error C1 fixed for range, now fixed for velocity.
+    #
+    # THE COST IS SEVERE AND IS NOT HIDDEN: this project's canonical closing
+    # rate is -60 m/s, which sits EXACTLY on the fold edge. The envelope for
+    # unambiguously-measurable phantoms is now drone-class speeds only. See
+    # PHASE4_RESULTS.md Phase 1.3.
+    "radial_vel_mps": (-unambiguous_velocity_mps(PRF_HZ),
+                        unambiguous_velocity_mps(PRF_HZ)),
     # Lower bound > 0, not 0.0: Phantom.amp_scale must be strictly positive
     # (schema.py's own validation) -- a phantom effectively "opts out" of
     # the swarm by converging toward this floor (letting phantom COUNT
@@ -275,7 +303,7 @@ def _min_range_separation_m(twin_config: TwinConfig) -> float:
     neighbor's noise estimate -- derived, not fitted, from those config
     values and the sampling-rate-derived range-per-sample.
     """
-    range_per_sample = 299792458.0 / (2.0 * twin_config.fs)
+    range_per_sample = range_per_sample_m(twin_config.fs)
     margin_samples = twin_config.cfar_num_training + twin_config.cfar_num_guard
     return margin_samples * range_per_sample
 
@@ -365,9 +393,29 @@ def naive_baseline_scene_multi(radar_state: RadarState, twin_config: TwinConfig,
                  t0_s=0.0, duration_s=duration)
 
 
+
+def _enforce_unambiguous_range(ranges: np.ndarray, prf_hz: float) -> np.ndarray:
+    """Clamp every range inside the radar's own unambiguous envelope.
+
+    PHASE C1. Clamps rather than folds, deliberately: folding a 5000 m
+    intent to 2002 m would silently hand the planner a phantom somewhere it
+    did not ask for, and the ambiguity ORDER is unrecoverable downstream.
+    Clamping keeps planner intent and physical reality the same number, which
+    is the property C1's test actually asserts.
+
+    The fold itself is real and is implemented -- radar_params.apparent_range_m
+    and +physics/apparentRange.m -- for describing what a beyond-R_ua return
+    does when one occurs. This function exists so the planner never creates
+    one in the first place.
+    """
+    rua = unambiguous_range_m(prf_hz)
+    # Keep a hair inside R_ua: exactly R_ua folds to 0.
+    return np.minimum(ranges, rua * 0.999)
+
 def _correct_params_multi(params_flat: np.ndarray, n_phantoms: int,
                            twin_config: TwinConfig, avg_budget_w: float = None,
-                           peak_budget_w: float = None) -> np.ndarray:
+                           peak_budget_w: float = None,
+                           prf_hz: float = None) -> np.ndarray:
     """Apply the three real, found-this-session twin-only-exploit corrections
     to a raw sampled [n_phantoms*3] parameter vector (range_m, radial_vel_mps,
     power_w per phantom), returning the CORRECTED flat vector -- not a Scene.
@@ -427,6 +475,12 @@ def _correct_params_multi(params_flat: np.ndarray, n_phantoms: int,
     powers = _enforce_power_budget(p[:, 2], avg_budget_w, peak_budget_w)
     ranges = _enforce_max_range_for_power(ranges, powers)
     ranges = _enforce_min_separation(ranges, min_sep)
+    # PHASE C1: _enforce_min_separation cascades ranges UPWARD, so it can walk
+    # a phantom past R_ua even from bounds that respect it. Clamp last -- a
+    # range the radar cannot unambiguously represent is worse than a tight
+    # pair, because the tight pair is at least where the planner thinks it is.
+    if prf_hz is not None:
+        ranges = _enforce_unambiguous_range(ranges, prf_hz)
     p[:, 0] = ranges
     p[:, 2] = powers
     return p.reshape(-1)
@@ -434,12 +488,14 @@ def _correct_params_multi(params_flat: np.ndarray, n_phantoms: int,
 
 def _scene_from_params_multi(params_flat: np.ndarray, n_phantoms: int,
                               twin_config: TwinConfig, avg_budget_w: float = None,
-                              peak_budget_w: float = None) -> Scene:
+                              peak_budget_w: float = None,
+                              prf_hz: float = None) -> Scene:
     """Decode a flat [n_phantoms*3] vector (range_m, radial_vel_mps, power_w
     per phantom, in that order) into an N-phantom Scene. See
     _correct_params_multi for the correction pipeline this applies first."""
     p = _correct_params_multi(params_flat, n_phantoms, twin_config,
-                               avg_budget_w, peak_budget_w).reshape(n_phantoms, 3)
+                               avg_budget_w, peak_budget_w,
+                               prf_hz).reshape(n_phantoms, 3)
     phantoms = []
     for i in range(n_phantoms):
         phantoms.append(Phantom(
@@ -512,9 +568,11 @@ def plan_multi(radar_state: RadarState, twin_config: TwinConfig, cem_config: CEM
         scores = np.empty(cem_config.population_size)
         for i in range(cem_config.population_size):
             corrected_population[i] = _correct_params_multi(
-                population[i], n_phantoms, twin_config, avg_budget_w, peak_budget_w)
+                population[i], n_phantoms, twin_config, avg_budget_w, peak_budget_w,
+                radar_state.prf_hz)
             scene = _scene_from_params_multi(population[i], n_phantoms, twin_config,
-                                              avg_budget_w, peak_budget_w)
+                                              avg_budget_w, peak_budget_w,
+                                              radar_state.prf_hz)
             score, _ = score_scene(scene, radar_state, twin_config,
                                      cem_config.flagged_decoy_penalty, rng,
                                      degraded_penalty=cem_config.degraded_penalty)

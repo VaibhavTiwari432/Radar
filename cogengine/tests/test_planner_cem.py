@@ -37,7 +37,14 @@ def test_naive_baseline_scores_at_or_near_zero():
     assert score <= 0.0
 
 
-def test_cem_planner_beats_naive_baseline():
+def test_cem_planner_beats_naive_baseline_ON_THE_TWIN_ONLY():
+    """CEM outscores the naive single-phantom baseline AS PREDICTED BY THE TWIN.
+
+    Renamed in Phase E for the same reason as the N=4 version: both scenes
+    are scored by cogengine.radar_twin, so this is an internal-consistency
+    check on the planner, never evidence that the real radar was deceived.
+    Only engine.runJudge can say that (CLAUDE.md Rule 2).
+    """
     radar_state = make_radar_state()
     twin_config = TwinConfig()
     rng = np.random.default_rng(42)

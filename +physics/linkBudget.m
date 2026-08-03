@@ -61,8 +61,11 @@ function L = linkBudget(varargin)
     C = physics.Constants();
 
     % --- fundamental constants (SI exact / defined) ---
-    BOLTZMANN   = 1.380649e-23;   % J/K, SI exact since 2019
-    T0_KELVIN   = 290;            % IEEE standard reference temperature
+    % Phase B1: these were locals here. They now live in physics.Constants()
+    % because the thermal floor is a project-wide fact -- physics.simUnits()
+    % needs the same two numbers to anchor the simulation's amplitude units.
+    BOLTZMANN   = C.k_boltzmann;
+    T0_KELVIN   = C.T0_kelvin;
 
     lambda = C.c / o.CarrierHz;
     G      = 10^(o.AntennaGainDBi/10);

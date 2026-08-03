@@ -61,7 +61,7 @@ classdef Stage4_Test < matlab.unittest.TestCase
 
             C = physics.Constants();
             wav = phased.LinearFMWaveform('SampleRate', C.fs, ...
-                    'PulseWidth', 12e-6, 'PRF', 50e3, 'SweepBandwidth', 2e6);
+                    'PulseWidth', 12e-6, 'PRF', physics.Constants().PRF, 'SweepBandwidth', 2e6);
             pulse = wav();
             Lp = numel(pulse);
 

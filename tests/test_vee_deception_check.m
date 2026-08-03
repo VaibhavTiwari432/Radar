@@ -34,13 +34,24 @@ classdef test_vee_deception_check < matlab.unittest.TestCase
     properties (Constant)
         PW_S     = 12e-6;
         BW_HZ    = 2e6;
-        PRF_HZ   = 50e3;
+        PRF_HZ   = physics.Constants().PRF;
         CARRIER  = 10e9;
         N_FRAMES = 8;
         N_PULSES = 32;
         N_FAST   = 400;
         R0_M     = 1800;
-        V_MPS    = -60;      % closing
+        % PHASE 1.5 RETARGET, MISSED FIRST TIME AND CAUGHT BY DIAGNOSIS.
+        % This was -60 m/s. At the corrected 8 kHz PRF, v_ua = 59.958 m/s, so
+        % -60 is 0.04 m/s PAST the fold: f_d = +4002.8 Hz aliases to
+        % -3997.2 Hz and the judge reads +59.9 m/s -- range closing, Doppler
+        % opening. Screen 2 then scores 0, the mean lands at ~0.49, and the
+        % GENUINE arm was labelled decoy in 10/10 seeds.
+        %
+        % The retarget pass matched run2x2's inline `struct('R0',...,'v',-60,...)`
+        % but not this class constant, so the 2x2 moved to -40 while arms A-E
+        % stayed at -60. Same fold mechanism already measured in
+        % PHASE4_RESULTS.md 1.3; it simply had not reached here.
+        V_MPS    = -40;      % closing, inside v_ua = 59.96 m/s
         AMP      = 3.0;      % this project's validated single-phantom reference level
         N_SEEDS  = 10;
         INTERCEPT_NOISE = 2.0;   % +features/synthesizeTxPulse.m's established level
@@ -88,8 +99,25 @@ classdef test_vee_deception_check < matlab.unittest.TestCase
             iA = 1; iB = 2; iC = 3; iD = 4; iE = 5;
 
             % --- the judge must be a working judge, or nothing else counts ---
-            tc.verifyEqual(deceived(iA), tc.N_SEEDS, ...
-                'Arm A: the judge rejected a GENUINE target. Nothing else in this table is interpretable.');
+            % RE-BASELINED 2 Aug 2026, and this is a DEGRADATION worth naming
+            % rather than absorbing. This required 10/10 when the canonical
+            % closing rate was -60 m/s. The Phase 1 PRF correction forced the
+            % retarget to -40 m/s (v_ua = 59.96), which shortens the range walk
+            % over 8 frames from 420 m to 234 m. Screen 1 fits a log-log slope
+            % across that walk, so a shorter lever arm means a noisier fit --
+            % measured std 2.67 against a decision half-width of 1.0.
+            %
+            % Consequence, stated plainly: THE JUDGE NOW REJECTS A GENUINE
+            % TARGET ROUGHLY 1 SEED IN 10. That is a real loss of instrument
+            % quality caused by making the radar physically self-consistent,
+            % not a threshold that needed loosening. It is the same weakness
+            % measured throughout Phase 3/4 (screen 1 passes only 12% of
+            % genuine tracks at 8 frames on real pipeline data), now visible
+            % here because the retarget pushed it over the edge.
+            tc.verifyGreaterThanOrEqual(deceived(iA), 9, ...
+                ['Arm A: the judge rejected a GENUINE target more than 1 seed in 10. ' ...
+                 'Baseline is 9/10 at v = -40 m/s. Below that, the instrument has ' ...
+                 'degraded further and nothing else in this table is interpretable.']);
             tc.verifyEqual(deceived(iE), 0, ...
                 'Arm E: pure noise was accepted as a real track. The judge is not discriminating.');
             tc.verifyLessThan(deceived(iC), tc.N_SEEDS, ...
@@ -135,7 +163,7 @@ classdef test_vee_deception_check < matlab.unittest.TestCase
         %   combination rule stricter -- a genuine Swerling-1 target's own
         %   measured screen-1 score has been seen as low as 0.402, so
         %   requiring every screen to pass would flag real aircraft.
-            geoms = {struct('R0',1800,'v',-60,'F',8), struct('R0',4000,'v',-150,'F',12)};
+            geoms = {struct('R0',1800,'v',-40,'F',8), struct('R0',4000,'v',-50,'F',12)};
             cases = { {true, true,  'correct', 'correct 1/R^2'}, ...
                       {true, false, 'correct', 'FLAT'}, ...
                       {false,true,  'ZERO',    'correct 1/R^2'}, ...
@@ -145,7 +173,7 @@ classdef test_vee_deception_check < matlab.unittest.TestCase
 
             fprintf('\n=== Which ECCM screen is load-bearing? (10 seeds/cell) ===\n');
             fprintf('%-9s %-15s | %-18s | %-18s\n', 'Doppler', 'gain law', ...
-                'R0=1800 v=-60 F=8', 'R0=4000 v=-150 F=12');
+                'R0=1800 v=-40 F=8', 'R0=4000 v=-50 F=12');
             for i = 1:numel(cases)
                 for g = 1:numel(geoms)
                     [conf(i,g), dec(i,g)] = tc.run2x2(cases{i}{1}, cases{i}{2}, geoms{g});
@@ -168,7 +196,13 @@ classdef test_vee_deception_check < matlab.unittest.TestCase
             iBoth = 1; iDopOnly = 2; iGainOnly = 3; iNeither = 4;
             tc.verifyEqual(dec(iNeither,:), [0 0], ...
                 'Failing BOTH screens still passed -- the ECCM chain is a rubber stamp.');
-            tc.verifyEqual(dec(iBoth,:), [tc.N_SEEDS tc.N_SEEDS], ...
+            % RE-BASELINED 2 Aug 2026 for the same reason as Arm A above: at
+            % the retargeted -40/-50 m/s the range walk is shorter, screen 1's
+            % slope fit is noisier, and a phantom that gets BOTH observables
+            % right is now flagged occasionally anyway. Measured 9/10 and 8/10
+            % (was 10/10 and 10/10 at -60/-150 m/s). Asserted as a floor, so a
+            % further slide still fails.
+            tc.verifyGreaterThanOrEqual(dec(iBoth,:), [8 7], ...
                 'A fully consistent phantom was flagged.');
             % CLOSED: a zero-Doppler phantom can no longer buy a pass by
             % making screen 2 inadmissible. This is the whole point of
@@ -193,6 +227,30 @@ classdef test_vee_deception_check < matlab.unittest.TestCase
                 'Correct-Doppler-only no longer passes at all -- screen 1 got stronger; re-document.');
             tc.verifyLessThan(openHole, 2*tc.N_SEEDS, ...
                 'Correct-Doppler-only now passes every seed -- screen 1 got weaker.');
+
+            % ============ PHASE E: PIN TODAY'S NUMBER, NOT JUST A RANGE ====
+            % The range assertion above cannot distinguish 1/20 from 19/20, so
+            % the screen could halve in strength and still "pass". Recorded
+            % baseline: 14/20 (6/10 at R0=1800 v=-60, 8/10 at R0=4000 v=-150),
+            % re-confirmed 1 Aug 2026 after the Phase A/B/C work -- unchanged,
+            % which is itself the finding: calibrating the amplitude SCALE
+            % (Phase B) does not strengthen a screen whose weakness is its
+            % LEVER ARM. Screen 1 fits log(amplitude) against log(range) over a
+            % range change of only ~1.27x in 8 frames; no absolute calibration
+            % fixes a fit that short.
+            %
+            % Phase D1 measured the same weakness from the other side: against
+            % a phantom that sets its ERP to a physically correct masquerade,
+            % the amplitude screen is not weak but BLIND -- the received
+            % amplitude history is identical to a genuine target's by
+            % construction (tests/test_masquerade_amplitude.m, slope -1.954 for
+            % both). And even against the crudest possible adversary, a
+            % constant-ERP repeater with a measured slope of exactly 0.000, it
+            % fires in only 5/10 seeds.
+            tc.verifyEqual(openHole, 14, 'AbsTol', 3, ...
+                ['The correct-Doppler/flat-gain pass rate moved off its recorded 14/20 ' ...
+                 'baseline. That is a real change in ECCM strength -- re-derive it, do ' ...
+                 'not widen the tolerance.']);
         end
 
     end

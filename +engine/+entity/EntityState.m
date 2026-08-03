@@ -50,14 +50,21 @@ function s = EntityState(varargin)
 %
 %   Example
 %       s = engine.entity.EntityState('range_m', 1800, ...
-%               'range_rate_mps', -60, 'class', 'fighter');
+%               'range_rate_mps', -40, 'class', 'fighter');
 
     % Mirrors cogengine/schema.py's PHANTOM_CLASSES, same order, same names.
     CLASSES = {'fighter', 'airliner', 'drone', 'missile', 'decoy'};
 
     p = inputParser;
     addParameter(p, 'range_m',          1800,      @(x) isscalar(x) && isnumeric(x));
-    addParameter(p, 'range_rate_mps',    -60,      @(x) isscalar(x) && isnumeric(x));
+    % PHASE 4.1: range_rate is now checked against the radar's unambiguous
+    % velocity, v_ua = lambda*PRF/4 = +-60 m/s at the corrected 8 kHz PRF.
+    % A faster entity is not rejected -- a real target may of course exceed
+    % v_ua -- but it WARNS, because its Doppler folds and the judge will
+    % measure a velocity that is not the one rendered. Silently rendering an
+    % unmeasurable velocity is how the old PRF contradiction stayed hidden.
+    % Suppress deliberately with warning('off', ...) when folding is the point.
+    addParameter(p, 'range_rate_mps', -40,      @(x) isscalar(x) && isnumeric(x));
     addParameter(p, 'range_accel_mps2',    0,      @(x) isscalar(x) && isnumeric(x));
     addParameter(p, 'rcs_dbsm',            0,      @(x) isscalar(x) && isnumeric(x));
     addParameter(p, 'swerling',            1,      @(x) isscalar(x) && isnumeric(x));
@@ -137,6 +144,20 @@ function s = EntityState(varargin)
     % boundary (see its header).
     s.range_m          = double(o.range_m);
     s.range_rate_mps   = double(o.range_rate_mps);
+
+    % PHASE 4.1 -- Doppler-ambiguity warning. See the range_rate_mps
+    % addParameter comment above for why this warns rather than errors.
+    Cvua = physics.Constants();
+    if abs(s.range_rate_mps) > Cvua.v_unambiguous
+        warning('engine:entity:EntityState:dopplerFolds', ...
+            ['range_rate_mps = %+.1f m/s exceeds this radar''s unambiguous ' ...
+             'velocity of +-%.1f m/s (lambda*PRF/4 at PRF = %.0f Hz). Its ' ...
+             'Doppler FOLDS: the judge will measure %+.1f m/s instead. ' ...
+             'Render it if you mean to -- but do not read the measured ' ...
+             'velocity as the rendered one.'], ...
+            s.range_rate_mps, Cvua.v_unambiguous, Cvua.PRF, ...
+            localFoldVelocity(s.range_rate_mps, Cvua.v_unambiguous));
+    end
     s.range_accel_mps2 = double(o.range_accel_mps2);
     s.rcs_dbsm         = double(o.rcs_dbsm);
     s.swerling         = double(o.swerling);
@@ -162,4 +183,13 @@ function s = EntityState(varargin)
         'swerling must be in 0..4, got %g', s.swerling);
     assert(ismember(s.class, CLASSES), 'engine:entity:badClass', ...
         'class must be one of {%s}, got ''%s''', strjoin(CLASSES, ', '), s.class);
+end
+
+function vFold = localFoldVelocity(v, vUa)
+%LOCALFOLDVELOCITY  Where a beyond-v_ua radial velocity actually lands.
+%   Doppler aliases modulo the PRF, i.e. velocity aliases modulo 2*v_ua,
+%   wrapped into [-v_ua, +v_ua). Same arithmetic as physics.apparentRange
+%   does for range, one axis over.
+    span = 2 * vUa;
+    vFold = mod(v + vUa, span) - vUa;
 end

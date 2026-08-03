@@ -21,7 +21,7 @@ classdef test_judge_measured_doppler < matlab.unittest.TestCase
     properties (Constant)
         FS_PW    = 12e-6;
         BW_HZ    = 2e6;
-        PRF_HZ   = 50e3;
+        PRF_HZ   = physics.Constants().PRF;
         CARRIER  = 10e9;
         N_FRAMES = 8;
         N_PULSES = 32;
@@ -38,7 +38,7 @@ classdef test_judge_measured_doppler < matlab.unittest.TestCase
     methods (Test)
 
         function test_cube_path_measures_the_real_range_rate(tc)
-            vTrue = -60;
+            vTrue = -40;
             fb = tc.judge(tc.buildConsistent(vTrue));
             tc.assertGreaterThanOrEqual(fb.confirmed_tracks, 1, 'Nothing confirmed to screen.');
             tc.verifyEqual(fb.doppler_source, 'measured');
@@ -57,7 +57,7 @@ classdef test_judge_measured_doppler < matlab.unittest.TestCase
         function test_consistent_targets_pass_both_directions(tc)
             % A genuine target is labelled real whether it closes or opens --
             % the screen tests CONSISTENCY, not a preferred direction.
-            for v = [-60, 60]
+            for v = [-40, 40]
                 fb = tc.judge(tc.buildConsistent(v));
                 tc.assertGreaterThanOrEqual(fb.confirmed_tracks, 1);
                 fprintf('[judge] consistent v=%+d -> label=%s (rate %+.1f m/s)\n', ...
@@ -71,7 +71,7 @@ classdef test_judge_measured_doppler < matlab.unittest.TestCase
             % Range walks CLOSING, Doppler says OPENING. Physically
             % impossible; a naive repeater pulling its range gate without
             % matching its velocity gate does exactly this.
-            fb = tc.judge(tc.buildInconsistent(-60, +60));
+            fb = tc.judge(tc.buildInconsistent(-40, +40));
             tc.assertGreaterThanOrEqual(fb.confirmed_tracks, 1, 'Nothing confirmed to screen.');
 
             R = fb.track_range_m{1};
@@ -97,7 +97,7 @@ classdef test_judge_measured_doppler < matlab.unittest.TestCase
         end
 
         function test_legacy_2d_export_disables_the_screen_instead_of_faking_it(tc)
-            cube = tc.buildConsistent(-60);
+            cube = tc.buildConsistent(-40);
             fb = tc.judge(squeeze(cube(:, 1, :)));          % drop slow time -> legacy shape
             tc.verifyEqual(fb.doppler_source, 'none-2d-export-screen-disabled');
             if fb.confirmed_tracks >= 1
@@ -110,7 +110,7 @@ classdef test_judge_measured_doppler < matlab.unittest.TestCase
         end
 
         function test_cube_without_carrier_refuses_to_guess(tc)
-            cube = tc.buildConsistent(-60);
+            cube = tc.buildConsistent(-40);
             f = [tempname '.mat'];
             S = tc.baseConfig(); S.rx_frames = cube;        % carrier_hz deliberately absent
             save(f, '-struct', 'S');

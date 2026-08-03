@@ -221,6 +221,29 @@ def health():
     return {"judge_online": b.online, "judge_error": b.last_error}
 
 
+@app.get("/constants")
+def constants():
+    """The backend's own physical facts, so the client never types them.
+
+    Phase A2: web/src/Console.jsx carried `const RANGE_CELL_M = 46.8426` and
+    `UNAMBIG_M = 2997.9` as finished literals -- correct on the day they were
+    typed and silently wrong the moment fs or the PRF changed. They are
+    derived here from cogengine.radar_params, which cogengine/tests/
+    test_radar_params.py pins to +physics/Constants.m.
+    """
+    from cogengine import radar_params as rp
+
+    prf_hz = 50e3  # this project's canonical PRF (schema.RadarState default)
+    return {
+        "speed_of_light_mps": rp.SPEED_OF_LIGHT_MPS,
+        "sample_rate_hz": rp.SAMPLE_RATE_HZ,
+        "range_per_sample_m": rp.RANGE_PER_SAMPLE_M,
+        "range_window_m": rp.RANGE_PER_SAMPLE_M * 512,   # 512-sample record
+        "unambiguous_range_m": rp.SPEED_OF_LIGHT_MPS / (2.0 * prf_hz),
+        "prf_hz": prf_hz,
+    }
+
+
 @app.post("/plan")
 def plan_endpoint(body: PlanIn):
     return serialize.plan_response(_plan(body))

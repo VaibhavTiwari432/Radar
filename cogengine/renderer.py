@@ -25,7 +25,7 @@ import numpy as np
 
 from cogengine.schema import Phantom, RadarState, Scene
 
-SPEED_OF_LIGHT = 299792458.0  # m/s, exact SI value
+from cogengine.radar_params import SPEED_OF_LIGHT_MPS as SPEED_OF_LIGHT
 
 # Reference range for amplitude calibration [m]. amplitude_law's 1/R^2 SHAPE
 # is exact physics; its absolute SCALE has no real transmit-power/antenna-

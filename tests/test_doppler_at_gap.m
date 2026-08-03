@@ -32,13 +32,13 @@ classdef test_doppler_at_gap < matlab.unittest.TestCase
             C = physics.Constants();
             rng(777);
             wav = phased.LinearFMWaveform('SampleRate', C.fs, ...
-                    'PulseWidth', 12e-6, 'PRF', 50e3, 'SweepBandwidth', 2e6);
+                    'PulseWidth', 12e-6, 'PRF', physics.Constants().PRF, 'SweepBandwidth', 2e6);
             pulse = wav();
             bufferLen = 400;
             xTemplate = [pulse; zeros(bufferLen - numel(pulse), 1)];
 
             F = 8; frameIntervalS = 1.0;
-            R0 = 1800; vClose = 60; gain0 = 3;
+            R0 = 1800; vClose = 40; gain0 = 3;
 
             rxFrames = complex(zeros(bufferLen, F));
             missedFrame = 5;   % deliberately kill the signal at this one frame
@@ -59,7 +59,7 @@ classdef test_doppler_at_gap < matlab.unittest.TestCase
             tmpMat = fullfile(here, '_tmp_doppler_gap.mat');
             cleanupObj = onCleanup(@() localDeleteIfExists(tmpMat)); %#ok<NASGU>
             S = struct('rx_frames', rxFrames, 'fs', C.fs, 'pulse_width_s', 12e-6, ...
-                        'bandwidth_hz', 2e6, 'prf_hz', 50e3, 'cfar_pfa', 1e-4, ...
+                        'bandwidth_hz', 2e6, 'prf_hz', physics.Constants().PRF, 'cfar_pfa', 1e-4, ...
                         'cfar_num_training', 20, 'cfar_num_guard', 4, ...
                         'frame_interval_s', frameIntervalS);
             save(tmpMat, '-struct', 'S');

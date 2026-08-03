@@ -1,10 +1,11 @@
-function feedback = runJudge(matFile)
+function feedback = runJudge(matFile, varargin)
 %RUNJUDGE  Run any exported Scene's rx buffers (from
 %   cogengine.matlab_judge.export_scene_for_judge, Phase 2 build-order
 %   step 5) through the Phase 1 MATLAB judge (+radar/+track) and return a
 %   Feedback-shaped struct.
 %
 %   feedback = engine.runJudge(matFile)
+%   feedback = engine.runJudge(matFile, 'Name', value, ...)
 %       matFile : path to a .mat written by
 %                 cogengine.matlab_judge.export_scene_for_judge
 %       feedback: struct with confirmed_tracks, false_tracks_surviving,
@@ -17,6 +18,36 @@ function feedback = runJudge(matFile)
 %   function never imports or calls anything from cogengine/*.py -- it
 %   only ever sees the rendered rx signal and generic config numbers that
 %   crossed the seam in matFile.
+%
+%   THE JUDGE'S OWN CONFIGURATION NEVER CROSSES THAT SEAM (Phase A1). This
+%   function used to read cfar_pfa / cfar_num_training / cfar_num_guard /
+%   assignment_gate_m / confirmation_threshold / deletion_threshold /
+%   filter_model / tracker_type / eccm_screens / expect_micro_doppler /
+%   micro_blade_hz_min out of the .mat -- a file the ADVERSARY's exporter
+%   writes. cogengine.matlab_judge.export_scene_for_judge was in fact
+%   writing its twin's own CFAR settings into it. That the values happened
+%   to be identical to +radar/cfarDetect.m's defaults is what made the wire
+%   invisible, not harmless: nothing prevented a planner from turning the
+%   judge's detector down. Those reads are gone. Every one of those knobs
+%   is now an explicit name-value argument, settable only by this
+%   function's MATLAB caller (+experiments/*), never by the .mat:
+%
+%       'Pfa' 'NumTraining' 'NumGuard'          -> radar.cfarDetect
+%       'AssignmentThreshold' 'ConfirmationThreshold' 'DeletionThreshold'
+%       'FilterModel' 'TrackerType'             -> track.runTracker
+%       'EccmScreens' 'ExpectMicroDoppler' 'MicroBladeHzMin'
+%                                               -> track.discriminator
+%
+%   Each defaults to [] meaning "do not pass it on" -- so the value in
+%   force is the one +radar/cfarDetect.m, +track/trackerDefaults.m or
+%   +track/discriminator.m declares. This file re-declares none of them
+%   (the C3 bug: a literal ASSIGNMENT_GATE_M = 200 copied out of the
+%   tracker went stale the moment a caller swept the gate).
+%
+%   The .mat still carries what DESCRIBES THE SIGNAL, which the judge has
+%   no other way to know and which is a Rule-1 shared physical fact, not a
+%   model parameter: fs, pulse_width_s, bandwidth_hz, prf_hz, carrier_hz,
+%   frame_interval_s, sweep_schedule, subaperture_sep_m, rx_frames_delta.
 %
 %   MULTI-TARGET (was single-target until this revision): a scene's
 %   rx_frames already sum ALL of its phantoms' returns per frame
@@ -80,6 +111,9 @@ function feedback = runJudge(matFile)
     projectRoot = fileparts(here);
     addpath(projectRoot);
 
+    C = physics.Constants();
+    opts = localParseJudgeConfig(varargin);
+
     S = load(matFile);
     rxFrames = S.rx_frames;
 
@@ -92,14 +126,13 @@ function feedback = runJudge(matFile)
         assert(isfield(S, 'carrier_hz'), 'engine:runJudge:noCarrier', ...
             ['A pulse-cube rx_frames needs carrier_hz in the .mat to turn a ' ...
              'Doppler bin into a range-rate. Refusing to guess a wavelength.']);
-        lambda = 299792458 / double(S.carrier_hz);
+        lambda = C.c / double(S.carrier_hz);
     else
         numPulses = 1;
         numFrames = size(rxFrames, 2);
         lambda = NaN;
     end
 
-    C = physics.Constants();
     % double() cast: a Python-exported .mat's numeric fields are only as
     % well-typed as whatever produced them -- a RadarState/Scene built via
     % engine.decideScene's JSON seam can carry a whole-number field (e.g.
@@ -146,6 +179,10 @@ function feedback = runJudge(matFile)
     peakAz    = cell(1, numFrames);   % MEASURED azimuth [rad], angle path only
     peakComb  = cell(1, numFrames);   % MEASURED micro-Doppler comb fraction
 
+    % Judge-side detector config, from THIS function's caller only (never
+    % the .mat). Empty -> omitted, so radar.cfarDetect's own defaults stand.
+    cfarArgs = localNameValue(opts, {'Pfa', 'NumTraining', 'NumGuard'});
+
     % ---- micro-Doppler resolvability, decided ONCE from the waveform ----
     % A comb at f_blade is invisible unless some line clears the slow-time
     % mainlobe. Measured criterion (experiments.microDopplerScreenability):
@@ -153,8 +190,17 @@ function feedback = runJudge(matFile)
     % rate. Uses the SLOWEST blade rate the screen must cover, because that
     % is the hardest case; 100 Hz is the low end of the 100-200 Hz band
     % measured across four drone types in the TSMS-Drone CW set.
-    if isfield(S, 'micro_blade_hz_min'); bladeMinHz = double(S.micro_blade_hz_min);
-    else;                                bladeMinHz = 100; end
+    % ---- RANGE AMBIGUITY (Phase C1) --------------------------------------
+    % Report the radar's real unambiguous envelope alongside every result, and
+    % state whether the receive window it was handed is even consistent with
+    % the PRF it declares. Reporting only -- this does NOT re-bin anything,
+    % because the fold happens in the receiver at acquisition time and cannot
+    % be undone downstream. What it prevents is quoting a 5000 m track from a
+    % radar that physically cannot place one past 2998 m without saying so.
+    ambigInfo = physics.assertPrfWindowConsistent(double(S.prf_hz), ...
+                    size(rxFrames, 1), 'Mode', 'silent');
+
+    bladeMinHz = opts.MicroBladeHzMin;
     if isCube
         dopplerResHz  = double(S.prf_hz) / numPulses;
         microResolvable = dopplerResHz < bladeMinHz;
@@ -197,8 +243,7 @@ function feedback = runJudge(matFile)
             dopBin = [];
         end
 
-        detIdx = radar.cfarDetect(power, 'Pfa', S.cfar_pfa, ...
-                    'NumTraining', S.cfar_num_training, 'NumGuard', S.cfar_num_guard);
+        detIdx = radar.cfarDetect(power, cfarArgs{:});
         peakBins = localMaxPeaks(detIdx, power);
 
         if isempty(peakBins)
@@ -287,23 +332,11 @@ function feedback = runJudge(matFile)
         dets{k} = detArr;
     end
 
-    % Sweepable radar operating point. Any of these MAY be present in the
-    % .mat; each absent one falls back to this project's historical value,
-    % so every existing exporter is unaffected. Used by
-    % +experiments/benchmarkSuite.m to state the adversary's difficulty as a
-    % parameter instead of a hardcoded constant (see its Tier-2 sweeps).
-    trkArgs = {};
-    if isfield(S, 'assignment_gate_m')
-        trkArgs = [trkArgs, {'AssignmentThreshold', [double(S.assignment_gate_m) inf]}];
-    end
-    if isfield(S, 'confirmation_threshold')
-        trkArgs = [trkArgs, {'ConfirmationThreshold', double(S.confirmation_threshold(:)')}];
-    end
-    if isfield(S, 'deletion_threshold')
-        trkArgs = [trkArgs, {'DeletionThreshold', double(S.deletion_threshold(:)')}];
-    end
-    if isfield(S, 'filter_model');  trkArgs = [trkArgs, {'FilterModel',  char(S.filter_model)}];  end
-    if isfield(S, 'tracker_type');  trkArgs = [trkArgs, {'TrackerType',  char(S.tracker_type)}];  end
+    % Sweepable radar operating point -- from this function's OWN caller
+    % (+experiments/benchmarkSuite.m's Tier-2 sweeps), never from the .mat.
+    % Empty -> omitted, so +track/trackerDefaults.m's values stand.
+    trkArgs = localNameValue(opts, {'AssignmentThreshold', ...
+        'ConfirmationThreshold', 'DeletionThreshold', 'FilterModel', 'TrackerType'});
 
     [confirmedTracks, history] = track.runTracker(dets, times, C, trkArgs{:});
     confirmedCount = numel(confirmedTracks);
@@ -317,7 +350,17 @@ function feedback = runJudge(matFile)
     % gate, +track/runTracker.m) -- not a literal readout of trackerGNN's
     % internal assignment (its public API doesn't expose that), but the
     % same defensible approximation already used and documented above.
-    ASSIGNMENT_GATE_M = 200;  % +track/runTracker.m's own AssignmentThreshold(1)
+    % C3: this was a literal 200 copied out of the tracker, which went stale
+    % the instant a caller swept the gate -- the frame log then reported hits
+    % against a threshold the tracker was not using. Read the gate ACTUALLY
+    % in force instead: the caller's override if there was one, otherwise
+    % +track/trackerDefaults.m, which is where the number now lives once.
+    if isempty(opts.AssignmentThreshold)
+        gateVec = track.trackerDefaults().AssignmentThreshold;
+    else
+        gateVec = opts.AssignmentThreshold;
+    end
+    ASSIGNMENT_GATE_M = gateVec(1);
     hitCountByID = containers.Map('KeyType', 'double', 'ValueType', 'double');
     missStreakByID = containers.Map('KeyType', 'double', 'ValueType', 'double');
     frameLog = cell(1, numFrames);
@@ -447,11 +490,11 @@ function feedback = runJudge(matFile)
                 ts.combFrac = mean(cSeq);
             end
             ts.microResolvable = microResolvable;
-            if isfield(S, 'expect_micro_doppler')
-                ts.expectMicroDoppler = logical(S.expect_micro_doppler);
+            if ~isempty(opts.ExpectMicroDoppler)
+                ts.expectMicroDoppler = logical(opts.ExpectMicroDoppler);
             end
-            if isfield(S, 'eccm_screens')     % ablation mask, absent -> all screens on
-                ts.screensEnabled = cellstr(S.eccm_screens);
+            if ~isempty(opts.EccmScreens)     % ablation mask, absent -> all screens on
+                ts.screensEnabled = cellstr(opts.EccmScreens);
             end
             [lbl, ~] = track.discriminator(ts, C);
             trackLabel(i) = string(lbl);
@@ -535,6 +578,21 @@ function feedback = runJudge(matFile)
     else
         feedback.angle_source = 'none';          % this radar cannot measure angle
     end
+    % ---- range ambiguity, reported with every result (Phase C1) ----------
+    feedback.unambiguous_range_m = ambigInfo.unambiguous_range_m;
+    feedback.range_window_m      = ambigInfo.window_span_m;
+    feedback.prf_window_consistent = ambigInfo.consistent;
+    % Where each confirmed track's measured range WOULD fold to if this
+    % radar's declared PRF is the honest one. Equal to track_range_m for any
+    % track inside R_ua, so a caller comparing the two sees the ambiguity
+    % order directly.
+    if isempty(trackRange)
+        feedback.track_apparent_range_m = {};
+    else
+        feedback.track_apparent_range_m = cellfun( ...
+            @(r) physics.apparentRange(r, double(S.prf_hz)), trackRange, ...
+            'UniformOutput', false);
+    end
     feedback.frame_log     = frameLog;
     feedback.num_frames    = numFrames;
     feedback.num_pulses_per_frame = numPulses;
@@ -568,5 +626,42 @@ function peaks = localMaxPeaks(detIdx, power)
             peaks(end+1,1) = run(im); %#ok<AGROW>
             runStart = i;
         end
+    end
+end
+
+function opts = localParseJudgeConfig(args)
+%LOCALPARSEJUDGECONFIG  The judge's own operating point, settable ONLY here.
+%   Every default is [] = "not specified", so the value actually in force is
+%   the one declared by radar.cfarDetect / track.trackerDefaults /
+%   track.discriminator. This function deliberately re-declares none of
+%   them; a copy here is exactly the C3 staleness bug.
+%
+%   MicroBladeHzMin is the one exception and it is the JUDGE's own screen
+%   constant, not a copy of anything: 100 Hz, the low end of the 100-200 Hz
+%   blade-rate band measured across four drone types in the TSMS-Drone CW
+%   set (experiments.microDopplerScreenability). It used to be overridable
+%   from the .mat, i.e. by the adversary.
+    p = inputParser;
+    p.addParameter('Pfa',                   []);
+    p.addParameter('NumTraining',           []);
+    p.addParameter('NumGuard',              []);
+    p.addParameter('AssignmentThreshold',   []);
+    p.addParameter('ConfirmationThreshold', []);
+    p.addParameter('DeletionThreshold',     []);
+    p.addParameter('FilterModel',           []);
+    p.addParameter('TrackerType',           []);
+    p.addParameter('EccmScreens',           []);
+    p.addParameter('ExpectMicroDoppler',    []);
+    p.addParameter('MicroBladeHzMin',       100);
+    p.parse(args{:});
+    opts = p.Results;
+end
+
+function nv = localNameValue(opts, names)
+%LOCALNAMEVALUE  Flatten the specified-only options into a name-value list.
+    nv = {};
+    for i = 1:numel(names)
+        v = opts.(names{i});
+        if ~isempty(v); nv = [nv, {names{i}, v}]; end %#ok<AGROW>
     end
 end

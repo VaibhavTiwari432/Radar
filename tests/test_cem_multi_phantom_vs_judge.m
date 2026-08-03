@@ -145,6 +145,34 @@ classdef test_cem_multi_phantom_vs_judge < matlab.unittest.TestCase
 
             tc.verifyGreaterThanOrEqual(mean(results.cem.realJ), 0);
             tc.verifyGreaterThanOrEqual(mean(results.naive.realJ), 0);
+
+            % ============ PHASE E: THE INVERSION IS NOW ASSERTED ============
+            % This test used to print the CEM-vs-naive comparison and assert
+            % only that both were non-negative -- so the headline finding, that
+            % the SNR-EQUALISED "NAIVE" BASELINE BEATS THE CEM PLANNER AGAINST
+            % THE REAL JUDGE, could regress silently in either direction.
+            %
+            % Recorded baseline (25 July 2026 re-run, after the judge's Doppler
+            % fix, N=5 render-noise seeds): CEM 1.00/4 real survivors, naive
+            % 3.60/4. CLAUDE.md's "CEM beats the baseline" conclusion is
+            % WITHDRAWN and stays withdrawn until this assertion fails.
+            %
+            % Tolerance is +-0.8 survivors: wide enough for seed-to-seed
+            % movement at N=5, far too narrow to let the inversion flip
+            % unnoticed (it would take a 2.6-survivor swing).
+            cemMean = mean(results.cem.realJ);
+            naiveMean = mean(results.naive.realJ);
+            fprintf(['\n[E1] RECORDED BASELINE: CEM %.2f/4 vs naive %.2f/4 real survivors.\n' ...
+                     '     Published inversion was CEM 1.00 vs naive 3.60 (25 Jul 2026).\n'], ...
+                cemMean, naiveMean);
+            tc.verifyEqual(cemMean, 1.00, 'AbsTol', 0.8, ...
+                'CEM''s judged survivor count moved off its recorded 1.00/4 baseline.');
+            tc.verifyEqual(naiveMean, 3.60, 'AbsTol', 0.8, ...
+                'The naive baseline''s judged survivor count moved off its recorded 3.60/4.');
+            tc.verifyGreaterThan(naiveMean, cemMean, ...
+                ['THE INVERSION HAS FLIPPED. The SNR-equalised naive baseline no longer ' ...
+                 'beats the CEM planner against the real judge. That is a genuine result ' ...
+                 'change and CLAUDE.md Task 1 must be re-derived, not quietly updated.']);
         end
 
     end

@@ -50,18 +50,25 @@ class WaveformParams:
     # shrinkage-to-nominal is already the right (and previously measured
     # beneficial) behavior.
     aliasing_margin: float = 1.0
+    # +1 if the caller-supplied nominal SIGN was kept, -1 if the sweep was
+    # found to run the other way and the estimator overrode it. Exposed so
+    # "did the known-radar prior's sign ever get corrected" is auditable
+    # rather than silent -- the correction itself is automatic.
+    sign_used: int = 1
 
 
-def characterize_intercept_dechirp(iq: np.ndarray, fs: float, nominal_chirp_rate_hz_s: float) -> WaveformParams:
-    """Nyquist-safe chirp characterization: dechirp against the KNOWN
-    nominal rate, then estimate the (small, slowly-varying) residual.
-    Direct Python port of +features/characterizeInterceptDechirp.m.
+def _dechirp_one_sign(iq: np.ndarray, fs: float, k_nom: float) -> Tuple[float, float, float]:
+    """One dechirp attempt at one assumed sweep sign.
+
+    Returns (k_est, quality, aliasing_margin). Factored out of
+    characterize_intercept_dechirp so both signs run through identical
+    code -- mirrors localDechirpOneSign in
+    +features/characterizeInterceptDechirp.m.
     """
-    iq = np.asarray(iq).ravel()
     n = len(iq)
     t = np.arange(n) / fs
 
-    ref_chirp = np.exp(1j * np.pi * nominal_chirp_rate_hz_s * t**2)
+    ref_chirp = np.exp(1j * np.pi * k_nom * t**2)
     residual = iq * np.conj(ref_chirp)
 
     ph = np.unwrap(np.angle(residual))
@@ -80,7 +87,39 @@ def characterize_intercept_dechirp(iq: np.ndarray, fs: float, nominal_chirp_rate
     # Shrinkage toward the known nominal rate as confidence drops (see
     # module docstring) -- and classification DEFAULTS to lfm, matching
     # the known-radar premise, rather than re-deciding from scratch.
-    k_est = nominal_chirp_rate_hz_s + quality * delta_k
+    k_est = k_nom + quality * delta_k
+    return float(k_est), quality, float(aliasing_margin)
+
+
+def characterize_intercept_dechirp(iq: np.ndarray, fs: float, nominal_chirp_rate_hz_s: float) -> WaveformParams:
+    """Nyquist-safe chirp characterization: dechirp against the KNOWN
+    nominal rate, then estimate the (small, slowly-varying) residual.
+
+    SWEEP-DIRECTION AMBIGUITY (Phase A3). This function called itself a
+    "direct port" of +features/characterizeInterceptDechirp.m while
+    implementing only half of it: the MATLAB version tries the nominal rate
+    at BOTH signs and keeps the higher-quality fit; this one built a single
+    reference chirp and never considered the other direction. That is not a
+    cosmetic divergence -- the MATLAB header records the single-sign version
+    as a MEASURED silent failure: a wrong-sign nominal scored
+    aliasing_margin = 0.0091, just ABOVE synthesize_tx_pulse's `<= 0`
+    fallback gate, so it committed a wrong-signed chirp rate without
+    triggering the documented fallback and without logging a degraded event.
+    Both signs are now tried here too, and `sign_used` records the outcome.
+
+    Correctly-signed intercepts are unaffected: the wrong-sign alternative
+    scores far lower, so the caller's nominal still wins. This is additive
+    robustness, not a behaviour change for the already-validated case.
+    """
+    iq = np.asarray(iq).ravel()
+    n = len(iq)
+
+    k_pos, q_pos, margin_pos = _dechirp_one_sign(iq, fs, nominal_chirp_rate_hz_s)
+    k_neg, q_neg, margin_neg = _dechirp_one_sign(iq, fs, -nominal_chirp_rate_hz_s)
+    if q_pos >= q_neg:
+        k_est, quality, aliasing_margin, sign_used = k_pos, q_pos, margin_pos, 1
+    else:
+        k_est, quality, aliasing_margin, sign_used = k_neg, q_neg, margin_neg, -1
 
     env = np.abs(iq)
     X = np.fft.fftshift(np.fft.fft(iq))
@@ -97,7 +136,8 @@ def characterize_intercept_dechirp(iq: np.ndarray, fs: float, nominal_chirp_rate
     return WaveformParams(wclass="lfm", f0_hz=centroid, bandwidth_hz=bw,
                            chirp_rate_hz_s=k_est, pulse_width_s=pw,
                            n_samples=n, confidence=quality,
-                           aliasing_margin=float(aliasing_margin))
+                           aliasing_margin=float(aliasing_margin),
+                           sign_used=sign_used)
 
 
 def synthesize_tx_pulse(clean_chirp: np.ndarray, fs: float, nominal_chirp_rate_hz_s: float,

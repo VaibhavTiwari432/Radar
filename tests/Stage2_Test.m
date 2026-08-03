@@ -30,7 +30,7 @@ classdef Stage2_Test < matlab.unittest.TestCase
         function test_output_contract(tc)
             C = physics.Constants();
             wav = phased.LinearFMWaveform('SampleRate',C.fs,'PulseWidth',12e-6, ...
-                    'PRF',50e3,'SweepBandwidth',2e6);
+                    'PRF',physics.Constants().PRF,'SweepBandwidth',2e6);
             numPulses = 32; fastTime = 256;
             cube = (randn(fastTime,numPulses)+1i*randn(fastTime,numPulses))/sqrt(2);
             [rd, rax, dax] = radar.rangeDoppler(cube, wav, C);
@@ -44,7 +44,7 @@ classdef Stage2_Test < matlab.unittest.TestCase
             % check the RD peak lands there (within a couple of cells).
             C = physics.Constants();
             wav = phased.LinearFMWaveform('SampleRate',C.fs,'PulseWidth',12e-6, ...
-                    'PRF',50e3,'SweepBandwidth',2e6);
+                    'PRF',physics.Constants().PRF,'SweepBandwidth',2e6);
             fastTime = 256; numPulses = 32; rbin = 120; fd = 4;  % doppler bin
             cube = 0.05*(randn(fastTime,numPulses)+1i*randn(fastTime,numPulses));
             n = (0:numPulses-1);

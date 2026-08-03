@@ -13,6 +13,16 @@ classdef test_survivor_count_vs_n_resourced < matlab.unittest.TestCase
 %   test re-runs the SAME N-sweep with population/iterations scaled to each
 %   N's actual dimensionality (population_size ~= 36*n_phantoms per
 %   plan_multi's own sizing guidance, iterations=8 throughout) and reports
+%
+%   ============ PHASE E: NOT A COMPETING TABLE ============
+%   This file's numbers are a CONFOUND CHECK on tests/test_tradeoff_sweep.m,
+%   which is the canonical Task 3 table. Both sweep N at 60 W and they do not
+%   agree, because they deliberately use different search resourcing:
+%     canonical   -- CEMConfig defaults, population_size=48, iterations=4
+%     this file   -- population_size = 36*N, iterations=8 (dimension-scaled)
+%   Quote any number from here WITH the "properly resourced" label attached.
+%   Neither table supersedes the other; the difference between them IS the
+%   measurement.
 %   the corrected numbers -- whatever they turn out to be, not a predicted
 %   or hoped-for direction.
 

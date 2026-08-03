@@ -37,6 +37,7 @@ from cogengine.radar_twin import (
     eccm_label,
     matched_filter_power,
 )
+from cogengine.radar_params import range_per_sample_m
 from cogengine.renderer import lfm_chirp, render_phantom_cpi
 from cogengine.schema import Phantom, RadarState
 
@@ -74,7 +75,7 @@ def run_scenario(name: str, params: dict):
     rng = np.random.default_rng(SEED)
 
     chirp = lfm_chirp(config.fs, config.pulse_width_s, config.bandwidth_hz)
-    range_per_sample = 299792458.0 / (2 * config.fs)
+    range_per_sample = range_per_sample_m(config.fs)
 
     rx_frames = np.zeros((config.fast_time_samples, NUM_FRAMES), dtype=complex)
     true_ranges = []

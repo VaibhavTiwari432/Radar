@@ -18,6 +18,28 @@ classdef test_tradeoff_sweep < matlab.unittest.TestCase
 %   project's own established CI style, CLAUDE.md Rule 3's own example:
 %   "P(detect)=[...] (+-0.8%, N=5 seeds)").
 %
+%   ============ PHASE E: WHICH TABLE IS CANONICAL ============
+%   Two files in this repo publish an N-sweep at 60 W and they do NOT agree
+%   (N=4/60W: 2.00 here vs 1.00 there; N=1: 0.00 here vs 1.00 there). Neither
+%   was identified as authoritative, so both were quotable and the pair was
+%   self-contradicting. Resolved:
+%
+%     THIS FILE IS THE CANONICAL TASK 3 TABLE. It is the one Task 3's
+%     definition of done ("the radar wins at least one cell") is evaluated
+%     against, and it uses CEMConfig's DEFAULT resourcing
+%     (population_size=48, iterations=4) uniformly across every cell.
+%
+%     tests/test_survivor_count_vs_n_resourced.m is NOT a competing table.
+%     It is a deliberate CONFOUND CHECK on this one: the same N-axis re-run
+%     with population/iterations scaled to each N's dimensionality
+%     (population_size = 36*N), to separate "the shared budget is a real
+%     physical ceiling" from "the search was starved at high N". Its numbers
+%     answer that question and must be quoted WITH the resourcing label
+%     attached; they are not a replacement for the cells below.
+%
+%   Quote either table only with its resourcing stated. They differ because
+%   the search budget differs, which is the whole point of having both.
+%
 %   Golden Rule (CLAUDE.md Rule 2): every cell is CEM's own plan, but scored
 %   ONLY by the real, independent judge -- never the twin.
 

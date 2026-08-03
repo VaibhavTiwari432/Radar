@@ -95,9 +95,17 @@ def export_scene_for_judge(scene: Scene, radar_state: RadarState, config: TwinCo
         # range-rate. It refuses to guess a wavelength rather than silently
         # corrupt every velocity it reports.
         "carrier_hz": radar_state.carrier_hz,
-        "cfar_pfa": config.cfar_pfa, "cfar_num_training": float(config.cfar_num_training),
-        "cfar_num_guard": float(config.cfar_num_guard),
-        "mofn_m": float(config.mofn_m), "mofn_n": float(config.mofn_n),
         "frame_interval_s": config.frame_interval_s,
+        # PHASE A1 -- CUT: cfar_pfa / cfar_num_training / cfar_num_guard /
+        # mofn_m / mofn_n USED TO BE WRITTEN HERE, straight out of the TWIN's
+        # own TwinConfig, and engine.runJudge configured its CFAR from them.
+        # That is the adversary setting the judge's detector: precisely the
+        # self-grading loop CLAUDE.md Rule 2 exists to forbid. It went
+        # unnoticed because TwinConfig's values happened to equal
+        # +radar/cfarDetect.m's own defaults, making the override invisible
+        # rather than harmless. The judge now always uses its own defaults;
+        # sweeping them is a name-value argument to engine.runJudge,
+        # available only to a MATLAB caller. Nothing this file writes may
+        # ever configure the judge again -- only DESCRIBE the signal.
     })
     return degraded_events

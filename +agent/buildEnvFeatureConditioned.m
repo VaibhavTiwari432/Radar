@@ -54,7 +54,7 @@ function [env, degradedEvent] = buildEnvFeatureConditioned(C, pfb)
     pulseWidthS = 12e-6;
     sweepBandwidthHz = 2e6;
     wav = phased.LinearFMWaveform('SampleRate', C.fs, ...
-            'PulseWidth', pulseWidthS, 'PRF', 50e3, 'SweepBandwidth', sweepBandwidthHz);
+            'PulseWidth', pulseWidthS, 'PRF', physics.Constants().PRF, 'SweepBandwidth', sweepBandwidthHz);
     pulse = wav();
     bufferLen = 400;
 

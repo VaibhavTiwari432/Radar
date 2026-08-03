@@ -17,7 +17,7 @@ classdef test_vee_shadow < matlab.unittest.TestCase
         FRAME_DT = 1.0;
         PW_S     = 12e-6;
         BW_HZ    = 2e6;
-        PRF_HZ   = 50e3;
+        PRF_HZ   = physics.Constants().PRF;
         CARRIER  = 10e9;
         N_FRAMES = 8;
         N_PULSES = 32;
@@ -202,7 +202,7 @@ classdef test_vee_shadow < matlab.unittest.TestCase
         %SHADOWRUN  Propagate an entity and track it with the shadow filter,
         %   feeding it the range the radar's quantiser would actually report.
             C = physics.Constants();
-            s = engine.entity.EntityState('range_m', 2800, 'range_rate_mps', -60, ...
+            s = engine.entity.EntityState('range_m', 2800, 'range_rate_mps', -40, ...
                     'class', 'fighter');
             rs = RandStream('twister', 'Seed', seed);
             f = engine.track.shadowEKF([], tc.quantise(s.range_m, C), tc.FRAME_DT, ...
@@ -243,7 +243,7 @@ classdef test_vee_shadow < matlab.unittest.TestCase
 
             switch name
                 case 'consistent-closing'
-                    s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -60, ...
+                    s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -40, ...
                             'class', 'fighter', 'rcs_dbsm', 0, 'swerling', 0);
                     for k = 1:tc.N_FRAMES
                         rangeTruth(k) = s.range_m;
@@ -270,7 +270,7 @@ classdef test_vee_shadow < matlab.unittest.TestCase
                 case 'range-jump'
                     % A discontinuity past the judge's own 200 m assignment
                     % gate. The one failure a purely kinematic filter CAN see.
-                    s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -60, ...
+                    s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -40, ...
                             'class', 'fighter', 'rcs_dbsm', 0, 'swerling', 0);
                     for k = 1:tc.N_FRAMES
                         if k == 5

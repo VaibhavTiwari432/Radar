@@ -28,7 +28,7 @@ classdef test_waveform_agility < matlab.unittest.TestCase
     properties (Constant)
         PW_S     = 12e-6;
         BW_HZ    = 2e6;
-        PRF_HZ   = 50e3;
+        PRF_HZ   = physics.Constants().PRF;
         CARRIER  = 10e9;
         N_FRAMES = 8;
         N_PULSES = 32;
@@ -148,7 +148,7 @@ classdef test_waveform_agility < matlab.unittest.TestCase
             tc.verifyTrue(engine.entity.checkCausality(3000, 2000, 'repeat', false));
 
             % And the renderer actually enforces it.
-            s = engine.entity.EntityState('range_m', 1200, 'range_rate_mps', -60, 'class', 'fighter');
+            s = engine.entity.EntityState('range_m', 1200, 'range_rate_mps', -40, 'class', 'fighter');
             tc.verifyError(@() engine.entity.render(s, 'JammerRangeM', 2000), ...
                 'engine:entity:acausalPhantom');
         end
@@ -178,9 +178,9 @@ classdef test_waveform_agility < matlab.unittest.TestCase
             end
 
             q = struct('sigma_accel_mps2', 0.05*9.80665, 'rcs_process_std_db', 0.233);
-            sg = engine.entity.EntityState('range_m', tc.GEN_R0, 'range_rate_mps', -60, ...
+            sg = engine.entity.EntityState('range_m', tc.GEN_R0, 'range_rate_mps', -40, ...
                     'class', 'fighter', 'rcs_dbsm', 0, 'swerling', 0);
-            sp = engine.entity.EntityState('range_m', tc.PH_R0, 'range_rate_mps', -60, ...
+            sp = engine.entity.EntityState('range_m', tc.PH_R0, 'range_rate_mps', -40, ...
                     'class', 'fighter', 'rcs_dbsm', 0, 'swerling', 0);
             genRange = zeros(tc.N_FRAMES,1); phRange = zeros(tc.N_FRAMES,1);
             cube = complex(zeros(tc.N_FAST, tc.N_PULSES, tc.N_FRAMES));

@@ -24,7 +24,7 @@ classdef test_vee_entity < matlab.unittest.TestCase
         FRAME_DT = 1.0;          % this project's established 1 Hz revisit cadence
         PW_S     = 12e-6;        % canonical radar: +engine/runJudge.m's own
         BW_HZ    = 2e6;          % matched-filter parameters
-        PRF_HZ   = 50e3;
+        PRF_HZ   = physics.Constants().PRF;
         CARRIER  = 10e9;         % cogengine fixtures' own X-band value
     end
 
@@ -47,7 +47,7 @@ classdef test_vee_entity < matlab.unittest.TestCase
             % (a noiseless CV target is a mathematical object), but the CV
             % threat model must still hold -- acceleration stays put.
             q = tc.calibratedQ();
-            s = engine.entity.EntityState('range_m', 2800, 'range_rate_mps', -60, ...
+            s = engine.entity.EntityState('range_m', 2800, 'range_rate_mps', -40, ...
                     'class', 'fighter', 'rcs_dbsm', 0);
             rs = RandStream('twister', 'Seed', 7);
 
@@ -59,7 +59,7 @@ classdef test_vee_entity < matlab.unittest.TestCase
                 A(k) = s.range_accel_mps2; rcs(k) = s.rcs_dbsm; posDraw(k) = w(1);
             end
 
-            straightLine = 2800 - 60*(1:n)';
+            straightLine = 2800 - 40*(1:n)';   % matches the state's -40 m/s above
             devM = max(abs(R - straightLine));
             fprintf(['[step1] 40 dwells: R_end=%.1f m  Rdot_end=%.2f m/s  ' ...
                      'Rddot_end=%.4g m/s^2\n'], R(end), V(end), A(end));
@@ -115,13 +115,16 @@ classdef test_vee_entity < matlab.unittest.TestCase
             % THE non-negotiable. Measure Doppler out of the rendered cube.
             % Same range-rate, different RANGE -> measured Doppler identical.
             % Same range, different RANGE-RATE -> measured range identical.
-            [rA, fA] = tc.measureCube(tc.renderAt(1800, -60));
-            [rB, fB] = tc.measureCube(tc.renderAt(1200, -60));
-            [rC, fC] = tc.measureCube(tc.renderAt(1800, -120));
+            % Velocities chosen so BOTH the base and the doubled case stay inside
+            % v_ua = 59.96 m/s (Phase 4.1). The old -60/-120 pair folded, which
+            % made 'fd moved' true for the wrong reason.
+            [rA, fA] = tc.measureCube(tc.renderAt(1800, -20));
+            [rB, fB] = tc.measureCube(tc.renderAt(1200, -20));
+            [rC, fC] = tc.measureCube(tc.renderAt(1800, -40));
 
-            fprintf(['[step2] R=1800 v=-60 -> range %.1f m, fd %+.1f Hz\n' ...
-                     '        R=1200 v=-60 -> range %.1f m, fd %+.1f Hz  (range moved, fd must not)\n' ...
-                     '        R=1800 v=-120-> range %.1f m, fd %+.1f Hz  (fd moved, range must not)\n'], ...
+            fprintf(['[step2] R=1800 v=-20 -> range %.1f m, fd %+.1f Hz\n' ...
+                     '        R=1200 v=-20 -> range %.1f m, fd %+.1f Hz  (range moved, fd must not)\n' ...
+                     '        R=1800 v=-40 -> range %.1f m, fd %+.1f Hz  (fd moved, range must not)\n'], ...
                      rA, fA, rB, fB, rC, fC);
 
             tc.verifyNotEqual(rA, rB, 'Range did not move -- the perturbation did not take.');
@@ -136,12 +139,17 @@ classdef test_vee_entity < matlab.unittest.TestCase
             % dwell's own Doppler resolution (PRF/NumPulses).
             lambda = physics.Constants().c / tc.CARRIER;
             binHz = tc.PRF_HZ / 32;
-            tc.verifyLessThanOrEqual(abs(fA - (-2*-60/lambda)), binHz, ...
+            % Expected Doppler derived from the SAME velocity the scene was
+            % rendered at, not a re-typed literal -- the literal -60 here
+            % survived the Phase 4.1 retarget and silently compared against a
+            % velocity nothing was rendering.
+            V_A = -20;
+            tc.verifyLessThanOrEqual(abs(fA - (-2*V_A/lambda)), binHz, ...
                 'Measured Doppler is not within one bin of -2*Rdot/lambda.');
         end
 
         function test_all_four_observables_trace_to_one_state(tc)
-            s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -60, ...
+            s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -40, ...
                     'class', 'drone', 'rcs_dbsm', 3, 'micro_doppler_hz', 400);
             [~, obs] = engine.entity.render(s, 'CarrierHz', tc.CARRIER, 'PrfHz', tc.PRF_HZ);
             tc.verifyEqual(obs.provenance.delay_samples,    'range_m');
@@ -158,7 +166,7 @@ classdef test_vee_entity < matlab.unittest.TestCase
         end
 
         function test_amplitude_obeys_the_two_way_law(tc)
-            mk = @(R) engine.entity.EntityState('range_m', R, 'range_rate_mps', -60, ...
+            mk = @(R) engine.entity.EntityState('range_m', R, 'range_rate_mps', -40, ...
                         'class', 'fighter', 'rcs_dbsm', 0, 'swerling', 0);
             [~, o1] = engine.entity.render(mk(1000));
             [~, o2] = engine.entity.render(mk(2000));
@@ -168,19 +176,34 @@ classdef test_vee_entity < matlab.unittest.TestCase
         end
 
         function test_micro_doppler_renders_but_needs_a_long_cpi_to_see(tc)
-            % Honest observability limit, recorded rather than claimed away:
-            % blade flash IS rendered from the state, but this project's
-            % default 32-pulse dwell cannot resolve it.
+            % Observability limit, recorded rather than claimed away, and REVISED in
+            % Phase 4.1 -- how much of the blade flash this project’s
+            % default 32-pulse dwell can resolve depends entirely on the PRF.
             bladeHz = 400;
-            s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -60, ...
+            s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -40, ...
                     'class', 'drone', 'rcs_dbsm', 0, 'swerling', 0, 'micro_doppler_hz', bladeHz);
 
+            % PHASE 4.1 -- THIS DOCUMENTED LIMIT HAS MOVED, IN THE GOOD
+            % DIRECTION. Doppler resolution is PRF/N. At the old (non-physical)
+            % 50 kHz that was 1562 Hz at the default 32-pulse dwell, coarser
+            % than any blade rate. At the corrected 8 kHz it is 250 Hz, so a
+            % 400 Hz blade rate IS now resolvable in the default dwell -- the
+            % first time this project's standard dwell could see micro-Doppler
+            % at all. The 100-200 Hz band MEASURED from TSMS-Drone still is
+            % not, so the limit is narrowed rather than removed.
             binDefault = tc.PRF_HZ / 32;
-            fprintf(['[step2] micro-Doppler %g Hz vs default-dwell Doppler resolution ' ...
-                     '%.0f Hz -> UNRESOLVABLE at 32 pulses (needs >= %d pulses)\n'], ...
+            fprintf(['[step2] micro-Doppler %g Hz vs default-dwell resolution %.0f Hz ' ...
+                     '-> RESOLVABLE at 32 pulses (needs >= %d)\n'], ...
                      bladeHz, binDefault, ceil(tc.PRF_HZ / bladeHz));
-            tc.verifyGreaterThan(binDefault, bladeHz, ...
-                'Default dwell now resolves blade flash -- update this documented limit.');
+            fprintf(['[step2] at the OLD 50 kHz this bin was 1562 Hz; the corrected PRF\n' ...
+                     '        made the default dwell 6.25x finer in Doppler.\n']);
+            tc.verifyLessThan(binDefault, bladeHz, ...
+                ['A 400 Hz blade rate should now be resolvable at the default dwell ' ...
+                 '(PRF/32 = 250 Hz). If not, the PRF moved -- re-derive this limit.']);
+            % ...but the MEASURED 100-200 Hz band still is not, at 32 pulses.
+            tc.verifyGreaterThan(binDefault, 200, ...
+                ['The 100-200 Hz MEASURED blade band should still be unresolvable at ' ...
+                 'the default dwell -- that half of the limit stands.']);
 
             % At a CPI long enough to resolve it, the sidebands are really there.
             nLong = 512;
@@ -190,7 +213,7 @@ classdef test_vee_entity < matlab.unittest.TestCase
             spec = abs(fftshift(fft(row(1,:)))).^2;
             fAxis = ((0:nLong-1) - floor(nLong/2)) / nLong * tc.PRF_HZ;
             lambda = physics.Constants().c / tc.CARRIER;
-            fd = -2*-60/lambda;
+            fd = -2*s.range_rate_mps/lambda;   % from the state, never re-typed
 
             main = tc.nearestBinPower(spec, fAxis, fd);
             sbHi = tc.nearestBinPower(spec, fAxis, fd + bladeHz);
@@ -222,7 +245,7 @@ classdef test_vee_entity < matlab.unittest.TestCase
             % Grounding: beta and the 100-200 Hz blade band are MEASURED from
             % TSMS-Drone (see +engine/+entity/render.m's header).
             bladeHz = 150;
-            s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -60, ...
+            s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -40, ...
                     'class', 'drone', 'rcs_dbsm', 0, 'swerling', 0, ...
                     'micro_doppler_hz', bladeHz);
             nLong = 1024;
@@ -236,7 +259,7 @@ classdef test_vee_entity < matlab.unittest.TestCase
             spec = abs(fftshift(fft(row(:) .* hann(nLong)))).^2;
             fAxis = ((0:nLong-1) - floor(nLong/2)) / nLong * tc.PRF_HZ;
             lambda = physics.Constants().c / tc.CARRIER;
-            fd = -2*-60/lambda;
+            fd = -2*s.range_rate_mps/lambda;   % from the state, never re-typed
 
             b = obs.micro_beta;
             tc.verifyGreaterThan(b, 0.5, 'modulation index collapsed -- blade_tip_mps lost?');

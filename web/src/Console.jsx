@@ -35,12 +35,13 @@ import BlockChain from './components/BlockChain.jsx';
 import * as bridge from './lib/bridge.js';
 import { toFrame, toIdentity, scoreboard, STATUS_COLOR } from './lib/consoleFrame.js';
 
-// DERIVED from the backend's own constants (c and fs). Mirrored here only for
-// the 3D range rings and the PPI graticule; the values are not invented here.
-const RANGE_CELL_M = 46.8426;
-const UNAMBIG_M = 2997.9;
-const CEIL_M = RANGE_CELL_M * 512;
-const IDENTITY = toIdentity({ rangeCellM: RANGE_CELL_M, unambigRangeM: UNAMBIG_M });
+// Phase A2: these were `const RANGE_CELL_M = 46.8426` and `UNAMBIG_M = 2997.9`
+// -- the backend's derived numbers, re-typed here as literals, and so a fifth
+// independent copy of c and fs that nothing kept in sync. They now arrive from
+// GET /constants, which derives them from cogengine/radar_params.py. Until the
+// bridge answers there are NO values: the graticule renders nothing rather
+// than a remembered scale, the same honesty contract bridge.js already holds
+// for a verdict (never substitute a plausible number for a missing one).
 
 const MANEUVERS = ['static', 'rgpo', 'vgpo', 'swarm'];
 const MODES = ['OFF', 'MANUAL', 'D3QN'];
@@ -102,6 +103,16 @@ export default function Console() {
   });
 
   useEffect(() => { bridge.health().then(setJudge); }, []);
+
+  const [consts, setConsts] = useState(null);
+  useEffect(() => { bridge.constants().then(setConsts); }, []);
+  const RANGE_CELL_M = consts?.range_per_sample_m ?? null;
+  const UNAMBIG_M = consts?.unambiguous_range_m ?? null;
+  const CEIL_M = consts?.range_window_m ?? null;
+  const IDENTITY = useMemo(
+    () => (consts ? toIdentity({ rangeCellM: RANGE_CELL_M, unambigRangeM: UNAMBIG_M }) : null),
+    [consts, RANGE_CELL_M, UNAMBIG_M],
+  );
 
   // Elapsed timer, so a 125 s plan reads as progress rather than a hang. It
   // counts the REAL wait; it does not predict a finish time, because the
@@ -280,9 +291,9 @@ export default function Console() {
               min={2} max={24} step={0.5}
               onChange={(v) => setRadar((r) => ({ ...r, range_gate_m: [0, v * 1000] }))} />
             <div style={{ marginTop: 8, fontSize: 9, lineHeight: 1.7 }}>
-              <Row k="Range cell" v={`${RANGE_CELL_M.toFixed(1)} m`} />
-              <Row k="Unambiguous" v={`${(UNAMBIG_M / 1000).toFixed(2)} km`} />
-              <Row k="Record ceiling" v={`${(CEIL_M / 1000).toFixed(1)} km`} />
+              <Row k="Range cell" v={consts ? `${RANGE_CELL_M.toFixed(1)} m` : '--'} />
+              <Row k="Unambiguous" v={consts ? `${(UNAMBIG_M / 1000).toFixed(2)} km` : '--'} />
+              <Row k="Record ceiling" v={consts ? `${(CEIL_M / 1000).toFixed(1)} km` : '--'} />
               <Row k="Carrier" v="10 GHz" vc={C.amber} />
             </div>
             <div style={{ fontSize: 7.5, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>
@@ -338,7 +349,7 @@ export default function Console() {
             <div style={{ padding: '6px 8px 8px' }}>
               <PPIScope targets={positions?.phantoms ?? []} tracks={positions?.tracks ?? []}
                 mother={positions?.mother ?? null}
-                scaleKm={scaleKm} unambigKm={UNAMBIG_M / 1000} ceilKm={CEIL_M / 1000}
+                scaleKm={scaleKm} unambigKm={consts ? UNAMBIG_M / 1000 : null} ceilKm={consts ? CEIL_M / 1000 : null}
                 measuredAz={measuredAz} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                 <span style={{ fontSize: 8.5, color: C.dim }}>Scale</span>

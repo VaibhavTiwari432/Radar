@@ -6,3 +6,8 @@ results/*
 !results/.gitkeep
 *.asv
 *.mat
+
+# Local artifacts and large datasets
+__pycache__/
+*.pyc
+data/TSMS-Drone/**/*.7z

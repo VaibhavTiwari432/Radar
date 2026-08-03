@@ -76,7 +76,7 @@ classdef Stage1_Test < matlab.unittest.TestCase
         function test_pulse_compression_gain(tc)
             C = physics.Constants();
             wav = phased.LinearFMWaveform('SampleRate', C.fs, ...
-                    'PulseWidth', 12e-6, 'PRF', 50e3, 'SweepBandwidth', 2e6);
+                    'PulseWidth', 12e-6, 'PRF', physics.Constants().PRF, 'SweepBandwidth', 2e6);
             pulse = wav();                       % one PRI of samples (col)
             rng(3);
             n1 = 0.1*(randn(300,1)+1i*randn(300,1))/sqrt(2);

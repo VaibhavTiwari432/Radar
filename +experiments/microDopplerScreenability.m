@@ -61,7 +61,7 @@ function out = microDopplerScreenability(pulseCounts, nSeeds, outDir)
     if ~isfolder(outDir); mkdir(outDir); end
 
     C = physics.Constants();
-    K = struct('PRF_HZ', 50e3, 'CARRIER', 10e9, 'PW_S', 12e-6, 'BW_HZ', 2e6, ...
+    K = struct('PRF_HZ', physics.Constants().PRF, 'CARRIER', 10e9, 'PW_S', 12e-6, 'BW_HZ', 2e6, ...
                'N_FAST', 400, 'AMP', 3.0);
     lambda = C.c / K.CARRIER;
     % Operating band, all MEASURED or established rather than picked:

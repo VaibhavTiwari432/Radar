@@ -124,7 +124,7 @@ function [cube, obs, cubeDelta] = render(s, varargin)
     addParameter(p, 'PulseWidth',       12e-6, @(x) isscalar(x) && x > 0);
     addParameter(p, 'Bandwidth',        2e6,   @(x) isscalar(x) && x > 0);
     addParameter(p, 'CarrierHz',        10e9,  @(x) isscalar(x) && x > 0);
-    addParameter(p, 'PrfHz',            50e3,  @(x) isscalar(x) && x > 0);
+    addParameter(p, 'PrfHz',            physics.Constants().PRF,  @(x) isscalar(x) && x > 0);
     addParameter(p, 'AmpScale',         1.0,   @(x) isscalar(x) && x > 0);
     addParameter(p, 'ReferenceRangeM',  1800,  @(x) isscalar(x) && x > 0);
     addParameter(p, 'ChirpOverride',    [],    @(x) isempty(x) || isvector(x));

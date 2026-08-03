@@ -82,10 +82,14 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     if isfield(trackStruct, 'screensEnabled')
         enabled = cellstr(trackStruct.screensEnabled);
     else
+        % 'residual' is DELIBERATELY NOT in this default -- see the screen's
+        % own block below for the measurement that put it here. Opt in with
+        % screensEnabled = {'amplitude','doppler','micro','residual'}.
         enabled = {'amplitude', 'doppler', 'micro'};
     end
     useAmplitude = any(strcmpi(enabled, 'amplitude'));
     useDoppler   = any(strcmpi(enabled, 'doppler'));
+    useResidual  = any(strcmpi(enabled, 'residual'));
 
     scores = [];
 
@@ -175,14 +179,129 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
         microVeto = isfinite(cf) && (cf <= COMB_THRESHOLD);
     end
 
+    % ---- 4. AMPLITUDE RESIDUAL CONSISTENCY (Phase 4, Screen 3) ----
+    % Screen 1 fits the SLOPE of log(A) vs log(R). Measured on real pipeline
+    % tracks at this project's 8-frame dwell, that fit passes only 12% of
+    % GENUINE targets -- its precision accumulates with lever arm, and this
+    % radar's lever arm is structurally short (bounded above by the 1124 m
+    % CFAR blind zone, below by v_ua = 59.96 m/s).
+    %
+    % This screen fixes the slope at the physical -2, fits only the intercept,
+    % and scores the SCATTER about it. Two consequences, both measured
+    % (tests/test_amplitude_residual_screen.m):
+    %   * RCS-independent EXACTLY -- sigma appears only in the intercept,
+    %     which is fitted and discarded. That matters because a radar cannot
+    %     know a target's RCS.
+    %   * No lever arm needed -- 90% genuine pass at 8 frames vs slope's 12%,
+    %     and 10 points of variation across an 8..32-frame sweep vs slope's 21.
+    %
+    % WHY THE "TOO PERFECT" BRANCH IS A VETO AND NOT AN AVERAGED SCORE.
+    % Averaging was measured and it destroys the capability: a servo-driven
+    % repeater scores slope 1.0 (its law is exactly -2), doppler 1.0, residual
+    % 0.0 -> mean 0.67 -> "real". The one failure mode this screen exists to
+    % catch would be diluted straight back to a pass. A return with LITERALLY
+    % ZERO scatter about the law is not a physical object -- real RCS
+    % fluctuates, floor measured at 0.233 dB (99 RadChar records) and 0.491 dB
+    % (TSMS corner reflector through a real receiver). So it vetoes, exactly
+    % as the micro-Doppler comb below already does for the same reason: the
+    % failure is physically impossible, not merely suspicious.
+    %
+    % The OTHER tail (scatter too LARGE = not following the law) is left in
+    % the average, because it is the same evidence screen 1 already weighs and
+    % should not be counted twice as a veto.
+    %
+    % FLOOR OWNERSHIP (CLAUDE.md Rule 2): this number is the JUDGE's, declared
+    % here. It is NOT read from engine.entity.calibrateQ -- the judge must not
+    % import the engine's calibration, and +track may not reference +engine at
+    % all (tests/test_package_separation.m). The provenance is cited; the value
+    % is the judge's own.
+    % THE FLOOR IS DERIVED PER TRACK, NOT PICKED. A first version used a flat
+    % 0.15 dB and false-vetoed genuine targets: the measured genuine residual
+    % distribution has mean 0.227 dB but p5 = 0.133, so a 0.15 dB floor sits
+    % INSIDE the real population's lower tail.
+    %
+    % The right bound accounts for how badly a standard deviation is known
+    % from a short track. For N samples the sample std has its own std of
+    % about sigma/sqrt(2(N-1)), so a genuine track can legitimately measure
+    % low by chance on a short dwell. Taking a 3-sigma lower bound:
+    %
+    %       floor(N) = SCINT_FLOOR_DB * max(0, 1 - 3/sqrt(2(N-1)))
+    %
+    %   N =  8  ->  0.046 dB      N = 16  ->  0.105 dB     N = 32  ->  0.144 dB
+    %
+    % It tightens as the track lengthens, which is correct: with more samples
+    % a genuine target's scatter cannot plausibly measure near zero. At N <= 4
+    % it goes to 0, i.e. the veto disarms itself rather than guessing on a
+    % track too short to know anything about.
+    SCINT_FLOOR_DB   = 0.233;   % MEASURED: median pulse-to-pulse peak-amplitude
+                                % std over 99 real RadChar LFM records. The
+                                % judge's own copy of a physical fact -- NOT
+                                % read from engine.entity.calibrateQ, which
+                                % +track may not reference (Rule 2,
+                                % tests/test_package_separation.m).
+    % (No ceiling constant: the "scatter too large" tail is exactly the
+    % evidence screen 1 already weighs, and this screen is veto-only, so
+    % there is nothing for a ceiling to do here.)
+    % ============ VETO-ONLY, AND WHY -- MEASURED, NOT ASSUMED ============
+    % A first integration let this screen contribute a POSITIVE score to the
+    % average when the residual looked healthy. That was wrong twice over, and
+    % the full deception suite caught both within one run:
+    %
+    %   * It DILUTED other screens' failures. A +1 added to the mean rescues a
+    %     track that screen 1 or 2 had condemned. Measured: the static VEE
+    %     phantom (arm D) went from 0/10 deceiving to 7/10, and the genuine arm
+    %     fell from 10/10 to 5/10.
+    %   * It fired where it has no meaning. This is a screen about the
+    %     amplitude-RANGE law, so a track whose range never varies gives a
+    %     degenerate fit -- the residual is then just amplitude scatter about
+    %     its own mean, which says nothing about 1/R^2. Worse, screen 1 also
+    %     contributes nothing in that case (its range guard fails and its
+    %     flat-amplitude branch does not fire on a scintillating return), so
+    %     scores = [1] alone and a STATIC REPEATER scored a clean pass.
+    %
+    % So: this screen may only ever VETO, never raise a score. It can add
+    % capability but cannot subtract any, which makes integrating it safe by
+    % construction. And it inherits screen 1's own range guard.
+    %
+    % ============ WHY IT IS OFF BY DEFAULT ============
+    % Veto-only and correctly guarded, it STILL flags this project's genuine
+    % reference target 10/10. That is not a screen fault -- it is the screen
+    % being right about a scene that is wrong. Both genuine arms render with
+    %       'swerling', 0
+    % (tests/test_vee_deception_check.m:244, tests/test_angle_channel.m:296),
+    % i.e. a NON-FLUCTUATING target whose amplitude follows 1/R^2 exactly.
+    % Zero scintillation is precisely the servo-driven-repeater signature this
+    % veto exists to catch, so it fires -- correctly -- on a "genuine" target
+    % that is physically unrealistic in exactly the dimension being tested.
+    %
+    % Enabling this screen therefore requires FIRST rendering genuine
+    % reference targets with real fluctuation (swerling >= 1). That changes
+    % every reference scene and moves every published ECCM number again, so it
+    % is a deliberate decision, not a side effect of this integration.
+    % Measured evidence and the full before/after tables:
+    % PHASE4_ECCM_INTEGRATION_RESULTS.md.
+    residualVeto = false;
+    if useResidual && range(R) > 1e-9
+        okRA = isfinite(R) & isfinite(A) & R > 0 & A > 0;
+        nR = nnz(okRA);
+        if nR >= 3
+            lr = log(R(okRA)); la = log(A(okRA));
+            b  = mean(la + 2*lr);                 % intercept only; absorbs sqrt(sigma)
+            residDb = 20/log(10) * (la - (-2*lr + b));
+            sigmaDb = std(residDb);
+            floorDb = SCINT_FLOOR_DB * max(0, 1 - 3/sqrt(2*(nR-1)));
+            residualVeto = (floorDb > 0) && (sigmaDb < floorDb);
+        end
+    end
+
     if isempty(scores)
         score = 0.5;                            % nothing informative either way
     else
         score = mean(scores);
     end
 
-    % Veto applies AFTER the average, so it cannot be diluted by it.
-    if microVeto
+    % Vetoes apply AFTER the average, so they cannot be diluted by it.
+    if microVeto || residualVeto
         score = 0;
     end
 

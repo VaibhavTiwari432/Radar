@@ -32,6 +32,33 @@
   identical pulse forever), and the DRFM's one-PRI causality constraint is
   unenforced (the mother drone has a power budget but no position).** Quote the
   deception results only with the range-only/non-agile qualifier stated there.
+- `PHASE3_RESULTS.md` — **1 August 2026. Read this before quoting ANY
+  deception number in this file.** Calibration, correctness and boundary work
+  driven by `PROJECT_INVENTORY.md`'s audit. Five things in it change how
+  earlier sections here must be read:
+  **(1)** The adversary's exporter was writing the twin's own CFAR settings
+  into the file the judge configured itself from — twelve judge parameters
+  crossed that seam. Cut, and now guarded by `tests/test_judge_config_isolation.m`.
+  No behaviour changed (the planted values equalled the judge's defaults),
+  which is precisely why it went unnoticed.
+  **(2)** There is a real thermal floor now (kT₀BF = −137.965 dBW) and the
+  simulation's amplitude unit is anchored to it, so every SNR here has an
+  absolute meaning for the first time — and `amp_scale = 3.0` turns out to be
+  a σ = 1.333 m² target at 1800 m, i.e. the convention was right all along.
+  **(3)** At the declared 50 kHz PRF, R_ua = 2998 m, so the canonical
+  4-phantom scene (1800/3000/4200/5400 m) places **three of its four phantoms
+  beyond the unambiguous range**. The planner is clamped now, and **N ≥ 4 is
+  not feasible for this radar at this PRF**. Worse: the declared PRF implies a
+  64-sample listening window and this project uses 400 — the radar has been
+  having the range–Doppler ambiguity trade both ways.
+  **(4)** The "shared 60 W GaN budget" is **not a physical constraint**. A
+  masquerading phantom needs 7.8 mW; `planner_cem.py`'s watts-to-amplitude
+  anchor overstates required power by 35.8 dB. Every N-vs-budget curve in this
+  file measures the planner's anchor, not the adversary's physics.
+  **(5)** Against the real judge the CEM planner scores **1.00/4** real
+  survivors and the SNR-equalised naive baseline **3.60/4** — the inversion is
+  now asserted, and two Python tests were renamed `..._ON_THE_TWIN_ONLY`
+  because their old names read as deception results.
 - `BENCHMARK_RESULTS.md` — **25 July 2026.** Full benchmark to the Benchmark
   Checklist: Tier-1 metrics at 20 seeds with Wilson CIs, threshold sweeps
   (Pfa/gate/M-of-N/ECCM ablation), generalization (CV→IMM→CA, GNN→JPDA, range,
@@ -146,6 +173,17 @@
   while MATLAB was still pacing through the mission, then the client
   correctly dropped out of LIVE mode the instant the `__end__` marker
   arrived.
+**1 August 2026 — Phase 3 (calibration, correctness, boundary). Several
+headline claims in the sections below are now qualified or withdrawn; the
+qualifications are in `PHASE3_RESULTS.md` and summarised in the reference list
+above. The single most important one to carry: EVERY deception number in this
+file measures an ANGLE-BLIND radar. With the monopulse difference channel on,
+this project's own validated 4-phantom swarm is flagged 4/4 in 8/8 seeds, and
+Phase 3 measured the bound on that (a collinear fan is separable from a genuine
+formation only when the formation's cross-range spread exceeds ~40 m; the bound
+is NOT an SNR threshold, because the co-bearing screen is a self-calibrating
+ratio and is near SNR-invariant from −5 to +25 dB).**
+
 **Status:** Active Agentic Development — Phase 1 complete, Phase 2 build-order
 steps 1-6 done and measured (multi-target judge included).
 `PHASE2_COMPLETION_POA.md`'s 5-task completion plan is **all 5 tasks
@@ -183,7 +221,7 @@ project on MATLAB's embedded `py.sys.path`, without which a large part of the
 MATLAB test suite had been silently self-filtering to `Incomplete` on this
 machine.
 
-**Last Updated:** 25 July 2026
+**Last Updated:** 1 August 2026
 
 ---
 
@@ -511,9 +549,8 @@ scattered file comments:
   distillation + System-ID feedback loop. Explicitly optional in the design
   doc; Rung 0 (CEM planning, done) already satisfies the build order's
   minimum credible slice.
-- **No version control.** This repo is still not a git repo -- nothing done
-  in any session is backed up or diffable. `git commit` steps in this file's
-  own checklists have never actually run.
+- ~~**No version control.**~~ -- **resolved.** The repo is under git (branch
+  `main`). Corrected 1 August 2026; the claim above was stale.
 
 ---
 
@@ -856,6 +893,16 @@ low as 0.402, so requiring every screen to pass would flag real aircraft. The
 test asserts this residual rate as a *range* so it can neither vanish nor
 worsen silently.
 
+**1 August 2026 (Phase D1): re-run on the calibrated instrument, UNCHANGED —
+14/20 for the correct-Doppler/flat-gain hole, cell for cell.** Calibrating the
+amplitude SCALE does not strengthen a screen whose weakness is its LEVER ARM (a
+slope fitted over a 1.27× range change in 8 frames). Measured from the other
+side, the amplitude screen is worse than "weak": against a phantom that sets its
+ERP to a physically correct masquerade it is **blind by construction** (received
+amplitude history identical to a genuine target's to 2.7e-16, both fitting slope
+−1.954), and against a constant-ERP repeater whose measured slope is exactly
+**0.000** it fires in only **5/10** seeds. See `PHASE3_RESULTS.md` D1.
+
 **So the honest headline is two sentences, not one:** the VEE phantom is
 accepted as a real target 10/10 by an independent judge whose Doppler screen
 is now a genuine measurement — *and* the same judge accepts a much cruder
@@ -1016,6 +1063,25 @@ of 4 confirmed); and range-compensating *per frame* pinned received amplitude
 flat over time, which is the naive-DRFM signature — the existing amplitude
 screen duly flagged the **genuine** formation in 7/8 seeds. The bug was in the
 scene, not the screen.
+
+**1 August 2026 (Phase D2) — the limit is PERMANENT but BOUNDED, and the bound
+is measured.** One aperture cannot beat monopulse; that is geometry. But the
+co-bearing screen only separates a collinear fan from a genuine formation when
+that formation's cross-range spread exceeds **≈40 m** at this geometry — below
+that, the radar cannot use the screen without falsely accusing real aircraft
+flying close together. Crucially the bound is **not** an SNR threshold: swept
+from −5 to +25 dB the screen flags the fan **100% at every point**, because it
+is a self-calibrating ratio (track-mean spread vs the tracks' own scatter) and
+σ_θ ~ 1/√SNR moves numerator and denominator together. The σ_θ degradation is
+real and visible (measured scatter 0.0726° → 0.0024°, a 30.3× drop where
+1/√SNR predicts 31.6×) — it just does not weaken this particular test.
+`tests/test_monopulse_snr_boundary.m`, 4/4.
+
+**And the interaction with D1 answers the project's most interesting open
+question: NO.** Getting the amplitude law right does not buy back angle
+survivability — it puts the phantom at a GENUINE target's SNR (+29.3 dB), which
+is exactly where monopulse works best. **The more convincing the amplitude, the
+more visible the bearing.** The two corrections pull in opposite directions.
 
 ### Still not built
 
@@ -1185,6 +1251,21 @@ Kinematics (range/velocity trajectory) remain from this project's own
 synthetic truth model -- RadChar is baseband with no ground-truth target
 motion. Not a validation against real target tracks, only real intercepted
 pulses.
+
+**RE-RUN AGAIN 1 August 2026 (Phase B3), on the CALIBRATED instrument: still
+unchanged, cell for cell — and that is the finding.** The two arms had been
+entering the scene 31-39 dB apart (Arm A a raw RadChar record, Arm B a
+unit-ENERGY `coherentReplica` output); both are now normalised and scaled to
+the received power `physics.targetReturn` derives for a σ = 1 m² target. The
+table did not move, because Arm A's low rate was never a power problem — the
+GENUINE arm was the STRONGER one, by 31 dB, and still confirmed less. It is
+pulse-compression mismatch expressed through CA-CFAR (peak/training collapses
+20.8 dB while peak/median falls only 9.6 dB; response smeared over 9.2 bins vs
+1). **And Arm A itself is mis-specified:** a monostatic radar's genuine target
+reflects the radar's OWN pulse, not another radar's. The control that should
+have been Arm A — a genuine target reflecting this radar's nominal LFM at the
+derived power — confirms **5/5 as `real`**. The instrument is sound. Full
+isolation in `PHASE3_RESULTS.md` B3.
 
 **RE-RUN 25 July 2026 after the judge Doppler fix: every number above is
 UNCHANGED**, cell for cell (A: 0/20/0/20/20%, B: 100/80/80/80/80%, C: 100%
@@ -1835,8 +1916,9 @@ hallucinatory claims.
 - [ ] **Beats-naive checked** (planner/policy modules only): a naive
       single-copy baseline is run through the SAME scorer for comparison
 - [ ] **Claim table updated:** design-doc claim verified with pasted evidence
-- [ ] **Commit:** `git commit -m "cogengine: <module> passing"` (if the repo is
-      under version control — currently it is not; ask before assuming)
+- [ ] **Commit:** `git commit -m "cogengine: <module> passing"` — the repo IS
+      under git version control (branch `main`); the older "currently it is
+      not" note here was stale and is corrected as of 1 August 2026.
 
 ---
 

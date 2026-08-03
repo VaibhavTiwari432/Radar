@@ -49,7 +49,7 @@ classdef test_feature_integration < matlab.unittest.TestCase
         function test_blind_estimator_aliases_on_project_waveform(tc)
             C = physics.Constants();
             wav = phased.LinearFMWaveform('SampleRate', C.fs, ...
-                    'PulseWidth', 12e-6, 'PRF', 50e3, 'SweepBandwidth', 2e6);
+                    'PulseWidth', 12e-6, 'PRF', physics.Constants().PRF, 'SweepBandwidth', 2e6);
             pulse = wav();
             activePulse = pulse(1:numel(getMatchedFilter(wav)));
 
@@ -65,7 +65,7 @@ classdef test_feature_integration < matlab.unittest.TestCase
         function test_dechirp_estimator_fixes_project_waveform(tc)
             C = physics.Constants();
             wav = phased.LinearFMWaveform('SampleRate', C.fs, ...
-                    'PulseWidth', 12e-6, 'PRF', 50e3, 'SweepBandwidth', 2e6);
+                    'PulseWidth', 12e-6, 'PRF', physics.Constants().PRF, 'SweepBandwidth', 2e6);
             pulse = wav();
             activePulse = pulse(1:numel(getMatchedFilter(wav)));
 

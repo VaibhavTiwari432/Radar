@@ -23,11 +23,12 @@ function [detIdx, detMask, cfar] = cfarDetect(power, varargin)
 %
 %   Ref: POA Part 4 Stage 1; phased.CFARDetector docs.
 
+    d = radar.cfarDefaults();   % the ONE declaration of these values
     p = inputParser;
-    addParameter(p, 'Pfa',         1e-4, @(x)isscalar(x)&&x>0&&x<1);
-    addParameter(p, 'NumTraining', 20,   @(x)isscalar(x)&&x>=1);
-    addParameter(p, 'NumGuard',    4,    @(x)isscalar(x)&&x>=0);
-    addParameter(p, 'Method',      'CA', @(s)ischar(s)||isstring(s));
+    addParameter(p, 'Pfa',         d.Pfa,         @(x)isscalar(x)&&x>0&&x<1);
+    addParameter(p, 'NumTraining', d.NumTraining, @(x)isscalar(x)&&x>=1);
+    addParameter(p, 'NumGuard',    d.NumGuard,    @(x)isscalar(x)&&x>=0);
+    addParameter(p, 'Method',      d.Method,      @(s)ischar(s)||isstring(s));
     parse(p, varargin{:});
     o = p.Results;
 

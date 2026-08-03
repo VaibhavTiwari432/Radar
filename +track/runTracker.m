@@ -63,12 +63,13 @@ function [confirmed, history] = runTracker(detsPerFrame, times, C, varargin) %#o
     %       jpda -> trackerJPDA, multi-hypothesis association. Tests whether
     %               association ambiguity catches what a single-hypothesis
     %               assignment misses.
+    d = track.trackerDefaults();   % the ONE declaration of these values
     p = inputParser;
-    addParameter(p, 'AssignmentThreshold',   [200 inf]);
-    addParameter(p, 'ConfirmationThreshold', [3 5]);
-    addParameter(p, 'DeletionThreshold',     [5 5]);
-    addParameter(p, 'FilterModel',           'cv');
-    addParameter(p, 'TrackerType',           'gnn');
+    addParameter(p, 'AssignmentThreshold',   d.AssignmentThreshold);
+    addParameter(p, 'ConfirmationThreshold', d.ConfirmationThreshold);
+    addParameter(p, 'DeletionThreshold',     d.DeletionThreshold);
+    addParameter(p, 'FilterModel',           d.FilterModel);
+    addParameter(p, 'TrackerType',           d.TrackerType);
     parse(p, varargin{:});
     o = p.Results;
 

@@ -39,6 +39,21 @@ async function post(path, body) {
   return res.json();
 }
 
+// The backend's own physical facts (c, fs, and everything derived from them).
+// Phase A2: these used to be typed into Console.jsx as finished numbers. The
+// client must never carry its own copy of a constant the backend derives --
+// same rule that put +physics/Constants.m and cogengine/radar_params.py in
+// charge on their respective sides. Returns null when the bridge is down; the
+// caller renders "--" rather than substituting a remembered value.
+export const constants = async () => {
+  try {
+    const r = await fetch(BASE + '/constants');
+    return r.ok ? r.json() : null;
+  } catch {
+    return null;
+  }
+};
+
 export const health = async () => {
   try {
     const r = await fetch(BASE + '/health');

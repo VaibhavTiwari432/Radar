@@ -21,10 +21,15 @@ function out = demoSwarmFlood(maxPhantoms, seed, swerling)
 %        (NumTraining+NumGuard) of either edge cannot be tested and are
 %        never flagged." 20 + 4 = 24 bins x 46.84 m. Anything closer is
 %        INVISIBLE -- not stealthy, simply never tested.
-%     2. MAXIMUM RANGE 2998 m, the unambiguous range at this PRI. Beyond it
-%        a real radar folds returns back inside (RADAR_REALISM_AUDIT 2.2 --
-%        computed here, never enforced, so placing a swarm at 5 km would
-%        manufacture spread that real hardware collapses).
+%     2. MAXIMUM RANGE = physics.Constants().R_unambiguous. Beyond it a real
+%        radar folds returns back inside (RADAR_REALISM_AUDIT 2.2). This was
+%        written as a hardcoded 2998 m, the unambiguous range at the OLD
+%        50 kHz PRF; Phase 4.1 resolved the PRF to a self-consistent 8 kHz,
+%        so it is 18737 m now and is DERIVED rather than typed. Note the
+%        consequence for this demo's own arithmetic: the usable range band
+%        widened by ~6x, so the range axis alone holds many more resolvable
+%        objects than the "about 1.6" this used to print -- but the binding
+%        constraint moved to VELOCITY (v_ua = +-60 m/s), not range.
 %     3. MUTUAL MASKING at ~1124 m. The CA-CFAR training window is the same
 %        +/-24 bins. Two objects closer than that sit inside each other's
 %        training cells, raise each other's threshold, and suppress each
@@ -61,14 +66,17 @@ function out = demoSwarmFlood(maxPhantoms, seed, swerling)
     if nargin < 3 || isempty(swerling);    swerling = 0;     end
 
     C = physics.Constants();
-    K = struct('nFast',400,'nPulses',32,'nFrames',8,'dt',1.0,'prf',50e3, ...
+    K = struct('nFast',400,'nPulses',32,'nFrames',8,'dt',1.0,'prf',physics.Constants().PRF, ...
                'carrier',10e9,'pulseWidth',12e-6,'bandwidth',2e6, ...
-               'noiseAmp',0.05,'closingMps',-60,'ampScale',3.0);
+               'noiseAmp',0.05,'closingMps',-40,'ampScale',3.0);
 
     binM      = C.range_per_sample;
     guardBins = 20 + 4;
     RMIN      = guardBins * binM;                 % CFAR edge, ~1124 m
-    RMAX      = 2998;                             % unambiguous at this PRI
+    % PHASE 4.1: was a hardcoded 2998 ("unambiguous at this PRI"), which was
+    % the OLD 50 kHz reading. Derived now, and NOT re-hardcoded at the new
+    % value either -- if the PRF moves again this follows it.
+    RMAX      = C.R_unambiguous;                  % c/(2*PRF), 18737 m at 8 kHz
     travel    = abs(K.closingMps) * K.dt * (K.nFrames-1);
     nearestT0 = RMIN + travel;                    % still visible at the END
 
@@ -150,16 +158,14 @@ function [nConf, nReal] = localScene(nP, spread, K, C, seed, swerling, nearestT0
         cubeD(:,:,k) = cubeD(:,:,k) + localNoise(rs, K);
     end
 
+    % Signal description only; the judge runs on its OWN defaults (Phase A1)
+    % apart from the ECCM screen mask this demo deliberately selects.
     S = struct('rx_frames', cube, 'rx_frames_delta', cubeD, 'fs', C.fs, ...
         'pulse_width_s', K.pulseWidth, 'bandwidth_hz', K.bandwidth, ...
-        'prf_hz', K.prf, 'cfar_pfa', 1e-4, 'cfar_num_training', 20, ...
-        'cfar_num_guard', 4, 'frame_interval_s', K.dt, 'carrier_hz', K.carrier, ...
-        'assignment_gate_m', 200, 'confirmation_threshold', [3 5], ...
-        'deletion_threshold', [5 5], 'filter_model', 'cv', 'tracker_type', 'gnn', ...
-        'eccm_screens', {{'amplitude','doppler'}});
+        'prf_hz', K.prf, 'frame_interval_s', K.dt, 'carrier_hz', K.carrier);
     f = [tempname '.mat']; save(f, '-struct', 'S');
     cleanup = onCleanup(@() delete(f)); %#ok<NASGU>
-    fb = engine.runJudge(f);
+    fb = engine.runJudge(f, 'EccmScreens', {'amplitude','doppler'});
 
     labels = string(fb.track_label(:)).';
     nConf  = numel(labels);

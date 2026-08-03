@@ -93,7 +93,23 @@ def test_enforce_max_range_for_power_leaves_compliant_range_untouched():
     assert out[0] == pytest.approx(1800.0)
 
 
-def test_cem_multi_beats_naive_multi_baseline():
+def test_cem_multi_beats_naive_multi_baseline_ON_THE_TWIN_ONLY():
+    """CEM outscores the naive N=4 baseline AS PREDICTED BY THE TWIN.
+
+
+    NAME AND SCOPE (Phase E). This test was called
+    `test_cem_multi_beats_naive_multi_baseline`, which reads as a deception
+    result. It is not one: BOTH scenes here are scored by
+    `cogengine.radar_twin` -- the engine grading its own homework. CLAUDE.md
+    Rule 2 is explicit that a plan which only survives the twin is worthless.
+    Renamed so it cannot be quoted as evidence about the real radar.
+
+    The REAL judge disagrees with this test, and the disagreement is the
+    headline finding, not a footnote: against `engine.runJudge` the CEM-planned
+    N=4 scene scores 1.00/4 real survivors and the SNR-equalised "naive"
+    baseline scores 3.60/4 -- an INVERSION. See
+    tests/test_cem_multi_phantom_vs_judge.m, which asserts it.
+    """
     radar_state = make_radar_state()
     twin_config = TwinConfig()
     rng = np.random.default_rng(202)
@@ -109,6 +125,6 @@ def test_cem_multi_beats_naive_multi_baseline():
 
     assert confirm_score > naive_score, (
         f"CEM-planned N=4 scene (score={confirm_score}, fb={confirm_fb}) did not beat "
-        f"the naive N=4 baseline (score={naive_score}, fb={naive_fb})"
+        f"the naive N=4 baseline (score={naive_score}, fb={naive_fb}) ON THE TWIN"
     )
     assert confirm_fb.false_tracks_surviving >= 1

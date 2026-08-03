@@ -23,6 +23,11 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from cogengine.features import synthesize_tx_pulse
+from cogengine.radar_params import (
+    SAMPLE_RATE_HZ,
+    SPEED_OF_LIGHT_MPS,
+    range_per_sample_m,
+)
 from cogengine.renderer import (
     lfm_chirp,
     range_delay_samples,
@@ -48,7 +53,7 @@ CLASSES_EXPECTING_MICRO = ("drone",)
 
 @dataclass
 class TwinConfig:
-    fs: float = 3.2e6
+    fs: float = SAMPLE_RATE_HZ
     pulse_width_s: float = 12e-6
     bandwidth_hz: float = 2e6
     fast_time_samples: int = 400
@@ -121,7 +126,7 @@ def matched_filter_power(rx: np.ndarray, chirp: np.ndarray) -> np.ndarray:
 
 def measure_range_rate(
     slow_time: np.ndarray, pri_s: float, carrier_hz: float,
-    c: float = 299792458.0,
+    c: float = SPEED_OF_LIGHT_MPS,
 ) -> float:
     """Range-rate [m/s] measured from ONE range bin's slow-time samples.
 
@@ -272,7 +277,7 @@ def predict(scene: Scene, radar_state: RadarState, config: TwinConfig,
     doppler_hist: List[List[float]] = [[] for _ in live]
     degraded_events: List[dict] = []
 
-    range_per_sample = 299792458.0 / (2 * config.fs)
+    range_per_sample = range_per_sample_m(config.fs)
 
     for frame_idx in range(config.num_frames):
         # Path B: intercept the radar's own pulse FRESH every frame (a real

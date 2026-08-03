@@ -49,7 +49,7 @@ classdef test_multi_target_judge < matlab.unittest.TestCase
             rng(2024);
 
             wav = phased.LinearFMWaveform('SampleRate', C.fs, ...
-                    'PulseWidth', 12e-6, 'PRF', 50e3, 'SweepBandwidth', 2e6);
+                    'PulseWidth', 12e-6, 'PRF', physics.Constants().PRF, 'SweepBandwidth', 2e6);
             pulse = wav();
             bufferLen = 400;
             xTemplate = [pulse; zeros(bufferLen - numel(pulse), 1)];
@@ -66,7 +66,7 @@ classdef test_multi_target_judge < matlab.unittest.TestCase
             % track.discriminator's own documented default) got scored
             % "decoy" by having NOTHING informative to say, not by actually
             % looking fake.
-            R0_real = 1800; vClose = 60;     % m/frame, closing
+            R0_real = 1800; vClose = 40;     % m/frame, closing
             R_decoy = 3600;                  % static
             gain0 = 3;
 
@@ -88,7 +88,7 @@ classdef test_multi_target_judge < matlab.unittest.TestCase
             cleanupObj = onCleanup(@() localDeleteIfExists(tmpMat)); %#ok<NASGU>
 
             S = struct('rx_frames', rxFrames, 'fs', C.fs, 'pulse_width_s', 12e-6, ...
-                        'bandwidth_hz', 2e6, 'prf_hz', 50e3, 'cfar_pfa', 1e-4, ...
+                        'bandwidth_hz', 2e6, 'prf_hz', physics.Constants().PRF, 'cfar_pfa', 1e-4, ...
                         'cfar_num_training', 20, 'cfar_num_guard', 4, 'frame_interval_s', 1.0);
             save(tmpMat, '-struct', 'S');
 
