@@ -980,6 +980,64 @@ need 40–80 pulses and remain unresolvable at the default 32** `[DERIVED]` — 
 table in §4.11 above. So the bin-width limit is real but **narrowed, and it is not what
 makes the screen inert**; the genuine comb is.
 
+## 4.12a DRFM latency and leading-edge tracking — a counter that does not work here
+
+A DRFM repeater must **receive** a pulse before it can retransmit one, so its copy is
+always late by the repeater's own processing latency (10–100 ns for fielded hardware).
+A radar that tracks the **leading edge** of the return rather than its matched-filter
+peak should therefore lock onto the genuine skin return and ignore the delayed copy
+behind it. This is a real, fielded counter to range-gate pull-off, and this project had
+never tested against it. `+radar/leadingEdge.m`, `+experiments/drfmLatency.m`.
+
+**Estimation precision is not the limit.** A first analysis argued the screen must be
+inert here, since a leading edge cannot be located better than the rise time
+`1/B` = 500 ns = 74.95 m at 2 MHz, against a 100 ns latency of only 15.0 m. **That
+argument is wrong and was corrected by measurement.** It conflates *resolution* —
+telling two returns apart, which is rise-time bounded — with *estimation precision* for
+a single smooth edge, which is bounded by rise time ÷ SNR and is far finer:
+
+| B | single-look edge `σ` | measured shift at 10 ns latency (true 1.50 m) |
+|---|---|---|
+| 2 MHz *(this radar)* | 0.152 m | 1.31 m = **8.6 σ** `[MEASURED]` |
+| 10 MHz | 0.011 m | 1.56 m |
+| 50 MHz | 0.002 m | 1.50 m (exact) |
+
+Accuracy improves with bandwidth as expected (21 % error at 2 MHz, 0.1 % at 10 MHz), but
+**even this radar's 2 MHz sees a 10 ns latency.** *(Method note: `fs` must scale with `B`
+for this sweep to mean anything. A first run held `fs` at 3.2 MHz while sweeping `B` to
+50 MHz — Nyquist is 1.6 MHz, so all three bandwidths aliased into the same waveform and
+the sweep returned a constant ~25 m shift regardless of `B`. Oversampled at 4B.)*
+
+**The limit that actually binds is sidelobes, and it is decisive.** Every shift above is
+measured against a *known zero-latency baseline of the same target*, which an
+operational radar does not have — it cannot ask "is this edge 1.5 m late?" because it
+does not independently know the target's range. The question it *can* ask is whether,
+with the skin return and the repeat both in one dwell, the leading edge still lands on
+the skin return. At the 20 dB J/S a repeater exists to produce, it cannot:
+
+```
+    repeat is 20.0 dB above the skin return
+    unwindowed LFM first range sidelobe          = -13.2 dB
+    => repeat's own sidelobes sit  20.0 - 13.2   = +6.8 dB ABOVE the skin return
+```
+
+**The skin return is buried inside the repeat's sidelobe structure and is not a
+distinguishable feature of the compressed profile at all**, so no threshold strategy can
+recover it. The measured two-return column is correspondingly erratic — 45 m in one
+cell, 391 m against a true 300 m in the next — and is **labelled `NOT ESTABLISHED` in
+the experiment's own printed output** rather than quoted as a result.
+
+**The actionable form of the negative:** sidelobe suppression must exceed the J/S ratio.
+A Hamming-weighted matched filter reaches −42 dB, clearing a 20 dB repeat by 22 dB, at a
+cost of ~1.3 dB SNR and ~50 % mainlobe broadening. **That trade has never been made in
+this project**, and making it is the prerequisite for leading-edge tracking to be worth
+anything here. Until then this counter is declared ineffective — measured, not assumed.
+
+*(A second self-correction worth recording: the estimator originally thresholded at a
+fraction of the **peak**, which structurally cannot see a skin return under a stronger
+repeat, because the peak IS the repeat. Noise-referenced thresholding — what a real
+leading-edge tracker uses — was added before the two-return case was run.)*
+
 ## 4.12 The radar configuration ladder
 
 Every result in §7 is stated against one of these five rungs. **A rung is a stated
@@ -1684,9 +1742,11 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
    - `test_far_phantom_range_correction` — the range-correction was calibrated against a
      2998 m ceiling and the search space is now 6.25× wider. Needs re-deriving.
 
-8. **Not measured, declared future work:** latency budget (P8), full ablation matrix
-   (P9), IMM validation against a discriminator that reads filter state, cross-eye
-   feasibility, `J/S` sweep (P1), false-track lifetime (P3).
+8. **Not measured, declared future work:** full ablation matrix (P9), IMM validation
+   against a discriminator that reads filter state, cross-eye feasibility, `J/S` sweep
+   (P1), false-track lifetime (P3). **DRFM latency (P8) has moved off this list** — it
+   is simulated and its counter measured ineffective (§4.12a); what remains unmeasured
+   is the hardware latency figure on a bench, not the effect of latency.
 
 9. **The N-phantom-from-one-aperture problem is the atom, not the molecule.** The shadow
    filter follows **one** entity and has no data association, no track birth/death and
@@ -1774,6 +1834,14 @@ returns, no clutter and no multipath. Every kinematic trajectory in this work is
 synthetic — the real-data grounding is in the *waveforms*, not the *tracks*. Closing
 that gap requires an SDR pair on a bench, a corner reflector on a range, and a measured
 latency budget. None of the three has been attempted.
+
+**DRFM latency is no longer in that list, and the reason it left is instructive.** It
+was previously declared unattempted future work; it has now been *simulated* end to end
+(§4.12a) and the counter it enables — leading-edge tracking — is measured **ineffective
+at this radar's parameters**, blocked by the repeater's own compression sidelobes sitting
+6.8 dB above the skin return rather than by latency or bandwidth. What remains
+genuinely unmeasured is the *hardware* latency figure itself: the 10–100 ns used here is
+a published range for fielded DRFMs, not something this project measured on a bench.
 
 ---
 
