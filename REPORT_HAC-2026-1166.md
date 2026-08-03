@@ -1905,6 +1905,12 @@ same split seed — moves the engine from committing on 18.7 % of emissions to *
 and coverage moved *toward* nominal, not away.** This is the same degeneracy §7.6
 records from the other side (Doppler-only 100.0 %, amplitude-only 13.0 %).
 
+> **⚠ Both numbers are correct; the reading of them is not, and it is corrected at
+> the end of this section.** The sets became sharp because the base rate is low, not
+> because the belief improved — `inline_s_amp` scores **AUC 0.502** against the
+> judge's verdict on the structural arm `[MEASURED]`. See *"The predictor carries no
+> information"* below.
+
 **Marginal validity is real; conditional validity is not.** One pooled threshold
 over-covers the easy arms and **under-covers `structural` at 78.8 %** `[MEASURED]`.
 Quoting "90 % coverage" *for the structural generator specifically* would be wrong.
@@ -2080,6 +2086,53 @@ easy label got more common.
 here, and the reason is weaker than the verdict alone suggests.** A shift in the
 opposite direction — one that *raises* the judge's real rate under a frozen belief —
 attacks coverage from the side this grid never probes, and is untested.
+
+### The predictor carries no information — and it explains everything above
+
+Chasing the 12 % maximally-wrong rate to its source produced the most important
+result in this section, and it qualifies the section's own headline `[MEASURED]`:
+
+| arm | **AUC vs the judge's verdict** | base rate `judge_real` | always-say-NOT-REAL accuracy |
+|---|---|---|---|
+| **structural** | **0.502** | 19.0 % | 81.0 % |
+| shaped | 0.572 | 4.0 % | 96.0 % |
+| stats | 0.464 | 2.0 % | 98.0 % |
+| POOLED | 0.576 | 8.3 % | 91.7 % |
+
+**AUC 0.502 is a coin flip.** On the arm carrying this report's headline result,
+`inline_s_amp` contains no information about what the judge will do; `stats` is below
+0.5. And the belief error is **perfectly one-sided** — all 17 maximally-wrong
+episodes across all three arms are the engine writing off a phantom the judge then
+accepted, **zero** in the reverse direction. The engine never over-claims.
+
+**What this does not invalidate:** the coverage guarantee. Split conformal is
+distribution-free, valid for an arbitrarily bad score, so every coverage number above
+stands as measured.
+
+**What it does invalidate:** the reading that the layer gained predictive capability.
+At a base rate of 8.3 % the singleton `{not real}` is right 91.7 % of the time on its
+own, so sharp sets are what conformal produces when the cheap answer is a good answer.
+**The sets got sharp; the belief did not get better.**
+
+**Four results in this section are one fact seen from four sides:**
+
+| result | same underlying fact |
+|---|---|
+| Simplex guard is a constant function (100 % fallback) | the predictor has nothing to say, so it emits the base-rate answer every time |
+| Mondrian makes `structural` vacuous (set size 2.00) | per-arm the base rate is 19 % > α = 10 %, so `{not real}` alone cannot reach 90 % |
+| the observer shift *improved* coverage (78.0 % → 84.0 %) | it drove `judge_real` 19 % → 8 %, making the base-rate answer better still |
+| 12 % maximally wrong, all one-sided | a coin-flip score at a low base rate errs exactly where the minority class lives |
+
+None is a defect in the conformal layer, the threshold, the grouping or the observer.
+**All four are the amplitude screen's score failing to predict the judge**, and every
+fix attempted at the assurance level moved a symptom.
+
+**The consequence for this report.** The assurance layer's real output is not a working
+belief — it is a cheap, four-times-cross-checked measurement that **the engine does not
+have one.** The fix is upstream, and this report already names it: §8.3, the amplitude
+screen's slope fitted over ~8 frames and a 1.27× range change, bounded above by the
+CFAR blind zone and below by `v_ua`. **Until that measurement improves there is no
+belief for an assurance layer to calibrate.**
 
 Two further boundaries: the guarantee is about the **belief**, not the deception — an
 engine that is reliably detected has excellent coverage. And the Simplex fallback is

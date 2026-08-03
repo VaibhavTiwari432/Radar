@@ -573,6 +573,93 @@ lever arm), not in the conformal layer.
 
 ---
 
+## 7. The correction that reframes §1: the predictor carries no information
+
+Chasing §6's 12 % maximally-wrong rate to its source produced the most important
+result in this document, and it qualifies the layer's own headline.
+
+### 7.1 The error is perfectly one-sided
+
+All 17 maximally-wrong episodes across all three arms are the **same** direction
+`[MEASURED]`:
+
+| arm | engine PESSIMISTIC (score 0.0, judge said `real`) | engine OPTIMISTIC (score 1.0, judge said `decoy`) |
+|---|---|---|
+| structural | **12** | **0** |
+| shaped | 3 | 0 |
+| stats | 2 | 0 |
+
+**The engine never over-claims at maximal confidence.** Every catastrophic
+belief error is the engine writing off a phantom the judge then accepted. Not
+velocity-dependent — the 12 spread across all four commanded velocities in
+proportion to their frequency.
+
+### 7.2 And the reason is that the score does not predict the judge at all
+
+`experiments.conformalValidate` now reports this, so it cannot rot:
+
+| arm | **AUC** | base rate `judge_real` | always-say-NOT-REAL accuracy |
+|---|---|---|---|
+| **structural** | **0.502** | 19.0 % | 81.0 % |
+| shaped | 0.572 | 4.0 % | 96.0 % |
+| stats | 0.464 | 2.0 % | 98.0 % |
+| POOLED | 0.576 | 8.3 % | 91.7 % |
+
+**AUC 0.502 is a coin flip.** On the arm that carries this project's headline
+result, `inline_s_amp` contains **no information** about what the judge will do.
+`stats` is below 0.5. The pooled 0.576 is inflated by pooling arms with
+different base rates *and* different score distributions, so it overstates even
+the little that is there.
+
+### 7.3 What this does and does not invalidate
+
+**Does not:** the coverage guarantee. Split conformal is distribution-free — it
+is valid for an arbitrarily bad score, and §1's 89.3 % and §5's 90.3 % stand
+exactly as measured.
+
+**Does:** the reading that the layer gained predictive capability. §1 reports the
+predictor-variable fix as *"the engine can now commit on 95.3 % of emissions
+instead of 18.7 % — 5× — and coverage moved TOWARD nominal."* Both numbers are
+correct. **The interpretation is not.** At a base rate of 8.3 % the singleton
+`{not real}` is right 91.7 % of the time by itself, so narrow sets are what
+conformal produces when the cheap answer is a good answer. The 5× is a base-rate
+effect, not new information. **§1's claim is hereby qualified: the sets got
+sharp, the belief did not get better.**
+
+### 7.4 Four earlier results are one fact seen from four sides
+
+This is the part worth carrying, because it collapses most of this document into
+a single cause:
+
+| result | section | same underlying fact |
+|---|---|---|
+| Simplex guard is a constant function, 100 % fallback | §2 | the predictor has nothing to say, so it always emits the base-rate answer |
+| Mondrian makes `structural` vacuous (set size 2.00) | §6 | per-arm the base rate is 19 % > α = 10 %, so `{not real}` alone cannot reach 90 % and the set must widen to everything |
+| the observer shift *improved* coverage, 78.0 % → 84.0 % | §5 | it drove `judge_real` 19 % → 8 %, making the base-rate answer better still |
+| 12 % maximally wrong, all one-sided | §7.1 | a coin-flip score at a low base rate is wrong exactly where the minority class lives |
+
+**None of these is a defect in the conformal layer, the threshold, the grouping
+or the observer.** They are four symptoms of one thing: **the amplitude screen's
+score does not predict the judge's verdict.** Every fix attempted at the
+assurance level — better predictor variable, per-arm thresholds, pooled
+observers — moved a symptom.
+
+### 7.5 The honest consequence
+
+The assurance layer's real output is not a working belief. It is a **measurement
+that the engine does not have one**, obtained cheaply and expressed four
+different ways before the cause was isolated. That is worth having — it redirects
+effort from the wrapper to the screen — but it must not be presented as the
+engine having gained calibrated self-knowledge.
+
+The fix is upstream and is already named in §3 and in the report's §8.3: the
+amplitude screen fits a slope over ~8 frames and a 1.27× range change, and the
+lever arm is bounded above by the CFAR blind zone and below by `v_ua`. **Until
+that measurement improves there is no belief for an assurance layer to
+calibrate**, and no amount of conformal machinery will manufacture one.
+
+---
+
 ## Honest limits of this layer
 
 - **Coverage is conditional on exchangeability, and §3 shows the condition is

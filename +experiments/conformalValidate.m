@@ -160,6 +160,33 @@ function out = conformalValidate(csvPath, alpha, splitSeed, scoreCol, groupCol)
             'coverage', c, 'width', w, 'gapPp', g); %#ok<AGROW>
     end
 
+    % ---- DISCRIMINATIVE POWER. Coverage and set size say how the conformal
+    % wrapper behaves; NEITHER says whether the underlying score carries
+    % information about the judge. It has to be asked separately, because at a
+    % low base rate a predictor with no information at all still yields narrow
+    % sets and high coverage -- it emits the majority label and is usually
+    % right. AUC 0.5 means no information; the always-say-NOT-REAL accuracy
+    % beside it is what a singleton set is actually worth on this data.
+    fprintf('\n  discriminative power of %s (AUC 0.5 = no information):\n', scoreCol);
+    aucAll = localAuc(s(~isnan(s)), T.judge_real(~isnan(s)));
+    perAuc = struct('arm', {}, 'auc', {}, 'baseRate', {}, 'majorityAcc', {});
+    for a = 1:numel(arms)
+        m = strcmp(T.arm, arms{a}) & ~isnan(s);
+        u = localAuc(s(m), T.judge_real(m));
+        br = mean(T.judge_real(m));
+        fprintf('    %-10s AUC %.3f   base rate judge_real %5.1f%%   always-NOT-REAL accuracy %5.1f%%\n', ...
+            arms{a}, u, 100*br, 100*(1-br));
+        perAuc(end+1) = struct('arm', arms{a}, 'auc', u, 'baseRate', br, ...
+                               'majorityAcc', 1-br); %#ok<AGROW>
+    end
+    brAll = mean(T.judge_real(~isnan(s)));
+    fprintf('    %-10s AUC %.3f   base rate judge_real %5.1f%%   always-NOT-REAL accuracy %5.1f%%\n', ...
+        'POOLED', aucAll, 100*brAll, 100*(1-brAll));
+    if aucAll < 0.60
+        fprintf(['    -> WEAK. Narrow sets here are the BASE RATE, not information.\n' ...
+                 '       Do not read a high singleton rate as predictive capability.\n']);
+    end
+
     % ---- epistemic / aleatoric, structural arm only (see header)
     st = strcmp(T.arm, 'structural') & ~isnan(T.vel_mps);
     [cellIds, ~] = findgroups(T.vel_mps(st), T.rcs_dbsm(st));
@@ -217,6 +244,20 @@ function [cov, width, singleton, covered] = localScore(model, s, y, ix, T, group
         single(i)  = ~unc;
     end
     cov = mean(covered); width = mean(sizes); singleton = mean(single);
+end
+
+% ------------------------------------------------------------------------
+function u = localAuc(s, y)
+%LOCALAUC  Probability a randomly chosen judge-real episode scores above a
+%   randomly chosen judge-decoy one. Ties count half, which matters here
+%   because this project's screen scores are heavily tied at 0 and 0.5.
+    pos = s(y ~= 0); neg = s(y == 0);
+    if isempty(pos) || isempty(neg); u = NaN; return; end
+    w = 0;
+    for i = 1:numel(pos)
+        w = w + sum(pos(i) > neg) + 0.5*sum(pos(i) == neg);
+    end
+    u = w / (numel(pos) * numel(neg));
 end
 
 % ------------------------------------------------------------------------
