@@ -1435,7 +1435,8 @@ Python   83 passed
 ```
 
 `[MEASURED]`. The three remaining failures are named, root-caused and open in §8 — none
-is quietly excluded.
+is quietly excluded. The assurance layer (§7.9) adds `tests/test_conformal.m` **5/5** and
+`tests/test_provenance_ledger.m` **5/5** on top of this count `[MEASURED]`.
 
 **A methodological note that changes how the earlier suite state should be read.**
 Before `startup.m` was fixed to insert the project root on MATLAB's embedded
@@ -1861,6 +1862,159 @@ motion. This is validation against real intercepted *pulses*, not against real t
 limited this adversary, so no result in this report may be quoted as demonstrating a
 power-limited swarm.
 
+## 7.9 Assurance layer — how wrong the engine's own belief is allowed to be
+
+Every number above is the judge's. This section measures the **engine's belief about
+what the judge will say**, and puts a distribution-free guarantee on it. Four
+components, all re-runnable: a calibration set, a split-conformal predictor, a Simplex
+guard, and an observer sweep. Full detail and the negative results in
+`ASSURANCE_LAYER_RESULTS.md`.
+
+**The calibration set.** `experiments.calibrationLog(20, 1:5)` → 300 rows, 3 arms × 5
+seeds × 20 episodes, each row a *(inline belief, `runJudge` verdict)* pair scored on the
+**same retained cube** `[MEASURED]`:
+
+| Arm | Inline real | `runJudge` real | Gap |
+|---|---|---|---|
+| `shaped` | 11.0 % | 4.0 % | +7.0 pp |
+| `stats` | 7.0 % | 2.0 % | +5.0 pp |
+| **structural** | **35.0 %** | **19.0 %** | **+16.0 pp** |
+
+This is an **independent third line** on §7.4's table (36.0 / 22.0 for structural, from
+`t6JudgeGap`) at a different sample and a different harness. It also settles a live
+hazard: `results/t4_gap.log` and `results/t6.log` are on disk, untracked, predate commit
+`6121e7ae`, and read **100.0 % / 76.0 %** for the structural arm. **They are stale by
+roughly 4× and must not be quoted** — the 100 % was measured at `swerling = 0`, a target
+that cannot exist (§4.5). §7.4's numbers are the corrected ones; these confirm them.
+
+### Conformal coverage — the guarantee holds; the first predictor variable was lossy
+
+Split conformal at 90 % nominal, 150 calibration / 150 held-out `[MEASURED]`:
+
+| Predictor variable | Coverage (Wilson) | Mean set size (of 2) | **Singleton rate** |
+|---|---|---|---|
+| `inline_score` (combined) | 87.3 % [81.1, 91.7] | 1.81 | **18.7 %** |
+| **`inline_s_amp` (screen 1 alone)** | **89.3 % [83.4, 93.3]** | **1.05** | **95.3 %** |
+
+**The combined discriminator score structurally disables conformal, and the mechanism is
+arithmetic.** `inline_s_dop` is 1.0 in *every* logged episode, so `mean(scores)` is an
+affine map of the one informative variable into [0.5, 1.0]; with every score ≥ 0.5 the
+nonconformity of "the judge says real" never exceeds any attainable `qhat`, so "real"
+can never be excluded. Switching the predictor variable — same method, same 300 rows,
+same split seed — moves the engine from committing on 18.7 % of emissions to **95.3 %,
+and coverage moved *toward* nominal, not away.** This is the same degeneracy §7.6
+records from the other side (Doppler-only 100.0 %, amplitude-only 13.0 %).
+
+**Marginal validity is real; conditional validity is not.** One pooled threshold
+over-covers the easy arms and **under-covers `structural` at 78.8 %** `[MEASURED]`.
+Quoting "90 % coverage" *for the structural generator specifically* would be wrong.
+Per-arm (Mondrian) fitting repairs every arm to ≥ 90 % and the price is visible —
+structural's threshold rises 0.5851 → 0.7742 and its sets widen to 1.90 of 2. The
+marginal predictor had been borrowing confidence from the easy arms.
+
+**Epistemic vs aleatoric — the actionable number.** Law of total variance over the
+structural arm's 20 (velocity, RCS) regime cells: total Bernoulli variance 0.1539 =
+**aleatoric 0.1289 (84 %)** + epistemic 0.0250 (16 %) `[MEASURED]`. **84 % of the
+outcome variance is irreducible given the regime.** A perfect belief model conditioned
+on (velocity, RCS) could remove at most 16 %. The correct response to this uncertainty
+is to accept it, not to gather more data.
+
+### The Simplex guard passes, and the pass is nearly vacuous
+
+`experiments.simplexAB` — smart = trained D3QN `stats`, fallback = the untrained
+structural generator `[MEASURED]`:
+
+| | always-smart | always-fallback | **guarded** |
+|---|---|---|---|
+| judge real rate | 2.0 % | 18.0 % | **18.0 %** |
+| fallback rate | — | — | **100.0 %** |
+
+Acceptance (fallback ≥ smart on flagged episodes) is met at 100 %, against an ≥ 80 %
+bar. **But guarded equals always-fallback**: the guard is a constant function,
+*"never trust the learned agent."* It recovers the fallback's floor and costs nothing;
+**it does not beat the fallback, and on this controller pair a Simplex architecture is
+not yet earning its complexity.** Reported before it is presented as one.
+
+A prediction was recorded before the corrected-predictor re-run — that a sharper
+predictor would *lower* the fallback rate. **It was wrong; the rate went to 100 %.** The
+guard did not become less constant, it became *confidently* constant: its decisions
+moved from `ambiguous` 94 % to `confident-not-real` 94 %, and the old 6 %
+`confident-real` was **spurious confidence manufactured by the affine squeeze** — those
+same episodes now read `out-of-distribution`, the shift alarm working as designed.
+
+**Measurement limit.** The score the guard switches on is computed from the *completed*
+8-frame track, so this measures the **ceiling** of an episode-level guard, not a
+deployable one. A deployable guard switches mid-episode on the partial-track score both
+environments already compute per frame. This number says that is not the work to do
+next: fix the fallback's 19 %, not the switching logic.
+
+### Observer sweep — the known-radar assumption, priced for the first time
+
+`experiments.observerSweep(100, 11)`. One rollout per episode, that **same retained
+cube** then scored under every observer configuration before it is discarded, so a
+row-to-row difference cannot be a different noise draw. The engine is never told which
+observer it faces; its inline belief is fixed at 34.0 % across the whole table
+`[MEASURED]`:
+
+| Observer configuration | `runJudge` real | Wilson 95 % CI |
+|---|---|---|
+| nominal | 23.0 % | [16, 32] |
+| Pfa 1e-6 / 1e-2, guard 2 / 8, gate 100 / 400 m | 23.0 % | [16, 32] — *bit-identical* |
+| confirm [2 3] / [4 5] | 28.0 % / 21.0 % | overlap nominal — noise |
+| **CFAR `NumTraining` 32** | **8.0 %** | **[4, 15] — disjoint from nominal** |
+| amplitude screen only | 13.0 % | [8, 21] |
+| doppler screen only | 100.0 % | [96, 100] |
+
+**Most detection knobs are inert across four orders of magnitude of `Pfa`** —
+independently reproducing `BENCHMARK_RESULTS.md`'s "no radar knob changes it" on a
+different arm, a different metric and paired cubes. **`NumTraining` is the one observer
+parameter that bites**, and it costs roughly two thirds of the survival rate: the
+known-radar assumption of §8 is **not** costless, and this is its price.
+
+**Root cause, with the hypothesis refuted.** `experiments.cliffRootCause(60, 11)` wrote
+both the hypothesis (amplitude perturbation) and the competing explanation (detection
+quality) into the file header *before* the run, with the verdict rule fixed in code.
+**The amplitude hypothesis is refuted as the primary cause** `[MEASURED]`: the episodes
+that flip real → decoy lose **6.00 → 4.12 usable frames**, and their fitted amplitude
+slope destabilises from −1.374 to −11.798 against a physical −2 (std 6.181 → 19.299).
+Frames are dropped → screen 1's already-short lever arm gets shorter → the fit
+destabilises → the label flips. The two mechanisms were not alternatives; the frame loss
+*drives* the slope instability.
+
+**And this corrects a methodological error the sweep itself first made.** `confirmed`
+stayed at 100.0 % in both configurations, because a 3-of-5 track can lose frames without
+un-confirming. **A saturated binary hid a real detection degradation.** Any sweep
+reporting only confirmation rate can miss this; the honest metric is usable frames per
+track.
+
+### Provenance ledger — a check that can fail
+
+`tests/test_provenance_ledger.m` **5/5** and `tests/test_conformal.m` **5/5**
+`[MEASURED]`. `assurance.provenanceLedger` walks the environment's actual log fields at
+runtime and registers a **derivation** for each of 15 observables; untagged count = 0.
+The planted-violation test runs *before* the clean-scan test, deliberately — a
+hand-written tag table is complete by construction and measures nothing, so "untagged =
+0" is only a metric if a quantity *can* go untagged. Same discipline as
+`web/scripts/verify-no-physics.mjs`. Three of the 15 are `ASSUMED` or weaker and are
+marked so; `rcsDbsm` is the notable one — an identity chosen from an options list, not
+derived from measured RCS data.
+
+### The limit that travels with every coverage number in this section
+
+**Conformal coverage is conditional on exchangeability, and §7.9's own observer sweep
+shows the condition is violable.** The calibration set is drawn from three arms at **one**
+radar configuration; the sweep measures a configuration (`NumTraining` 32) where the
+judge's real rate falls 23.0 % → 8.0 % *while the engine's belief does not move at all*.
+That is exactly the distribution shift the 90 % guarantee is conditional on. **No
+coverage number here may be quoted for a radar whose CFAR training length is unknown**
+until the calibration set is re-collected across the observer distribution. Not done;
+it is the first follow-up and it is one loop around `calibrationLog`.
+
+Two further boundaries: the guarantee is about the **belief**, not the deception — an
+engine that is reliably detected has excellent coverage. And the Simplex fallback is
+**measured, not verified**: black-box Simplex is proven safe against a *verified*
+baseline, and this baseline is an empirical 19.0 % floor.
+
 ---
 
 # §8 Limitations & boundary conditions
@@ -1925,6 +2079,17 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
     filter is explicitly not this build, because it would make the shadow↔judge gap
     conflate a *structural* mismatch with the *parameter* mismatch it currently measures
     cleanly.
+
+11. **The known-radar assumption now has a price, and it is not zero.** §7.9's observer
+    sweep holds the engine's belief fixed at 34.0 % while sweeping the judge: `Pfa` over
+    four orders of magnitude, guard cells, gate width and confirmation threshold are all
+    inert, but CFAR `NumTraining` 20 → 32 alone costs **23.0 % → 8.0 %, Wilson intervals
+    disjoint** `[MEASURED]`. **Being wrong about one observer parameter costs roughly two
+    thirds of the survival rate.** The same shift invalidates the exchangeability
+    condition behind §7.9's 90 % conformal coverage, so no coverage number may be quoted
+    for a radar whose training length is unknown until the calibration set is
+    re-collected across the observer distribution — the layer's first follow-up, not
+    done.
 
 ---
 
@@ -2145,6 +2310,16 @@ Every `[ASSUMED]` tag in this report, with its consequence.
 | RadChar three-arm | `tests/test_radchar_three_arm.m` | 1/1 |
 | Package independence (Rule 2) | `tests/test_package_separation.m` | pass |
 | End-to-end seam | `tests/test_decideScene.m` | 3/3 |
+| Conformal predictor (§7.9) | `tests/test_conformal.m` | 5/5 |
+| Provenance ledger, planted violation (§7.9) | `tests/test_provenance_ledger.m` | 5/5 |
+
+**Assurance-layer experiment scripts (§7.9), each printing its own criterion:**
+`+experiments/calibrationLog.m` (calibration set → `results/calibration_data.csv`),
+`conformalValidate.m` (held-out coverage, PASS/FAIL), `simplexAB.m` (guard acceptance),
+`observerSweep.m` (graceful-vs-cliff), `cliffRootCause.m` (pre-registered hypothesis vs
+competing explanation), `ledgerAudit.m` (untagged count). Layer implementation:
+`+assurance/conformalFit.m`, `conformalPredict.m`, `simplexGuard.m`,
+`provenanceLedger.m`. Full write-up: `ASSURANCE_LAYER_RESULTS.md`.
 
 ## D.2 Dataset provenance and citation
 
