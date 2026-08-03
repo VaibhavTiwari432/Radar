@@ -2134,6 +2134,33 @@ screen's slope fitted over ~8 frames and a 1.27× range change, bounded above by
 CFAR blind zone and below by `v_ua`. **Until that measurement improves there is no
 belief for an assurance layer to calibrate.**
 
+**And no other logged variable supplies one either.** Since the layer's variance
+decomposition puts 16 % of the outcome variance in the *regime* rather than the noise,
+the engine's commanded parameters — which it knows because it chose them — are the
+obvious alternative belief. Measured on the structural arm `[MEASURED]`:
+
+| candidate | AUC | bootstrap 95 % CI |
+|---|---|---|
+| `inline_s_amp` (the ECCM screen) | 0.502 | [0.382, 0.627] |
+| **commanded RCS** | **0.603** | **[0.464, 0.739]** |
+| commanded speed | 0.543 | — |
+| full (vel, rcs) cell, leave-one-out | 0.472 | — |
+
+**Every interval contains 0.5, so nothing here is established.** Commanded RCS beats
+the screen by 0.10 AUC in the physically expected direction, but its per-cell trend is
+non-monotone (the +5 dBsm cell drops to 7.1 % against 23.1 % at 0 dBsm) and is not
+claimed. The full-regime predictor scores **0.472 — worse than chance** — because 20
+cells over 100 episodes leaves ~5 episodes per cell: **conditioning on more of the
+regime made the belief worse.** The 16 % epistemic figure is an in-sample
+decomposition and does not promise a predictor can recover it out-of-sample; this is
+the measurement showing it cannot at this *n*.
+
+Settling it needs **20 seeds × 20 episodes on the structural arm** (bootstrap
+half-width ±0.14 → ±0.07), which would clear commanded RCS of chance if the point
+estimate holds. Until then the honest statement is the strong one: **no variable this
+engine logs is established as predictive of the independent judge's verdict** — not
+the screen it was built on, not the regime it commands.
+
 Two further boundaries: the guarantee is about the **belief**, not the deception — an
 engine that is reliably detected has excellent coverage. And the Simplex fallback is
 **measured, not verified**: black-box Simplex is proven safe against a *verified*

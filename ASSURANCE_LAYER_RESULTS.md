@@ -660,6 +660,66 @@ calibrate**, and no amount of conformal machinery will manufacture one.
 
 ---
 
+## 8. Is there a better belief available? Not at this sample size — and that is the answer
+
+§7 says the amplitude screen carries no information. §1 says **16 % of the
+outcome variance is epistemic**, i.e. in principle predictable from the commanded
+regime. Those two together imply the engine's best available belief may not be
+its ECCM screen at all, but something it already knows because it chose it.
+Tested directly on the structural arm, the only one with a commanded regime per
+episode `[MEASURED]`:
+
+| candidate predictor | AUC | bootstrap 95 % CI (4000 resamples) |
+|---|---|---|
+| `inline_s_amp` — the engine's own screen | 0.502 | [0.382, 0.627] |
+| **`rcs_dbsm` — commanded RCS** | **0.603** | **[0.464, 0.739]** |
+| `abs(vel_mps)` — commanded speed | 0.543 | — |
+| full (vel, rcs) cell, leave-one-out | **0.472** | — |
+
+**No candidate is established. Every interval contains 0.5.** Commanded RCS is
+the best of them and beats the screen by 0.10 AUC, which is the physically
+expected direction — more RCS, more received power, more usable frames, a better
+amplitude fit — but **the finding is not significant at n = 100 and is not
+claimed.**
+
+The per-RCS rates show why, and they are reported rather than smoothed:
+
+```
+  rcs -10.0 dBsm   n=13   judge_real   7.7%  [ 1.4, 33.3]
+  rcs  -5.0 dBsm   n=25   judge_real  16.0%  [ 6.4, 34.7]
+  rcs  +0.0 dBsm   n=26   judge_real  23.1%  [11.0, 42.1]
+  rcs  +5.0 dBsm   n=14   judge_real   7.1%  [ 1.3, 31.5]   <- breaks the trend
+  rcs +10.0 dBsm   n=22   judge_real  31.8%  [16.4, 52.7]
+```
+
+The extremes move in the expected direction (7.7 % → 31.8 %), but **the trend is
+not monotone** — the +5 dBsm cell drops to 7.1 % — and every Wilson interval
+overlaps every other. An AUC computed over this is a summary of noise as much as
+of signal.
+
+**A small-sample lesson worth keeping.** The *full* (vel, rcs) cell predictor
+scores **0.472 — worse than chance and worse than either variable alone**. With
+20 cells over 100 episodes the cells hold ~5 episodes each (one holds a single
+episode), so a leave-one-out rate per cell is estimated from ~4 points and is
+mostly noise. **Conditioning on more of the regime made the belief worse.** The
+16 % epistemic figure in §1 is an in-sample variance decomposition and does not
+promise that a predictor can *recover* those 16 % out-of-sample; this is the
+measurement showing it cannot, at this n.
+
+**What would settle it, concretely.** The bootstrap half-width is ±0.14 at
+n = 100 with 19 positives. Four times the data gives roughly ±0.07, which would
+put commanded RCS at [0.53, 0.67] and clear of chance if the point estimate
+holds. That is **20 seeds × 20 episodes on the structural arm alone** — the
+existing `calibrationLog` call with `seeds = 1:20` and the two agent arms
+skipped. Affordable, and it is the one experiment that could give this layer a
+belief worth calibrating.
+
+**Until then the honest statement is the strong one:** *no variable logged by
+this engine is established as predictive of the independent judge's verdict.*
+Not the screen it was built on, not the regime it commands.
+
+---
+
 ## Honest limits of this layer
 
 - **Coverage is conditional on exchangeability, and §3 shows the condition is
