@@ -892,6 +892,48 @@ one. So the measurement in §7.5 quantifies **staleness**, and any negative resu
 prediction being worthless is a result about **this schedule**, not about agility in
 general. A larger hop set with exploitable structure is untested.
 
+## 4.9a PRF stagger — free, weak, and valuable for a reason that is not its own numbers
+
+§4.9's own reasoning lists PRF stagger alongside sweep reversal as a technique real
+anti-DRFM radars use and this project did not implement. It is implemented now
+(`+radar/prfSchedule.m`, symmetric about nominal so the **mean PRF and revisit rate are
+unchanged** — only predictability is spent) and measured against both arms, because a
+counter that degrades the radar as much as the threat is not a counter.
+
+| jitter | GENUINE (passive) peak / `v` error | PREDICTIVE repeater peak / `v` error |
+|---|---|---|
+| 0.00 | 0.00 dB / 1.28 m s⁻¹ | 0.00 dB / 1.28 m s⁻¹ |
+| 0.10 | 0.00 dB / 1.28 m s⁻¹ | −0.07 dB / 1.58 m s⁻¹ |
+| 0.40 | **0.01 dB / 1.28 m s⁻¹** | **−1.83 dB / 2.88 m s⁻¹** |
+
+`[MEASURED]`, 20 seeds, 32 pulses, `v` = −50 m s⁻¹, `experiments.prfJitter`.
+**Net advantage 1.84 dB, against waveform agility's 14.2 dB.**
+
+**It is free.** A genuine target is passive — it reflects each pulse whenever that pulse
+arrives — so its slow-time phase is sampled at the radar's own true transmit times and
+the radar, which chose the schedule, compensates exactly (a DFT evaluated at `t_p`
+rather than an FFT). Measured cost to the genuine arm across a 0→0.4 jitter sweep:
+**0.01 dB, with the range-rate error unchanged at 1.28 m s⁻¹.**
+
+**Why it is nonetheless weak, stated as a mechanism rather than a disappointment.** A
+staggered PRI walk is dominated by its **linear trend**, which is indistinguishable from
+a frequency offset — and the radar's own Doppler search absorbs it. Stagger therefore
+does not destroy the predictive repeater's coherence; it **biases its apparent
+velocity**, 1.28 → 2.88 m s⁻¹. That bias remains *below* `track.rangeRateConsistency`'s
+derived 8.81 m s⁻¹ gate (§4.7), so stagger does not trip the RGPO screen by itself
+either.
+
+**THE RESTRICTION IS THE RESULT.** A standard DRFM repeater is **reactive**: it answers
+each pulse it hears, and therefore follows the stagger by construction. **PRF stagger is
+worth nothing against repeat-back.** The arm measured above is the **predictive**
+repeater — and that is precisely why the technique matters.
+`+engine/+entity/checkCausality.m` already establishes that repeat-back can only place a
+phantom **farther out** than the jammer (delay ≥ 0), so pulling a range gate *inward*
+requires prediction. **PRF stagger's value is not the 1.84 dB. It is that it forces the
+adversary back into repeat-back mode, where causality already forbids the inward
+pull-off.** Read that way it composes with a constraint this system already enforces,
+rather than competing with waveform agility on integration loss.
+
 ## 4.10 Deception techniques
 
 **RGPO** (range-gate pull-off): the repeater first transmits at the target's true
