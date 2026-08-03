@@ -803,7 +803,7 @@ built, measured, and either scene-specific or disabled with a stated reason.
 | 1 | **Amplitude-vs-range law** | slope of `log A` vs `log R` | score `= max(0, 1 − \|slope+2\|/2)`; physical slope −2 | **active** |
 | 2 | **Doppler ↔ range-rate consistency** | `sign(mean Δ R)` vs `sign(mean f_d)` | contradiction ⇒ 0; never measured ⇒ skipped | **active** |
 | 3 | Micro-Doppler comb presence | Bessel sideband comb at blade rate | veto, two gates | built; **inert at any dwell** — §4.11 |
-| 4 | Amplitude residual variance | scatter about a slope **fixed** at −2 | floor `= 0.233·max(0, 1−3/√(2(N−1)))` dB | built; **off by default** |
+| 4 | Amplitude residual variance | scatter about a slope **fixed** at −2 | floor `= 0.233·max(0, 1−3/√(2(N−1)))` dB | built; **inert at this track length** — §4.7a |
 | 5 | **Co-bearing (monopulse angle)** | spread of track-mean azimuths vs within-track scatter | self-calibrating ratio | active **when angle channel on** |
 | 6 | Innovation whiteness | lag-1 autocorrelation of innovations | — | **falsified, not built** |
 
@@ -831,6 +831,63 @@ deterministic quantiser the residuals are deterministic, and a whiteness test as
 stochastic process. **Recommendation withdrawn.** The general lesson — *an apparent
 phantom-vs-genuine difference must be re-measured with the generator held fixed before
 it is called a signature* — is the methodological finding of this section.
+
+## 4.7a Screen 4 enabled and measured — inert, and the floor is the reason
+
+Screen 4 was `off by default` for a stated reason that has since been removed, so the
+default was re-examined rather than left standing. The reason was **a defect in the
+reference scene, not in the screen**: it vetoes a return with essentially zero scatter
+about the 1/R² law — the servo-driven-repeater signature — and every genuine arm in this
+project rendered `swerling = 0`, a non-fluctuating target that trips exactly that veto
+and was duly flagged 10/10. Tier 1.3 made `swerling` a stated parameter defaulting to
+**Swerling I**, so a genuine target now fluctuates and the screen can finally be measured
+against a control it will not falsely condemn.
+
+Enabled on top of both authoritative rungs, 20 seeds per cell
+(`experiments.eccmLadder`, `[MEASURED]`):
+
+| rung | VEE phantom | naive DRFM | genuine (control) |
+|---|---|---|---|
+| R2 (Doppler + amplitude) | 7/20 | 0/20 | 8/20 |
+| **R2 + residual** | **7/20** | **0/20** | **8/20** |
+| R3 (+ waveform agility) | 4/20 | 0/20 | 8/20 |
+| **R3 + residual** | **4/20** | **0/20** | **8/20** |
+
+Deception rate, confirmed **and** labelled `real`. **The screen changes nothing — every
+cell is identical to the rung it extends, for all three arms.**
+
+**The mechanism is arithmetic, and it is reported so that "no change" reads as a
+measurement rather than as a suspicion that the screen was never wired in.** The veto
+fires only when measured scatter falls *below* a floor carrying a small-sample
+correction, `0.233·max(0, 1−3/√(2(N−1)))`. At the eight-frame track length this system
+actually produces, that floor collapses to **0.046 dB**. Measured scatter:
+
+| arm | residual scatter σ | vs. floor |
+|---|---|---|
+| VEE phantom | 5.816 dB | 126× |
+| genuine | 4.216 dB | 92× |
+| **naive DRFM** (constant gain, no fluctuation at all) | **0.972 dB** | **21×** |
+
+`[MEASURED]`, 20 seeds. The least-scattered arm in the experiment is the constant-gain
+repeater that does not fluctuate *by construction* — and it still sits 21× above the
+floor, because at this SNR **receiver noise on the amplitude estimate alone exceeds the
+scintillation floor the screen tests against.** Nothing in the experiment can fall below
+the floor, so nothing is vetoed.
+
+**Consequence for §8's limitation 3, stated plainly: the residual screen does not repair
+the amplitude screen.** Screen 1's weakness is its *lever arm* — a slope fitted over a
+1.27× range change in eight frames — and screen 4 is bounded by the *same* eight frames
+from the other direction: its floor is driven toward zero by the very small-sample
+correction that keeps it honest. The two failures share a cause. Lengthening the track
+is the only move that helps either, and §8 records that the lever arm is already bounded
+above by the 1124 m CFAR blind zone and below by `v_ua`.
+
+The screen is therefore **kept, enabled-able, and documented as inert at this track
+length** rather than deleted: it is correctly constructed and veto-only, and it would
+have real capability against a longer dwell or a higher-SNR return. What it does not have
+is any capability *here*. Asserted as a standing measurement in
+`tests/test_eccm_ladder.m::test_residual_screen_is_inert_at_this_track_length`, so it
+cannot rot into a silent claim in either direction.
 
 ## 4.8 Monopulse and the co-bearing veto
 
@@ -1828,6 +1885,10 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
    change in 8 frames — which no calibration repairs. Even at 4× the dwell only 70 % of
    *genuine* tracks clear the bar, and the lever arm is bounded **above** by the 1124 m
    CFAR blind zone and **below** by `v_ua`: the two constraints close on each other.
+   **The residual-variance screen does not repair it** — enabled on both authoritative
+   rungs it changes no cell for any arm, because its veto floor at an eight-frame track
+   is 0.046 dB while the *least*-scattered arm measures 0.972 dB (§4.7a). Both screens
+   are bounded by the same eight frames.
 
 4. **No shared-power-budget result is a physical constraint.** §3.2 and §7.8.
 
@@ -2076,6 +2137,7 @@ Every `[ASSUMED]` tag in this report, with its consequence.
 | Four-phantom swarm, 8 seeds | `tests/test_four_phantom_swarm_seeds.m` | pass |
 | Mixed swarm (naive decoy control) | `tests/test_mixed_swarm_naive_decoy.m` | pass |
 | Residual-variance screen | `tests/test_amplitude_residual_screen.m` | 4/4 |
+| ECCM ladder + screen-4 inertness | `tests/test_eccm_ladder.m` | 4/4 |
 | VEE entity / shadow filter | `tests/test_vee_entity.m`, `test_vee_shadow.m` | **7/7**, 4/4 |
 | Action grid inside `v_ua` | `tests/test_action_grid_unambiguous.m` | 4/4 |
 | Multi-dwell NIS gate | `tests/test_nis_consistency.m` | 5/5 |

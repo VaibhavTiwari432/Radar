@@ -8,6 +8,27 @@ function out = eccmLadder(nSeeds)
 %       R1  Doppler screen only
 %       R2  + amplitude screen        (the authoritative rung)
 %       R3  + waveform agility        (per-frame sweep reversal)
+%       R2+residual  R2 + residual-variance screen (screen 4, veto-only)
+%       R3+residual  R3 + the same screen
+%
+%   THE RUNG LABELS HERE ARE THIS FILE'S OWN AND DO NOT MAP ONTO THE REPORT'S
+%   §4.12 LADDER. That ladder's R4 is monopulse and its R5 is agility; this
+%   file has no monopulse rung (see below) and its R3 already IS agility. The
+%   two new rungs are therefore named for what they add to an existing rung,
+%   not given fresh R-numbers that already mean something else elsewhere.
+%
+%   WHY THE RESIDUAL RUNGS EXIST NOW AND NOT BEFORE. discriminator.m's residual-variance
+%   screen is off by default, and its own header states the single reason:
+%   it vetoes a return with literally zero scatter about the 1/R^2 law, which
+%   is the servo-repeater signature -- and every genuine reference arm in
+%   this project rendered `swerling = 0`, i.e. a non-fluctuating target that
+%   trips exactly that veto. Enabling it therefore required genuine targets
+%   to fluctuate first. Tier 1.3 did that (swerling is a stated parameter,
+%   default I), so the blocker is gone and the screen can finally be measured
+%   against a genuine arm it will not falsely condemn. R2 is the rung where
+%   the amplitude slope screen was measured UNABLE to separate phantom from
+%   genuine (35% vs 40%, p = 0.74); the residual rungs test whether the
+%   residual screen fixes that.
 %
 %   THE MONOPULSE RUNG IS DELIBERATELY NOT HERE, and the reason is a defect
 %   found in the first version of this file rather than a scoping preference.
@@ -48,7 +69,9 @@ function out = eccmLadder(nSeeds)
     rungs = { ...
         'R1 doppler',        {'doppler'},              false, false; ...
         'R2 +amplitude',     {'doppler','amplitude'},  false, false; ...
-        'R3 +agility',       {'doppler','amplitude'},  false, true};
+        'R3 +agility',       {'doppler','amplitude'},  false, true; ...
+        'R2+residual',       {'doppler','amplitude','residual'}, false, false; ...
+        'R3+residual',       {'doppler','amplitude','residual'}, false, true};
     arms = {'vee-phantom', 'naive-drfm', 'genuine'};
 
     fprintf('\n============ ECCM LADDER, %d seeds/cell ============\n', nSeeds);
@@ -56,12 +79,13 @@ function out = eccmLadder(nSeeds)
         'deceived', 'NIS pass', 'rate pass');
 
     out = struct('rung', {}, 'arm', {}, 'confirmed', {}, 'deceived', {}, ...
-                 'nisPass', {}, 'ratePass', {}, 'nisMean', {}, 'rateMismatch', {});
+                 'nisPass', {}, 'ratePass', {}, 'nisMean', {}, 'rateMismatch', {}, ...
+                 'residSigmaDb', {});
 
     for r = 1:size(rungs, 1)
         for a = 1:numel(arms)
             nConf = 0; nDec = 0; nNis = 0; nRate = 0;
-            nisVals = []; rateVals = [];
+            nisVals = []; rateVals = []; sigVals = [];
             for seed = 1:nSeeds
                 % The sweep schedule is handed to the ARM as well as the
                 % judge: a GENUINE target reflects whatever the radar
@@ -82,6 +106,8 @@ function out = eccmLadder(nSeeds)
                 nisVals(end+1)  = mean(fb.track_nis_mean(~isnan(fb.track_nis_mean))); %#ok<AGROW>
                 m = fb.track_rate_mismatch_mps(~isnan(fb.track_rate_mismatch_mps));
                 if ~isempty(m); rateVals(end+1) = mean(m); end %#ok<AGROW>
+                sd = localResidSigmaDb(fb);
+                if ~isnan(sd); sigVals(end+1) = sd; end %#ok<AGROW>
             end
             fprintf('%-14s %-13s %6d/%-2d %6d/%-2d %8d/%-2d %8d/%-2d\n', ...
                 rungs{r,1}, arms{a}, nConf, nSeeds, nDec, nSeeds, ...
@@ -89,16 +115,38 @@ function out = eccmLadder(nSeeds)
             out(end+1) = struct('rung', rungs{r,1}, 'arm', arms{a}, ...
                 'confirmed', nConf, 'deceived', nDec, 'nisPass', nNis, ...
                 'ratePass', nRate, 'nisMean', mean(nisVals), ...
-                'rateMismatch', mean(rateVals)); %#ok<AGROW>
+                'rateMismatch', mean(rateVals), ...
+                'residSigmaDb', mean(sigVals)); %#ok<AGROW>
         end
     end
 
-    fprintf('\nNIS mean / rate mismatch by arm (all rungs pooled):\n');
+    fprintf('\nNIS mean / rate mismatch / residual scatter by arm (all rungs pooled):\n');
     for a = 1:numel(arms)
         sel = strcmp({out.arm}, arms{a});
-        fprintf('  %-13s NIS %8.3f | rate mismatch %8.2f m/s\n', arms{a}, ...
-            mean([out(sel).nisMean], 'omitnan'), mean([out(sel).rateMismatch], 'omitnan'));
+        fprintf('  %-13s NIS %8.3f | rate mismatch %8.2f m/s | resid sigma %7.3f dB\n', ...
+            arms{a}, mean([out(sel).nisMean], 'omitnan'), ...
+            mean([out(sel).rateMismatch], 'omitnan'), ...
+            mean([out(sel).residSigmaDb], 'omitnan'));
     end
+    fprintf(['  (residual veto fires only BELOW the floor; at N=%d hits that is ' ...
+             '%.3f dB)\n'], cfg.nFrames, ...
+             0.233 * max(0, 1 - 3/sqrt(2*(cfg.nFrames-1))));
+end
+
+% ------------------------------------------------------------------------
+function sd = localResidSigmaDb(fb)
+%LOCALRESIDSIGMADB  The scatter about the 1/R^2 law that discriminator.m's
+%   residual screen vetoes on, recomputed here from the judge's OWN returned
+%   series with the same formula. Reported so that "the residual rung changed
+%   nothing" is readable as a MEASUREMENT (scatter sits above the veto floor)
+%   rather than as a suspicion that the screen was never wired in.
+    sd = NaN;
+    if ~isfield(fb, 'track_range_m') || isempty(fb.track_range_m); return; end
+    R = fb.track_range_m{1}(:); A = fb.track_amp{1}(:);
+    ok = isfinite(R) & isfinite(A) & R > 0 & A > 0;
+    if nnz(ok) < 3 || range(R(ok)) <= 1e-9; return; end
+    lr = log(R(ok)); la = log(A(ok));
+    sd = std(20/log(10) * (la - (-2*lr + mean(la + 2*lr))));
 end
 
 % ------------------------------------------------------------------------

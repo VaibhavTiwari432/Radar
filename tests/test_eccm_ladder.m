@@ -74,5 +74,39 @@ classdef test_eccm_ladder < matlab.unittest.TestCase
                 ['NIS now separates the VEE phantom from the naive DRFM -- that is ' ...
                  'a NEW capability, not a regression, but the report says inert']);
         end
+
+        function test_residual_screen_is_inert_at_this_track_length(tc)
+            % The residual-variance screen changes NOTHING on this scene, and
+            % the reason is arithmetic rather than a wiring fault: its veto
+            % floor carries a small-sample correction, 0.233*(1-3/sqrt(2(N-1))),
+            % which at N=8 hits is 0.046 dB -- while the LEAST-scattered arm
+            % here (the constant-gain naive DRFM, which does not fluctuate at
+            % all) still measures ~0.97 dB of scatter from receiver noise on
+            % the amplitude estimate alone. Nothing can fall below the floor,
+            % so nothing is vetoed. Asserted so the inertness is a standing
+            % measurement, not a one-off observation: if the residual rungs
+            % ever diverge from the rungs they extend, the screen has gained
+            % real capability and the report's language must be revisited.
+            out = experiments.eccmLadder(6);
+            pairs = {'R2 +amplitude', 'R2+residual'; 'R3 +agility', 'R3+residual'};
+            for p = 1:size(pairs, 1)
+                base = out(strcmp({out.rung}, pairs{p,1}));
+                resid = out(strcmp({out.rung}, pairs{p,2}));
+                fprintf('[resid] %-14s deceived %s -> %-12s %s\n', pairs{p,1}, ...
+                    mat2str([base.deceived]), pairs{p,2}, mat2str([resid.deceived]));
+                tc.verifyEqual([resid.deceived], [base.deceived], ...
+                    sprintf(['%s differs from %s -- the residual screen has become ' ...
+                             'active on this scene'], pairs{p,2}, pairs{p,1}));
+            end
+
+            % And the mechanism, not just the outcome: every arm's scatter
+            % must sit above the floor the veto tests against.
+            floorDb = 0.233 * max(0, 1 - 3/sqrt(2*(8-1)));
+            sigmas = [out.residSigmaDb];
+            fprintf('[resid] min arm scatter %.3f dB vs veto floor %.3f dB\n', ...
+                min(sigmas), floorDb);
+            tc.verifyGreaterThan(min(sigmas), floorDb, ...
+                'an arm fell below the residual veto floor -- the screen can now fire');
+        end
     end
 end
