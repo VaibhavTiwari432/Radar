@@ -532,6 +532,35 @@ function feedback = runJudge(matFile, varargin)
         if ~isempty(a); azMeans(i) = mean(a); end
         if numel(a) >= 2; azStds(i) = std(a); end
     end
+    % ============ THE SCREEN HAS AN UPPER VALIDITY LIMIT TOO ============
+    % The documented bound on this screen has always been a LOWER one (a
+    % genuine formation needs ~40 m of cross-range spread not to look like a
+    % fan). There is an UPPER one as well, and it was undocumented until
+    % tests/test_monopulse_snr_boundary.m failed on it.
+    %
+    % Phase-comparison monopulse is unambiguous only within
+    % asin(lambda/(2*subSep)) -- +-2.866 deg at 0.30 m and 10 GHz. phiEst
+    % above is 2*atan(imag(.)), which lives in (-pi, pi), so a target OUTSIDE
+    % that sector does not saturate: its phase WRAPS and it is reported at a
+    % completely wrong azimuth. Measured on this project's own geometry: a
+    % genuine object 80 m off boresight at 900 m is truly at +5.100 deg and is
+    % MEASURED at -0.637 deg.
+    %
+    % The consequence is the opposite of the screen's intent. A genuine
+    % formation WIDER than the sector has its outer members folded back
+    % toward the middle, its apparent azimuth spread collapses, and it is
+    % condemned as co-bearing -- the screen accuses real aircraft precisely
+    % when they are most widely separated. Measured flag rate against genuine
+    % cross-range spread is therefore NON-MONOTONIC: 100/50/38/25/12/0% out to
+    % 80 m, then back up to 75% at 160 m.
+    %
+    % THIS CANNOT BE FIXED IN SOFTWARE HERE, and saying so is the honest
+    % answer: one aperture cannot distinguish +5.100 deg from -0.637 deg,
+    % because they produce the identical phase. Resolving it needs a second
+    % baseline (a third subaperture, or a second PRF/wavelength). What CAN be
+    % done is to REPORT the limit so no caller quotes a co-bearing verdict
+    % without knowing the sector it is valid inside -- feedback.unambiguous_az_rad
+    % below, and the cross-range ceiling it implies at each track's own range.
     CO_BEARING_SIGMAS = 3;      % 3-sigma: "closer together than one track's own noise"
     valid = ~isnan(azMeans);
     if hasAngle && nnz(valid) >= 2
@@ -545,6 +574,51 @@ function feedback = runJudge(matFile, varargin)
             % Every co-bearing track is condemned together -- that is the
             % point: the giveaway is the GROUP, not any individual track.
             trackLabel(valid) = "decoy";
+        end
+    end
+
+    % ============= NIS CONSISTENCY (Tier 1.1), a SEPARATE column =============
+    % The stateful tracker has always run across frames; nothing ever computed
+    % an innovation from it. This does -- per confirmed track, from that
+    % track's own hit ranges and hit TIMES (so a missed dwell lengthens dt
+    % instead of being silently counted as one interval).
+    %
+    % DELIBERATELY NOT FOLDED INTO trackLabel. The Tier 1.1 brief is explicit:
+    % report it alongside first, so its effect on the evasion rate can be seen
+    % in isolation before anyone decides to combine it with the four screens.
+    % Combining it here would make that measurement impossible to take.
+    nisMean = nan(1, confirmedCount);
+    nisInGate = nan(1, confirmedCount);
+    nisPass = false(1, confirmedCount);
+    % Tier 1.2 -- the explicit RGPO/VGPO MAGNITUDE detector. Also a separate
+    % column, for the same reason. Note it is NOT redundant with
+    % track.discriminator screen 2, which compares only SIGNS: a phantom
+    % walking range at -50 m/s while transmitting -5 m/s of Doppler passes
+    % that screen and fails this one.
+    rrMismatch = nan(1, confirmedCount);
+    rrThreshold = nan(1, confirmedCount);
+    rrPass = true(1, confirmedCount);
+    for i = 1:confirmedCount
+        if numel(trackRange{i}) >= 2
+            nisOut = track.nisConsistency(trackRange{i}, trackTime{i}, C, ...
+                        'GateChi2', opts.NisGateChi2);
+            nisMean(i)   = nisOut.meanNIS;
+            nisInGate(i) = nisOut.inGateFrac;
+            nisPass(i)   = nisOut.pass;
+
+            % Only meaningful where a Doppler measurement exists at all; on
+            % the legacy 2-D path trackRate is an all-zero placeholder and
+            % accusing a track on it would be exactly the "absent vs missing
+            % evidence" error track/discriminator.m documents.
+            if isCube
+                rrOut = track.rangeRateConsistency(trackRange{i}, trackTime{i}, ...
+                            trackRate{i}, C, 'NumPulses', numPulses, ...
+                            'CarrierHz', double(S.carrier_hz), 'PrfHz', double(S.prf_hz), ...
+                            'Sigmas', opts.RangeRateSigmas);
+                rrMismatch(i)  = rrOut.mismatchMps;
+                rrThreshold(i) = rrOut.thresholdMps;
+                rrPass(i)      = rrOut.pass;
+            end
         end
     end
 
@@ -573,10 +647,34 @@ function feedback = runJudge(matFile, varargin)
     feedback.track_azimuth_rad    = trackAz;     % MEASURED (angle path) or empty
     feedback.track_azimuth_mean   = azMeans;
     feedback.cobearing_flagged    = coBearing;
+    % Tier 1.1 -- the NIS column. Separate from track_label BY DESIGN; a
+    % caller wanting a combined verdict must combine them itself, visibly.
+    feedback.track_nis_mean     = nisMean;
+    feedback.track_nis_in_gate  = nisInGate;
+    feedback.track_nis_pass     = nisPass;
+    feedback.nis_gate_chi2      = opts.NisGateChi2;
+    % Tier 1.2 -- the RGPO/VGPO magnitude column, also separate from track_label.
+    feedback.track_rate_mismatch_mps = rrMismatch;
+    feedback.track_rate_threshold_mps = rrThreshold;
+    feedback.track_rate_pass    = rrPass;
     if hasAngle
         feedback.angle_source = 'monopulse';
+        % The sector the azimuths above are VALID inside. A track reported
+        % outside it is not clamped, it is WRAPPED -- see the co-bearing block.
+        feedback.unambiguous_az_rad = asin(min(1, lambda/(2*subSep)));
+        % ... and what that sector is worth in metres at each confirmed
+        % track's own range, since a formation's spread is a cross-range
+        % quantity and the angular limit alone is easy to misread.
+        if confirmedCount > 0
+            lastR = cellfun(@(r) localLastOrNaN(r), trackRange);
+            feedback.cross_range_ceiling_m = lastR .* tan(feedback.unambiguous_az_rad);
+        else
+            feedback.cross_range_ceiling_m = [];
+        end
     else
         feedback.angle_source = 'none';          % this radar cannot measure angle
+        feedback.unambiguous_az_rad = NaN;
+        feedback.cross_range_ceiling_m = [];
     end
     % ---- range ambiguity, reported with every result (Phase C1) ----------
     feedback.unambiguous_range_m = ambigInfo.unambiguous_range_m;
@@ -629,6 +727,11 @@ function peaks = localMaxPeaks(detIdx, power)
     end
 end
 
+function v = localLastOrNaN(r)
+%LOCALLASTORNAN  Last element, or NaN for an empty series.
+    if isempty(r); v = NaN; else; v = r(end); end
+end
+
 function opts = localParseJudgeConfig(args)
 %LOCALPARSEJUDGECONFIG  The judge's own operating point, settable ONLY here.
 %   Every default is [] = "not specified", so the value actually in force is
@@ -653,6 +756,14 @@ function opts = localParseJudgeConfig(args)
     p.addParameter('EccmScreens',           []);
     p.addParameter('ExpectMicroDoppler',    []);
     p.addParameter('MicroBladeHzMin',       100);
+    % Tier 1.1 -- the multi-dwell NIS gate. Reported as its OWN column, never
+    % folded into the ECCM score. See track.nisConsistency for why 7.81 is the
+    % conservative choice and 3.84 the tight one; it is a tunable either way.
+    p.addParameter('NisGateChi2',           7.81);
+    % Tier 1.2 -- sigmas on the derived range-rate-vs-Doppler tolerance. The
+    % tolerance itself is DERIVED from the two quantisers (see
+    % track.rangeRateConsistency); this is only how many sigmas of it to allow.
+    p.addParameter('RangeRateSigmas',       3);
     p.parse(args{:});
     opts = p.Results;
 end

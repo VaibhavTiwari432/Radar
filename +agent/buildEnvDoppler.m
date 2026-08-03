@@ -136,8 +136,29 @@ function [env, degradedEvent, spec] = buildEnvDoppler(C, pfb, opts)
     % kinematically truthful action is exactly the diagonal vel == delta.
     % That makes "trajectory consistency" a directly measurable quantity
     % (see experiments.diagnoseDopplerEnv) instead of a qualitative claim.
-    deltaOptionsM  = linspace(-120, 120, 5);
-    velOptionsMps  = linspace(-120, 120, 5);
+    % BOUNDED BY v_ua, NOT BY THE TRACKER GATE (2 Aug 2026). These were
+    % +-120 m/s, chosen against trackerGNN's assignment gate back when the
+    % PRF was believed to be 50 kHz (v_ua +-375 m/s). At the resolved 8 kHz
+    % PRF v_ua = lambda*PRF/4 = 59.958 m/s, so 4 of the 5 old options
+    % (+-120, +-60) sat AT OR PAST the fold: a commanded -60 m/s renders
+    % f_d = +4002.8 Hz, aliases past the +-4000 Hz Nyquist edge and is
+    % MEASURED as +59.9 m/s -- range closing, Doppler opening, which is the
+    % exact RGPO/VGPO signature discriminator.m screen 2 exists to catch.
+    % The generator was condemning itself with its own action space.
+    %
+    % +-50 leaves 9.96 m/s of margin = 2.7 Doppler bins at the 32-pulse
+    % dwell (bin = lambda*(PRF/32)/2 = 3.747 m/s). +-55 was rejected: only
+    % 1.3 bins, too tight once a measurement lands on a bin centre.
+    % Verified by tests/test_action_grid_unambiguous.m.
+    %
+    % deltas and velocities STILL share one grid, and that is why both had
+    % to move together: with dt = 1 s, a range-walk of d metres per frame IS
+    % a range-rate of d m/s, so the kinematically truthful action is the
+    % diagonal vel == delta. Under projection cmdVel is DERIVED from the
+    % achieved step, so leaving deltaOptionsM at +-120 would have kept the
+    % fold via the range walk even with velOptionsMps fixed.
+    deltaOptionsM  = linspace(-50, 50, 5);
+    velOptionsMps  = linspace(-50, 50, 5);
     % GEOMETRIC gain ladder, not linear. The law the agent has to reproduce
     % (amplitude ~ 1/R^2) is multiplicative, so a multiplicative ladder gives
     % it uniform leverage across the span. Over an 8-frame walk the range can
@@ -151,6 +172,20 @@ function [env, degradedEvent, spec] = buildEnvDoppler(C, pfb, opts)
     actInfo = rlFiniteSetSpec(1:(numDeltas*numGains*numVels));   % 125
     actInfo.Name = 'drfm_action';
 
+    % RANGE BOUNDS, DERIVED (2 Aug 2026). Were [150, 2950] m: the ceiling
+    % tracked the REJECTED 50 kHz PRF's R_ua (2997.9 m), and the floor sat
+    % deep inside the CA-CFAR blind zone. Both are now computed from the
+    % detector and the receive window that actually bound them:
+    %   floor : cells within NumTraining+NumGuard of a buffer edge are never
+    %           testable, so a phantom below that range cannot be detected
+    %           at all, whatever its power.
+    %   ceil  : synth.synthesizeSwarm zero-fills and TRUNCATES at the window
+    %           length, so a pulse must fit entirely inside it -- and the
+    %           far CFAR edge needs the same training clearance.
+    % Note the ceiling is NOT R_ua (18737 m): the 400-sample window cannot
+    % hold a pulse placed there. Window, not ambiguity, is the binding limit.
+    cfarD = radar.cfarDefaults();
+    cfarGuardM = (cfarD.NumTraining + cfarD.NumGuard) * C.range_per_sample;
     pulseWidthS = 12e-6;
     sweepBandwidthHz = 2e6;
     wav = phased.LinearFMWaveform('SampleRate', C.fs, ...
@@ -170,6 +205,9 @@ function [env, degradedEvent, spec] = buildEnvDoppler(C, pfb, opts)
         activePulse, C.fs, nominalChirpRateHzS, interceptNoiseAmp, rngIntercept, 0);
     xTemplate = [txPulse; zeros(bufferLen - numel(txPulse), 1)];
 
+    rangeMinM = cfarGuardM;
+    rangeMaxM = (bufferLen - activeLen) * C.range_per_sample - cfarGuardM;
+
     F = 8; dt = 1.0;
     R0 = 1800;
 
@@ -183,6 +221,7 @@ function [env, degradedEvent, spec] = buildEnvDoppler(C, pfb, opts)
         'refScale', refScale, 'numPulses', opts.numPulses, 'lambda', lambda, ...
         'shaping', opts.shaping, 'gamma', opts.gamma, ...
         'project', opts.project, 'refRangeM', R0, ...
+        'rangeMinM', rangeMinM, 'rangeMaxM', rangeMaxM, ...
         'useFeatures', opts.useFeatures, 'useStats', opts.useStats, ...
         'microHz', opts.microHz, 'microTipMps', opts.microTipMps, ...
         'keepCube', opts.keepCube, 'pulseWidthS', pulseWidthS, ...
@@ -231,7 +270,7 @@ function [obs, reward, isDone, logged] = localStep(action, logged, P)
     C = P.C;
     [di, gi, vi] = ind2sub([numel(P.deltaOptionsM) numel(P.gainOptions) numel(P.velOptionsMps)], action);
     stepM    = P.deltaOptionsM(di);
-    newRange = min(2950, max(150, logged.range + stepM));
+    newRange = min(P.rangeMaxM, max(P.rangeMinM, logged.range + stepM));
 
     if ~P.project
         gain     = P.gainOptions(gi);
@@ -348,7 +387,21 @@ function [obs, reward, isDone, logged] = localStep(action, logged, P)
         % closing"). This is a MEASUREMENT off the Doppler axis, not diff().
         rateEst = -P.lambda * dopAxis(dopBin(rbin)) / 2;
         detected = true;
-        det = objectDetection(frameTime, [rEst; 0; 0], 'MeasurementNoise', eye(3));
+        % MeasurementNoise matches the REAL range-bin quantisation error
+        % (~C.range_per_sample, ~46.8 m std), not eye(3)'s claimed 1 m std --
+        % a ~47x overconfidence that makes trackerGNN's gates falsely tight.
+        % Root-caused and fixed in +engine/runJudge.m:326 (Task 2,
+        % PHASE2_COMPLETION_POA.md); propagated to +agent/buildEnvEntity.m and
+        % here on 2 Aug 2026 (Tier 0.2). Until then every D3QN arm was TRAINED
+        % and SCORED against a tracker told its own measurements were 47x more
+        % precise than they are, while the judge it is compared against was
+        % not -- so the two disagreed on identical data. On buildEnvEntity the
+        % same one-line fix moved the inline real-rate 49.0% -> 100.0% and
+        % closed a -51.0 pp inline-vs-judge gap to 0.0 pp; the failures there
+        % were tracking failures (51/100 episodes confirmed ZERO tracks), not
+        % mislabels.
+        measNoise = diag([C.range_per_sample^2, 1, 1]);
+        det = objectDetection(frameTime, [rEst; 0; 0], 'MeasurementNoise', measNoise);
     end
 
     logged.dets{end+1}      = det;

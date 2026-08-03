@@ -60,10 +60,17 @@ function out = t1TrajectoryDof(nEp, seed)
     fprintf('   real %.1f%% [%.1f, %.1f] | confirmed %.1f%% | medSlope %+.2f | median |drift| %.0f m\n', ...
         100*out.realRate, 100*lo, 100*hi, 100*out.confirmRate, ...
         out.medianAmpSlope, out.medianAbsDrift);
-    fprintf('   compare: projected+INCOHERENT random 54.0%% [47.1, 60.8]\n');
-    fprintf('            unprojected random           7.0%% [ 4.2, 11.4]\n');
-    fprintf('            trained+shaped, unprojected 44.0%% [37.3, 50.9]\n');
-    fprintf('            truthful reference         100.0%% [96.9, 100.0]\n');
+    % COMPARISON FIGURES ARE MEASURED ELSEWHERE AND MOVE. This block used to
+    % print four hardcoded literals (54.0 / 7.0 / 44.0 / 100.0) directly
+    % beneath this function's own fresh measurement. After the Tier 0
+    % corrections (v_ua-bounded action grid, MeasurementNoise) three of the
+    % four were wrong, and the function was printing them next to numbers that
+    % contradicted them -- the same stale-reference defect this project has
+    % already recorded for test_survivor_count_vs_n_resourced.m's internal
+    % baseline. Pointing at the source instead of copying it is the fix.
+    fprintf(['   compare: see REPORT §7.4 for the current arm table -- every arm\n' ...
+             '            measured on ONE corrected environment. Do NOT copy\n' ...
+             '            figures back into this print block.\n']);
 
     % BREAKDOWN BY COMMANDED STEP. A zero-step episode is a STATIONARY
     % phantom: range never varies, so discriminator screen 1 falls through to
@@ -71,7 +78,9 @@ function out = t1TrajectoryDof(nEp, seed)
     % has no direction to check. Being flagged there is the ECCM working as
     % designed, not a modelling gap -- so the honest headline is the
     % non-stationary subset, reported separately rather than blended.
-    deltas = linspace(-120, 120, 5);
+    % Printing copy of buildEnvDoppler's deltaOptionsM -- kept in sync by
+    % hand. Moved -120..120 -> -50..50 with that grid (2 Aug 2026, v_ua bound).
+    deltas = linspace(-50, 50, 5);
     fprintf('\n   by commanded step:\n');
     for d = 1:5
         sel = diUsed == d;
