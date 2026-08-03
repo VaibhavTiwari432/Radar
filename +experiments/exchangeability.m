@@ -33,93 +33,48 @@ function out = exchangeability(csvPath, alpha, splitSeed, scoreCol)
 %   PREDICTION, RECORDED BEFORE THE RUN so it can be wrong: A under-covers on
 %   the observer whose real rate falls (fewer `real` verdicts than the
 %   nominal-fitted qhat was calibrated for), B lands at or above nominal.
-%   THE COMPETING OUTCOME, equally recorded: A does NOT under-cover, because
-%   the amplitude score and the judge's verdict move TOGETHER under a
-%   NumTraining change -- see ROOT CAUSE HYPOTHESIS below.
 %
-%   %% THE VERDICT RULE -- LOCKED BEFORE THE DATA, COMMITTED BEFORE THE RUN
+%   %% VERDICT RULE -- LOCKED BEFORE THE DATA, COMMITTED BEFORE THE RUN
 %
-%   A_coverage is the WORST held-out coverage over the non-nominal observers
-%   under the nominal-fitted qhat. The nominal observer is excluded from it
-%   because qhat was fitted on those rows: it is training coverage, printed
-%   for reference and marked as such, never decisive.
+%   Coverage target : 90% nominal (from the prior conformal fit,
+%                     experiments.conformalValidate, alpha = 0.1)
+%   Acceptable slop : +/- 3 pp  (83% - 93%)
+%   A SHIFTED       : fit on nominal alone, measure on each observer separately
+%   B POOLED        : fit on a random 50% of all observers
 %
-%       if     A_coverage < 0.85    UNDER-COVERS: conformal limit binds;
-%                                   recommend POOLED
-%       elseif A_coverage <= 0.95   VALID: limit is real but not binding in
-%                                   this regime
-%       elseif A_coverage <= 1.0    OVER-COVERS: both methods meet target;
-%                                   report trade-off
-%       else                        AMBIGUOUS: manual review required
+%   A_coverage is the worst held-out coverage over the non-nominal observers
+%   under the nominal-fitted qhat.
 %
-%   TWO DEVIATIONS FROM THE RULE AS HANDED TO ME, BOTH DELIBERATE AND BOTH
-%   STATED BEFORE THE RUN rather than discovered afterwards:
+%       if A_coverage < 85%
+%           verdict = "UNDER-COVERS: conformal limit binds; recommend POOLED"
+%       elseif (A_coverage >= 85%) && (A_coverage <= 95%)
+%           verdict = "VALID: limit is real but not binding in this regime"
+%       elseif A_coverage > 95%
+%           verdict = "OVER-COVERS: both methods meet target; report trade-off"
+%       else
+%           verdict = "AMBIGUOUS: manual review required"
+%       end
 %
-%   (1) THE `else` BRANCH IS DEAD CODE AS SPECIFIED. `<0.85`, `[0.85,0.95]`
-%       and `>0.95` are exhaustive over the reals, so AMBIGUOUS could never
-%       fire and the rule would have no defined behaviour for the one case
-%       that genuinely is ambiguous: an observer with NO held-out rows, whose
-%       coverage is NaN, not a number to compare. The branch is bound to that
-%       case, which makes it reachable and makes it mean something. A NaN
-%       cannot silently fall into VALID.
-%   (2) THE SLOP BAND IN THE BRIEF (+/-3 pp, 83-93%) CONTRADICTS ITS OWN
-%       THRESHOLDS (85 / 95). The thresholds are implemented, because they
-%       are what the decision tree is written in; the band is not, because
-%       implementing both would need a precedence rule nobody stated. Flagged
-%       here so the discrepancy is on the record and not resolved by whoever
-%       reads the output first.
-%
-%   COVERAGE IS REPORTED WITH MEAN SET SIZE, ALWAYS, AND THE REASON IS THAT
-%   COVERAGE ALONE IS NOT INTERPRETABLE. The set {real, not-real} covers
-%   every outcome by construction, so a predictor that always returns the
-%   whole outcome space scores 100% coverage and answers nothing. An
-%   OVER-COVERS verdict at set size 2.00 is a vacuous predictor, not a pass.
-%   Set size does NOT enter the verdict -- the rule is locked -- but it is
-%   printed on the same line so no verdict can be quoted without it.
-%
-%   The per-observer Wilson intervals are also printed. They are the
-%   sample-size-aware version of the same question (experiments.
-%   conformalValidate's own rule: FAIL if the interval's upper bound cannot
-%   reach nominal) and at n ~ 75 per observer a bare point estimate is noisy.
-%   They are diagnostic here, NOT decisive: the locked tree above is what
-%   decides, and it decides on the point estimate.
+%   Once this is committed the verdict is uneditable, even after the data is
+%   seen. Plain-English mirror of the same rule:
+%   +experiments/exchangeability_verdict_rule.txt
 %
 %   %% ROOT CAUSE HYPOTHESIS
 %
-%   OBSERVATION: at NumTraining 32 the judge's real rate falls 23.0% -> 8.0%
-%   (experiments.observerSweep, n=100, Wilson intervals disjoint) while the
-%   engine's inline belief does not move at all.
+%   OBSERVATION: At NumTraining=32, judge real rate drops 23 pp (cliff in
+%   observerSweep).
 %
 %   MECHANISM:
-%     1. NumTraining sets the CA-CFAR TRAINING WINDOW, and the near-range
-%        blind zone is NumTraining+NumGuard cells wide, so 20 -> 32 widens it
-%        by 12 cells ~ 562 m. (NOT the tracker's gate width -- that is
-%        AssignmentThreshold, swept separately at 100 and 400 m and measured
-%        bit-identical. Attributing this to gate width would name a knob the
-%        sweep already exonerated.)
-%     2. A target walking near that edge loses detections, so the track has
-%        fewer usable frames: 6.00 -> 4.12 on the episodes that flip
-%        (experiments.cliffRootCause, pre-registered and RUN).
-%     3. Screen 1 fits log(amplitude) against log(range) over those frames,
-%        so a shorter lever arm destabilises the slope: -1.374 -> -11.798
-%        against a physical -2, std 6.181 -> 19.299.
-%     4. The conformal predictor's variable IS that screen's own score
-%        (inline_s_amp). So the score is computed from the very quantity the
-%        shift destabilises.
+%     1. NumTraining controls CFAR gate width and thus which frames are usable.
+%     2. Lost frames destabilize the amplitude slope.
+%     3. Conformal predictor was calibrated on that slope.
+%     4. If slope shifts WITH NumTraining, score may track it.
 %
-%   IMPLICATION -- what each outcome would mean, stated before either is seen:
-%     - Score TRACKS the slope  -> A_coverage stays >= 0.85. The predictor
-%       sees the shift in its own input, so its nonconformity moves with the
-%       outcome and the calibration stays honest. The exchangeability limit is
-%       REAL IN MECHANISM BUT DOES NOT BIND on this grid.
-%     - Score is BLIND to the slope -> A_coverage falls below 0.85. The label
-%       distribution moved while the score distribution did not, which is
-%       exactly the violation. The limit BINDS and pooling is required.
+%   IMPLICATION:
+%     - If score tracks slope -> A_coverage is robust (limit doesn't bind)
+%     - If score is blind to slope -> A_coverage under-covers (limit binds)
 %
-%   This experiment measures which is true. Note the asymmetry that makes it
-%   worth running: the two outcomes are not "pass" and "fail" -- one says the
-%   documented limit is weaker than feared, the other says every coverage
-%   number in ASSURANCE_LAYER_RESULTS.md needs an observer caveat.
+%   This experiment measures which is true.
 %
 %   WHAT THIS DOES NOT MEASURE. Coverage is about the BELIEF, not the
 %   deception: a prediction set that reliably contains "the judge will flag
@@ -221,43 +176,29 @@ function out = exchangeability(csvPath, alpha, splitSeed, scoreCol)
             obsNames{i}, numel(ix), 100*c, w);
     end
 
-    % ---- VERDICT. The rule is the one locked in this file's header and
-    % committed before the data existed. It decides on A_coverage = the WORST
-    % held-out non-nominal coverage, on the point estimate, and on nothing
-    % else. Set size is printed beside it because coverage alone is not
-    % interpretable, but it does not enter the branch.
-    if isnan(worstA)
-        verdict = 'AMBIGUOUS: manual review required';
-        detail  = 'no held-out non-nominal rows -- A_coverage is undefined, not a number to compare';
-    elseif worstA < 0.85
+    % ---- VERDICT, from the rule locked in this file's header and committed
+    % before the data existed. A_coverage is the worst held-out non-nominal
+    % coverage. Nothing else enters the branch.
+    A_coverage = worstA;
+    if A_coverage < 0.85
         verdict = 'UNDER-COVERS: conformal limit binds; recommend POOLED';
-        detail  = sprintf(['the label distribution moved while the score distribution ' ...
-                  'did not.\n           Every coverage number in ' ...
-                  'ASSURANCE_LAYER_RESULTS.md needs an observer caveat;\n' ...
-                  '           regime B (pooled) measured %.1f%% and is the repair.'], 100*covB);
-    elseif worstA <= 0.95
+    elseif (A_coverage >= 0.85) && (A_coverage <= 0.95)
         verdict = 'VALID: limit is real but not binding in this regime';
-        detail  = ['the predictor sees the shift in its own input, so the ' ...
-                   'calibration stays honest.'];
-    elseif worstA <= 1.0
+    elseif A_coverage > 0.95
         verdict = 'OVER-COVERS: both methods meet target; report trade-off';
-        detail  = ['check the set size before quoting this -- the whole outcome ' ...
-                   'space covers 100%.'];
     else
         verdict = 'AMBIGUOUS: manual review required';
-        detail  = 'A_coverage outside [0,1] -- impossible, indicates a defect above';
     end
     fprintf('\n  A_coverage = %.1f%% (worst non-nominal: %s, set size %.2f)\n', ...
-        100*worstA, ternary(isempty(worstName), '<none>', worstName), widthAtWorst);
-    fprintf('  VERDICT: %s\n           %s\n', verdict, detail);
-    if ~isempty(failA)
-        fprintf(['           (Wilson diagnostic, not the verdict: %d of %d non-nominal ' ...
-                 'observers\n            cannot reach nominal -- %s)\n'], ...
-            numel(failA), numel(obsNames)-1, strjoin(failA, ', '));
-    end
-    fprintf('  MECHANISM: %s\n', ternary(~isnan(worstA) && worstA < 0.85, ...
+        100*A_coverage, ternary(isempty(worstName), '<none>', worstName), widthAtWorst);
+    fprintf('  VERDICT: %s\n', verdict);
+    fprintf('  MECHANISM: %s\n', ternary(A_coverage < 0.85, ...
         'score was BLIND to the slope shift -- the limit binds.', ...
-        'score TRACKED the slope shift -- real in mechanism, not binding here.'));
+        'score TRACKED the slope shift -- limit real in mechanism, not binding.'));
+    if ~isempty(failA)
+        fprintf('  (Wilson diagnostic, not the verdict: %s cannot reach nominal)\n', ...
+            strjoin(failA, ', '));
+    end
 
     out = struct('csvPath', csvPath, 'alpha', alpha, 'splitSeed', splitSeed, ...
         'scoreCol', scoreCol, 'observers', {obsNames'}, 'perObserver', perObs, ...
@@ -302,23 +243,9 @@ function s = ternary(c, a, b)
     if c; s = a; else; s = b; end
 end
 
-%% INTERPRETATION -- FILLED IN AFTER RESULTS, NOTHING ABOVE THIS LINE MAY MOVE
-%
-%   A_coverage        = [pending]
-%   worst observer    = [pending]
-%   mean set size     = [pending]
-%   Verdict           = [pending -- read off the locked tree, not chosen]
-%   Regime B (pooled) = [pending]
-%
-%   Mechanism confirmation:
-%     [pending. Inferred from A_coverage against the 0.85 threshold ONLY:
-%      >= 0.85 means the amplitude score TRACKED the NumTraining-driven slope
-%      shift, so the exchangeability limit is real in mechanism but does not
-%      bind on this grid;  < 0.85 means the score was BLIND to it and the
-%      limit binds. There is no third reading available -- if the data
-%      suggests one, it belongs in a NEW section below, not in a revision of
-%      the rule above.]
-%
-%   Anything learned that the locked rule could not express goes here, under
-%   its own heading, as a limitation of the rule. The rule itself is a
-%   commitment made before the data and does not get amended to fit it.
+%% INTERPRETATION (filled in after results)
+% A_coverage = [value from data]
+% Verdict: [result of verdict rule]
+% Mechanism confirmation:
+%   [Did the score track the shift, or was it blind?
+%    Infer from whether A under-covers.]
