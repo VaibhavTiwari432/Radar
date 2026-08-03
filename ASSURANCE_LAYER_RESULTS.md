@@ -1,11 +1,38 @@
 # Assurance Layer — measured results
 
-**3 August 2026.** Blueprint Part 4.5 / Part 7 Steps 1–3 and 5, built and
-measured on this repo's own arms and its own independent judge.
+**3–4 August 2026.** Blueprint Part 4.5 / Part 7 Steps 1–5, built and measured
+on this repo's own arms and its own independent judge — then followed past the
+blueprint to the cause the measurements kept pointing at.
 
 Every number here is re-runnable from a committed file. Nothing in this
 document is predicted, and the results that do not flatter the design are
 stated first where they matter.
+
+> ## What this layer actually found
+>
+> It was built to give the engine a calibrated belief about its own success.
+> **It established instead that there is no belief there to calibrate**, and it
+> established that four separate ways.
+>
+> The conformal guarantee holds (§1, §5). The predictor it wraps scores
+> **AUC 0.502** against the judge (§7) — a coin flip. Its confident-looking
+> prediction sets are the majority label at an 8.3 % base rate, not
+> information, so coverage collapses from 90.3 % to **23.3 %** the moment a
+> shift makes the majority label false (§9). A Simplex guard on that belief
+> degenerates to a constant (§2); per-arm thresholds "repair" it only by
+> abstaining (§6); and no other logged variable rescues it — commanded RCS
+> looked promising at n = 100 and regressed to 0.488 at n = 400 (§8, §10).
+>
+> **The one variable with established predictive power is commanded SPEED
+> (§10), and its mechanism is range walk — a direct proxy for the amplitude
+> screen's lever arm.** The layer set out to find a belief and arrived, from
+> the opposite direction, at the root cause the report had already named.
+> §11 tests that convergence directly rather than leaving it as two agreeing
+> inferences.
+>
+> **Read every coverage number here with its mean set size.** That is the one
+> habit this document would ask a reader to take away: coverage alone is
+> satisfiable by answering nothing.
 
 ---
 
@@ -15,12 +42,22 @@ stated first where they matter.
 |---|---|---|
 | 1 · calibration log | `+experiments/calibrationLog.m` | its own printed per-arm summary, cross-checked against commit `6121e7ae` |
 | 2 · conformal predictor | `+assurance/conformalFit.m`, `conformalPredict.m` | `tests/test_conformal.m` **6/6** |
-| 2 · coverage validation | `+experiments/conformalValidate.m` | held-out coverage, PASS/FAIL printed |
+| 2 · coverage validation | `+experiments/conformalValidate.m` | held-out coverage, PASS/FAIL, AUC + base rate printed |
 | 3 · Simplex guard | `+assurance/simplexGuard.m` | — (thin wrapper over the tested predictor) |
 | 3 · guard A/B | `+experiments/simplexAB.m` | acceptance test printed |
 | 4 · observer sweep | `+experiments/observerSweep.m` | graceful-vs-cliff criterion printed |
+| 4 · cliff root cause | `+experiments/cliffRootCause.m` | pre-registered hypothesis vs competing explanation |
 | 5 · provenance ledger | `+assurance/provenanceLedger.m` | `tests/test_provenance_ledger.m` **5/5** |
 | 5 · ledger audit | `+experiments/ledgerAudit.m` | untagged count asserted |
+
+Built afterwards, because the results above demanded them:
+
+| Question | File | Pre-registered? |
+|---|---|---|
+| does coverage survive an unseen radar? | `+experiments/exchangeability.m` | **yes** — rule in `exchangeability_verdict_rule.txt`, committed before the data existed |
+| does per-arm fitting repair the gap? | `conformalValidate(…, groupCol)` | locked by `test_conformal.m`'s Mondrian case |
+| is any logged variable predictive? | AUC path in `conformalValidate.m` | criterion (bootstrap CI containing 0.5) fixed before the n = 400 run |
+| is the lever arm really the cause? | `+experiments/leverArm.m` | **yes** — P1/P2/P3 and the competing outcome committed before running |
 
 Two deviations from the workbook, both to avoid rebuilding what exists:
 
