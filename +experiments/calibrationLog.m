@@ -1,4 +1,4 @@
-function T = calibrationLog(nEp, seeds, outCsv, observers)
+function T = calibrationLog(nEp, seeds, outCsv, observers, armsWanted)
 %CALIBRATIONLOG  Per-episode (twin-belief, judge-actual) pairs -- the
 %   calibration set the Assurance Layer's conformal predictor is fitted on.
 %
@@ -74,11 +74,19 @@ function T = calibrationLog(nEp, seeds, outCsv, observers)
         outCsv = fullfile(root, 'results', 'calibration_data.csv');
     end
     if nargin < 4 || isempty(observers); observers = {'nominal', {}}; end
+    % ARMS filter. Default is all three. Exists because the AUC question in
+    % ASSURANCE_LAYER_RESULTS.md section 8 needs ~4x the episodes on the
+    % STRUCTURAL arm specifically, and paying 3x that to re-measure two agent
+    % arms already known to sit near the floor (4.0% and 2.0% judge-real)
+    % would triple the cost for nothing.
+    if nargin < 5 || isempty(armsWanted); armsWanted = {'structural', 'shaped', 'stats'}; end
+    if ischar(armsWanted) || isstring(armsWanted); armsWanted = cellstr(armsWanted); end
 
     C = physics.Constants();
     rows = {};
 
     % ---- arm 1: the structural CV-coherent generator (t4JudgeGap's recipe)
+    if any(strcmp(armsWanted, 'structural'))
     [env, spec] = agent.buildEnvEntity(C, struct('shaping', false, ...
                         'keepCube', true, 'swerling', 1));
     nVel = numel(spec.velOptionsMps);
@@ -101,9 +109,11 @@ function T = calibrationLog(nEp, seeds, outCsv, observers)
         end
         fprintf('structural seed %d: %d episodes\n', s, nEp);
     end
+    end
 
     % ---- arms 2-3: the trained D3QN agents (t6JudgeGap's recipe)
     for name = {'shaped', 'stats'}
+        if ~any(strcmp(armsWanted, name{1})); continue; end
         f = fullfile(root, 'results', ['doppler_agent_' name{1} '.mat']);
         if ~isfile(f)
             fprintf('  %-10s SKIPPED (no agent on disk)\n', name{1}); continue;
@@ -130,6 +140,15 @@ function T = calibrationLog(nEp, seeds, outCsv, observers)
     end
 
     T = struct2table([rows{:}]);
+    % struct2table collapses a char field to a CHAR ROW when the struct array
+    % has exactly one element, and to a cell array otherwise -- so every
+    % strcmp below silently changes meaning at n=1. Same singleton-collapse
+    % failure class this project already fixed in jsonencode
+    % (engine.sceneStructToJson) and in the web client's asList(). Normalised
+    % here rather than guarded at each use site.
+    for f = {'arm', 'observer', 'inline_label', 'judge_label'}
+        if ~iscell(T.(f{1})); T.(f{1}) = cellstr(T.(f{1})); end
+    end
     writetable(T, outCsv);
     fprintf('\nwrote %d rows -> %s\n', height(T), outCsv);
 
