@@ -2312,6 +2312,22 @@ Two further results are reported as losses because they are: **a fully trained D
 and **waveform agility costs a stale repeater 14.2 dB of compression gain**, converting
 it from a deceiver into an unintentional noise jammer `[MEASURED]`.
 
+**A third loss, and it concerns what the engine knows about itself.** §7.9 puts a
+distribution-free guarantee on the engine's own prediction of the judge's verdict, and
+the guarantee holds — 89.3 % coverage at 90 % nominal, and 90.3 % under a radar
+configuration the calibration never saw. **What the layer actually established is that
+there is no belief there to calibrate.** The predictor scores **AUC 0.502** against the
+judge on the arm carrying this report's headline `[MEASURED]`; at an 8.3 % base rate its
+confident-looking sets are the majority label, not information. Commanded RCS is the
+best alternative found and its bootstrap interval still contains chance. Four separate
+symptoms — a Simplex guard that degenerates to a constant, per-arm thresholds that buy
+coverage with abstention, an observer shift that *improves* coverage, and a 12 %
+one-sided catastrophic-error rate — are one fact: **the amplitude screen does not
+predict the judge.** The engine is never over-confident (zero optimistic maximal errors
+in 300 episodes); it is simply uninformed about its own success. That is a real
+limitation of this build and it is reported as one, not buried in a coverage number that
+technically passed.
+
 ### TRL declaration: **TRL 4** — component validation in a laboratory environment
 
 **Evidence supporting TRL 4.** A complete signal chain — matched filter, range-Doppler,
@@ -2321,7 +2337,7 @@ to end and is validated against **real intercepted radar waveforms** (RadChar-Ti
 `kT₀BF` = −137.965 dBW to within 0.005 dB; the amplitude unit is anchored to it in one
 place. The scorer is provably independent of the scored party, enforced by a test.
 188 MATLAB and 83 Python tests run, with 175 and 83 passing and three failures named and
-root-caused.
+root-caused, plus 11 assurance-layer tests (§6.4) passing on top of that count.
 
 **The specific gap preventing TRL 5.** No hardware-in-the-loop and no over-the-air
 validation. Concretely: no RF front end, no measured transmit–receive isolation, no
@@ -2516,6 +2532,10 @@ from the validation checklist itself rather than from the code.
 | M7 | Judge's CFAR settings written by the adversary's exporter | Twelve parameters crossed the independence seam. No number moved — which is exactly why it survived |
 | M8 | Test arm amplitudes 31–39 dB apart | The three-arm comparison was partly a power comparison wearing a waveform comparison's label |
 | M9 | Stale MATLAB function cache | Made agility appear to cost the radar its own target. The test's own assertion caught it |
+| M10 | **A high singleton rate read as predictive capability** | The assurance layer reported "the engine can now commit on 95.3 % of emissions instead of 18.7 % — 5×" as a capability gain. Coverage and set size describe the *wrapper*; neither says whether the score carries information. **AUC had to be asked separately, and it is 0.502** — at an 8.3 % base rate the singleton `{not real}` is right 91.7 % of the time unaided. `conformalValidate` now prints AUC with an explicit WEAK warning so the inference cannot be repeated (§7.9) |
+| M11 | **An in-sample variance split read as an out-of-sample promise** | The 16 % epistemic fraction was taken to mean a predictor conditioned on (velocity, RCS) could recover 16 %. Measured out-of-sample it recovers **nothing**: the full-regime leave-one-out predictor scores **AUC 0.472, worse than chance**, because 20 cells over 100 episodes leaves ~5 episodes each. Conditioning on more of the regime made the belief worse (§7.9) |
+| M12 | **Mondrian validated on a predictor that cannot express the failure** | The per-arm "repair" (structural qhat 0.7742, sets 1.90) was computed on `inline_score`, which is compressed into [0.5, 1.0] and **structurally cannot represent a maximally-wrong belief** — it reported 0.0 % at nonconformity 1.0 where the corrected predictor reports **12.0 %**. On the corrected predictor Mondrian drives qhat to 1.0 and the sets to 2.00 of 2: it buys coverage with abstention. The claim is withdrawn, the stale table marked in place (§7.9) |
+| M13 | `struct2table` collapses a char field to a **char row** at n = 1 | Every `strcmp` in `calibrationLog`'s summary silently changes meaning at one row; the function errored the first time it was called with one. Latent until an arm filter made a 1-row call reachable. **Third instance of this failure class in this project** — after `jsonencode` collapsing a 1-element struct array to a JSON object, and the web client's `asList()` guard |
 
 ---
 
