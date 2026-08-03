@@ -65,6 +65,31 @@ function out = leverArm(nEp, seeds, frameCounts)
 %   the sum of their Wilson half-widths; P2 holds if the fast arm's F=16
 %   value is below its own F=12 value on the same criterion. Anything else is
 %   reported as NOT ESTABLISHED, not as a trend.
+%
+%   %% POWER -- RECORDED BEFORE THE RESULTS, BECAUSE P3 IS UNDER-POWERED
+%
+%   Noted while the run was in flight and before any output was seen, since a
+%   caveat discovered after the numbers is worth much less than one stated
+%   before them.
+%
+%   At the default 20 episodes x 5 seeds each frame count carries n = 100,
+%   which splits roughly 50/50 across the two speeds, so each ARM cell holds
+%   ~50 episodes and ~12 positives at the measured 23.5% base rate. Section 8
+%   measured the bootstrap half-width on an AUC at n = 100 with 19 positives:
+%   +/- 0.14. P3 therefore cannot establish anything short of an enormous AUC
+%   shift, and a null P3 at this n is NOT evidence against the lever-arm
+%   account -- it is an absence of evidence either way. P3 is reported as
+%   DIRECTIONAL only, and the file prints the raw delta rather than a verdict
+%   for exactly that reason.
+%
+%   P1 and P2 are better placed: they compare RATES, where a 10-15 pp move is
+%   detectable at n ~ 50 per cell against the Wilson criterion above.
+%
+%   What would power P3 properly: ~400 episodes per frame count on the slow
+%   arm alone (seeds 1:20, and only the |v| = 25 actions), taking the AUC
+%   half-width to roughly +/- 0.07 as the n = 400 run in section 10 did. That
+%   is the follow-up if P1 holds and P3 merely points the right way; it is not
+%   worth paying for if P1 fails, because the account would already be dead.
 
     if nargin < 1 || isempty(nEp);         nEp = 20;            end
     if nargin < 2 || isempty(seeds);       seeds = 1:5;         end
