@@ -1,8 +1,23 @@
-function T = calibrationLog(nEp, seeds, outCsv)
+function T = calibrationLog(nEp, seeds, outCsv, observers)
 %CALIBRATIONLOG  Per-episode (twin-belief, judge-actual) pairs -- the
 %   calibration set the Assurance Layer's conformal predictor is fitted on.
 %
-%   T = experiments.calibrationLog(nEp, seeds, outCsv)   % 20, 1:5, results/calibration_data.csv
+%   T = experiments.calibrationLog(nEp, seeds, outCsv, observers)
+%       % 20, 1:5, results/calibration_data.csv, {'nominal', {}}
+%
+%   THE OBSERVER AXIS, AND WHY IT EXISTS. Conformal's coverage guarantee is
+%   conditional on EXCHANGEABILITY between the calibration set and what is
+%   seen at deployment, and experiments.observerSweep measured a violation of
+%   exactly that condition: at CFAR NumTraining 32 the judge's real rate falls
+%   23.0% -> 8.0% (Wilson intervals disjoint) while the engine's inline belief
+%   does not move at all. A calibration set drawn from ONE radar configuration
+%   therefore cannot support a coverage claim about a radar whose training
+%   length is unknown. `observers` is an Nx2 cell {name, runJudge args} and
+%   each episode's SAME retained cube is scored under every one of them, so a
+%   difference between two observer rows cannot be a different noise draw --
+%   the same pairing observerSweep uses. Default is nominal alone, which
+%   reproduces the single-configuration CSV exactly apart from one constant
+%   `observer` column. experiments.exchangeability is what consumes it.
 %
 %   WHY THIS FILE EXISTS. experiments.t4JudgeGap and experiments.t6JudgeGap
 %   already run exactly the right measurement -- roll an arm out with
@@ -58,6 +73,7 @@ function T = calibrationLog(nEp, seeds, outCsv)
     if nargin < 3 || isempty(outCsv)
         outCsv = fullfile(root, 'results', 'calibration_data.csv');
     end
+    if nargin < 4 || isempty(observers); observers = {'nominal', {}}; end
 
     C = physics.Constants();
     rows = {};
@@ -80,7 +96,7 @@ function T = calibrationLog(nEp, seeds, outCsv)
             for k = 1:spec.framesPerEpisode
                 [~, ~, ~, lg] = step(env, a);      % HELD -- one state, 8 frames
             end
-            rows{end+1} = localRow('structural', s, e, lg, C, spec, ...
+            rows{end+1} = localRow('structural', s, e, lg, C, spec, observers, ...
                                     spec.velOptionsMps(vi), spec.rcsOptionsDbsm(ri)); %#ok<AGROW>
         end
         fprintf('structural seed %d: %d episodes\n', s, nEp);
@@ -107,7 +123,7 @@ function T = calibrationLog(nEp, seeds, outCsv)
                 end
                 % The agent chooses a fresh action every frame, so there is no
                 % single held (vel, rcs) to log. NaN, not a fabricated value.
-                rows{end+1} = localRow(name{1}, s, e, lg, C, S.spec, NaN, NaN); %#ok<AGROW>
+                rows{end+1} = localRow(name{1}, s, e, lg, C, S.spec, observers, NaN, NaN); %#ok<AGROW>
             end
             fprintf('%-10s seed %d: %d episodes\n', name{1}, s, nEp);
         end
@@ -120,29 +136,49 @@ function T = calibrationLog(nEp, seeds, outCsv)
     % Summary per arm, on the SAME scale t4/t6 print, so this file's numbers
     % can be checked against the already-published ones rather than trusted.
     for a = unique(T.arm)'
-        m = strcmp(T.arm, a{1});
-        fprintf('  %-10s inline real %5.1f%%  |  runJudge real %5.1f%%  |  GAP %+5.1f pp  (confirmed %5.1f%%)\n', ...
-            a{1}, 100*mean(T.inline_real(m)), 100*mean(T.judge_real(m)), ...
-            100*(mean(T.inline_real(m)) - mean(T.judge_real(m))), ...
-            100*mean(T.judge_confirmed(m)));
+        for o = unique(T.observer)'
+            m = strcmp(T.arm, a{1}) & strcmp(T.observer, o{1});
+            if ~any(m); continue; end
+            fprintf('  %-10s %-16s inline real %5.1f%%  |  runJudge real %5.1f%%  |  GAP %+5.1f pp  (confirmed %5.1f%%)\n', ...
+                a{1}, o{1}, 100*mean(T.inline_real(m)), 100*mean(T.judge_real(m)), ...
+                100*(mean(T.inline_real(m)) - mean(T.judge_real(m))), ...
+                100*mean(T.judge_confirmed(m)));
+        end
     end
 end
 
 % ------------------------------------------------------------------------
-function r = localRow(arm, seed, ep, lg, C, spec, velMps, rcsDbsm)
-%LOCALROW  One calibration pair: what the adversary's own inline screen
-%   believed, and what the independent judge actually did to the same cube.
+function r = localRow(arm, seed, ep, lg, C, spec, observers, velMps, rcsDbsm)
+%LOCALROW  One calibration pair PER OBSERVER: what the adversary's own inline
+%   screen believed, and what the independent judge actually did to the same
+%   cube under each observer configuration. The inline belief is computed once
+%   and repeated across the observer rows -- deliberately, and it is the whole
+%   point of the measurement: the engine is never told which radar it faces,
+%   so its belief CANNOT vary with the observer. Rows that share (arm, seed,
+%   episode) are paired on one cube.
     [iLabel, iScore, sAmp, sDop] = localInline(lg, C);
-    [jLabel, jConfirmed] = localJudge(lg.cubeFrames, C, spec);
-    r = struct( ...
-        'arm', {arm}, 'seed', seed, 'episode', ep, ...
+    nObs = size(observers, 1);
+    f = localWriteCube(lg.cubeFrames, C, spec);
+    cleanup = onCleanup(@() localDelete(f)); %#ok<NASGU>
+    r = repmat(struct( ...
+        'arm', arm, 'observer', '', 'seed', seed, 'episode', ep, ...
         'vel_mps', velMps, 'rcs_dbsm', rcsDbsm, ...
-        'inline_label', {char(iLabel)}, 'inline_score', iScore, ...
+        'inline_label', char(iLabel), 'inline_score', iScore, ...
         'inline_s_amp', sAmp, 'inline_s_dop', sDop, ...
         'inline_real', double(strcmp(char(iLabel), 'real')), ...
-        'judge_confirmed', double(jConfirmed), ...
-        'judge_label', {char(jLabel)}, ...
-        'judge_real', double(jConfirmed && strcmp(char(jLabel), 'real')));
+        'judge_confirmed', 0, 'judge_label', '', 'judge_real', 0), 1, nObs);
+    for c = 1:nObs
+        [jLabel, jConfirmed] = localJudge(f, observers{c, 2});
+        r(c).observer        = observers{c, 1};
+        r(c).judge_confirmed = double(jConfirmed);
+        r(c).judge_label     = char(jLabel);
+        r(c).judge_real      = double(jConfirmed && strcmp(char(jLabel), 'real'));
+    end
+end
+
+% ------------------------------------------------------------------------
+function localDelete(f)
+    if ~isempty(f) && isfile(f); delete(f); end
 end
 
 % ------------------------------------------------------------------------
@@ -209,19 +245,32 @@ function [label, score] = localScore(ts, C)
 end
 
 % ------------------------------------------------------------------------
-function [label, confirmed] = localJudge(cubeFrames, C, spec)
-%LOCALJUDGE  Field-for-field copy of t4JudgeGap's/t6JudgeGap's localJudge, so
-%   the pairs logged here sit on the same scale as the published gaps.
-    label = ""; confirmed = false;
+function f = localWriteCube(cubeFrames, C, spec)
+%LOCALWRITECUBE  Signal description only -- the judge's own configuration
+%   never crosses this seam (Phase A1); it arrives as runJudge arguments.
+%   Written ONCE per episode and scored under every observer, so the observer
+%   rows are paired on one cube (observerSweep's method).
+    f = '';
     if isempty(cubeFrames); return; end
-    % Signal description only; the judge runs on its OWN defaults (Phase A1)
-    % apart from the ECCM screen mask these experiments deliberately select.
     S = struct('rx_frames', cubeFrames, 'fs', C.fs, ...
         'pulse_width_s', 12e-6, 'bandwidth_hz', 2e6, 'prf_hz', C.PRF, ...
         'frame_interval_s', spec.dt, 'carrier_hz', spec.carrierHz);
     f = [tempname '.mat']; save(f, '-struct', 'S');
-    cleanup = onCleanup(@() delete(f)); %#ok<NASGU>
-    fb = engine.runJudge(f, 'EccmScreens', {'amplitude','doppler'});
+end
+
+% ------------------------------------------------------------------------
+function [label, confirmed] = localJudge(f, args)
+%LOCALJUDGE  Field-for-field copy of t4JudgeGap's/t6JudgeGap's localJudge, so
+%   the pairs logged here sit on the same scale as the published gaps -- plus
+%   the observer's own runJudge arguments.
+    label = ""; confirmed = false;
+    if isempty(f); return; end
+    if isempty(args) || ~any(strcmp(args(1:2:end), 'EccmScreens'))
+        % Default screen mask matches t4JudgeGap/t6JudgeGap so the nominal
+        % rows stay comparable to the published gaps.
+        args = [args, {'EccmScreens', {'amplitude', 'doppler'}}];
+    end
+    fb = engine.runJudge(f, args{:});
     if isfield(fb, 'eccm_label') && strlength(string(fb.eccm_label)) > 0
         confirmed = true;
         label = string(fb.eccm_label);

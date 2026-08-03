@@ -1,0 +1,153 @@
+EXCHANGEABILITY EXPERIMENT -- LOCKED VERDICT RULE
+=================================================
+
+Locked 3 August 2026, committed BEFORE results/calibration_observers.csv
+existed. The authoritative copy lives in +experiments/exchangeability.m's
+header; this file is the same rule in plain English beside its code, so a
+reader does not have to trust a prose summary of what the code does.
+
+If these two ever disagree, THE CODE IS THE RULE. This file is a mirror.
+
+
+WHAT IS BEING DECIDED
+---------------------
+
+Whether split-conformal's 90% coverage guarantee, calibrated on one radar
+configuration, still holds when the radar is a different one.
+
+experiments.observerSweep already established that the shift is real: at CFAR
+NumTraining 32 the judge's real rate falls 23.0% -> 8.0% (Wilson intervals
+disjoint) while the engine's inline belief does not move at all. A label
+distribution moving underneath a frozen score distribution is exactly the
+exchangeability violation the guarantee is conditional on.
+
+
+THE QUANTITY THAT DECIDES
+-------------------------
+
+  A_coverage  =  the WORST held-out coverage over the NON-NOMINAL observers,
+                 under a qhat fitted on the nominal observer alone.
+
+Three properties of that definition, each deliberate:
+
+  worst, not mean    One observer breaking coverage is enough to invalidate a
+                     coverage claim for an unknown radar. Averaging it against
+                     three observers that hold would hide the case the whole
+                     experiment exists to find.
+
+  non-nominal only   qhat was fitted on the nominal rows. Their coverage is
+                     TRAINING coverage. It is printed, it is labelled, and it
+                     is never decisive.
+
+  point estimate     The tree below decides on the point estimate. Wilson
+                     intervals are computed and printed for every observer,
+                     but they are diagnostic. Two rules cannot both be
+                     authoritative, and this is the one that was locked.
+
+
+THE RULE
+--------
+
+  PLAIN ENGLISH                              MATLAB
+
+  No held-out non-nominal rows at all --     if isnan(worstA)
+  A_coverage is undefined, not a number.         verdict = 'AMBIGUOUS: manual
+  A NaN must never fall through into a                      review required';
+  "valid" verdict.
+                                             elseif worstA < 0.85
+  Coverage fell below 85%. The predictor         verdict = 'UNDER-COVERS:
+  did not see the shift in its own input.                   conformal limit
+  The limit BINDS. Every coverage number                     binds; recommend
+  in ASSURANCE_LAYER_RESULTS.md needs an                     POOLED';
+  observer caveat, and pooling across
+  observers is the repair.
+                                             elseif worstA <= 0.95
+  Coverage held between 85% and 95%. The         verdict = 'VALID: limit is
+  predictor tracked the shift through its                   real but not
+  own input, so the calibration stayed                      binding in this
+  honest. The limit is real in MECHANISM                    regime';
+  but does not BIND on this grid.
+                                             elseif worstA <= 1.0
+  Coverage above 95%. Both methods clear         verdict = 'OVER-COVERS: both
+  the target -- but check set size before                   methods meet
+  quoting it, because the full outcome                      target; report
+  space covers 100% and answers nothing.                    trade-off';
+                                             else
+  A_coverage outside [0,1]. Impossible;          verdict = 'AMBIGUOUS: manual
+  indicates a defect in the code above.                     review required';
+                                             end
+
+
+TWO DEVIATIONS FROM THE RULE AS HANDED OVER
+-------------------------------------------
+
+Both are stated here because they were decided BEFORE the data, not
+discovered after it.
+
+1. THE `else` BRANCH WAS DEAD CODE AS SPECIFIED.
+   `< 0.85`, `[0.85, 0.95]` and `> 0.95` are exhaustive over the reals, so
+   AMBIGUOUS could never fire -- and the rule therefore had no defined
+   behaviour for the one situation that genuinely is ambiguous: an observer
+   with no held-out rows, whose coverage is NaN rather than a number. The
+   branch is now bound to that case. A NaN comparison in MATLAB is false, so
+   without this an undefined coverage would have silently landed in
+   OVER-COVERS by falling through every numeric test.
+
+2. THE BRIEF'S SLOP BAND CONTRADICTS ITS OWN THRESHOLDS.
+   It states "acceptable slop +/-3 pp (83%-93%)" and then specifies branch
+   points at 85 and 95. Those are different rules. The THRESHOLDS are
+   implemented, because the decision tree is written in them; the band is
+   not, because honouring both needs a precedence rule nobody stated.
+   Recorded here rather than resolved silently by whoever reads the output
+   first.
+
+
+THE COMPANION FIGURE THAT IS NOT OPTIONAL
+-----------------------------------------
+
+Coverage is reported with MEAN SET SIZE, always, on the same line.
+
+Coverage alone is not interpretable. The prediction set {real, not-real}
+contains every possible outcome by construction, so a predictor that always
+returns the whole outcome space scores 100% coverage and has answered
+nothing. An OVER-COVERS verdict at set size 2.00 is a vacuous predictor, not
+a pass. This is not hypothetical for this project: the layer's FIRST
+predictor variable (the combined discriminator score) produced 1.81-of-2 sets
+at 87.3% coverage, and the sets were the defect, not the coverage.
+
+Set size does NOT enter the branch. The rule is locked. It is printed beside
+the verdict so that no verdict can be quoted without it.
+
+
+WHAT EACH OUTCOME WILL MEAN, WRITTEN DOWN FIRST
+-----------------------------------------------
+
+  A_coverage >= 0.85   The amplitude score TRACKED the NumTraining-driven
+                       slope shift. The predictor's own input moved with the
+                       outcome, so its nonconformity moved too. The stated
+                       exchangeability limit is REAL IN MECHANISM BUT DOES
+                       NOT BIND on this observer grid.
+
+  A_coverage <  0.85   The score was BLIND to the shift. The label
+                       distribution moved while the score distribution did
+                       not. The limit BINDS, and no coverage number may be
+                       quoted for a radar whose CFAR training length is
+                       unknown without pooling the calibration set across
+                       observers.
+
+Neither outcome is a "pass" and neither is a "fail". One says a documented
+limit is weaker than feared; the other says a documented limit is load-
+bearing. Both are results.
+
+
+AMENDMENT POLICY
+----------------
+
+None. Once committed, the rule is not edited in light of the data.
+
+If the results turn out to say something the rule cannot express, that goes
+in a NEW section of ASSURANCE_LAYER_RESULTS.md as a limitation OF THE RULE,
+under its own heading, with the rule's own verdict reported first and
+unaltered. Precedent in this repo: experiments.cliffRootCause pre-registered
+a hypothesis, the data refuted it, and the refutation was published as the
+finding rather than the hypothesis being quietly rewritten.
