@@ -14,7 +14,7 @@ stated first where they matter.
 | Blueprint step | File | Test |
 |---|---|---|
 | 1 · calibration log | `+experiments/calibrationLog.m` | its own printed per-arm summary, cross-checked against commit `6121e7ae` |
-| 2 · conformal predictor | `+assurance/conformalFit.m`, `conformalPredict.m` | `tests/test_conformal.m` **5/5** |
+| 2 · conformal predictor | `+assurance/conformalFit.m`, `conformalPredict.m` | `tests/test_conformal.m` **6/6** |
 | 2 · coverage validation | `+experiments/conformalValidate.m` | held-out coverage, PASS/FAIL printed |
 | 3 · Simplex guard | `+assurance/simplexGuard.m` | — (thin wrapper over the tested predictor) |
 | 3 · guard A/B | `+experiments/simplexAB.m` | acceptance test printed |

@@ -1435,7 +1435,7 @@ Python   83 passed
 ```
 
 `[MEASURED]`. The three remaining failures are named, root-caused and open in §8 — none
-is quietly excluded. The assurance layer (§7.9) adds `tests/test_conformal.m` **5/5** and
+is quietly excluded. The assurance layer (§7.9) adds `tests/test_conformal.m` **6/6** and
 `tests/test_provenance_ledger.m` **5/5** on top of this count `[MEASURED]`.
 
 **A methodological note that changes how the earlier suite state should be read.**
@@ -2005,7 +2005,7 @@ track.
 
 ### Provenance ledger — a check that can fail
 
-`tests/test_provenance_ledger.m` **5/5** and `tests/test_conformal.m` **5/5**
+`tests/test_provenance_ledger.m` **5/5** and `tests/test_conformal.m` **6/6**
 `[MEASURED]`. `assurance.provenanceLedger` walks the environment's actual log fields at
 runtime and registers a **derivation** for each of 15 observables; untagged count = 0.
 The planted-violation test runs *before* the clean-scan test, deliberately — a
@@ -2390,7 +2390,7 @@ Every `[ASSUMED]` tag in this report, with its consequence.
 | RadChar three-arm | `tests/test_radchar_three_arm.m` | 1/1 |
 | Package independence (Rule 2) | `tests/test_package_separation.m` | pass |
 | End-to-end seam | `tests/test_decideScene.m` | 3/3 |
-| Conformal predictor (§7.9) | `tests/test_conformal.m` | 5/5 |
+| Conformal predictor (§7.9) | `tests/test_conformal.m` | 6/6 |
 | Provenance ledger, planted violation (§7.9) | `tests/test_provenance_ledger.m` | 5/5 |
 
 **Assurance-layer experiment scripts (§7.9), each printing its own criterion:**

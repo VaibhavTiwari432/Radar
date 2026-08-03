@@ -86,3 +86,40 @@ function test_small_n_saturates_rather_than_undercovering(tc)
     tc.verifyEqual(model.qhat, Inf);
     tc.verifyEqual(nnz(assurance.conformalPredict(model, 0.99)), 2);
 end
+
+function test_mondrian_cannot_repair_a_confidently_wrong_group(tc)
+    % Locks the measured result behind experiments.conformalValidate's
+    % groupCol path (ASSURANCE_LAYER_RESULTS.md section 6): per-group fitting
+    % does NOT repair a group whose belief is MAXIMALLY wrong more often than
+    % alpha. It only makes that group abstain.
+    %
+    % Nonconformity is 1-score when the judge says real and score when it does
+    % not, so 1.0 means the belief was maximally wrong -- score 0.0 on a track
+    % the judge called real. The structural arm does that on 12.0% of
+    % episodes, so at alpha=0.1 the calibrated quantile lands ON 1.0 and every
+    % prediction set becomes the whole outcome space. That is arithmetic, not
+    % tuning, and this test exists so that nobody "fixes" it by clamping qhat
+    % below 1.0 -- which would silently break the coverage guarantee rather
+    % than reveal that the belief is the problem.
+    n = 100;
+    bad  = [ones(12,1); zeros(88,1)] ~= 0;      % 12% maximally wrong
+    sBad = [zeros(12,1); 0.95*ones(88,1)];      % score 0.0 while judge=real
+    yBad = [true(12,1);  true(88,1)];
+    mBad = assurance.conformalFit(sBad, yBad, 0.1);
+    tc.verifyEqual(mBad.qhat, 1.0, 'AbsTol', 1e-12, ...
+        '12% maximally-wrong at alpha=0.1 must drive qhat to 1.0');
+    tc.verifyFalse(mBad.saturated, 'this is not the small-n case -- n is ample');
+    tc.verifyEqual(nnz(assurance.conformalPredict(mBad, 0.5)), 2, ...
+        'a qhat of 1.0 must yield the whole outcome space -- coverage bought by abstention');
+
+    % Same alpha, same n, a group that is merely imperfect rather than
+    % confidently wrong: Mondrian works there, so the failure above is a
+    % property of the BELIEF and not of the method.
+    sOk = [0.30*ones(12,1); 0.95*ones(88,1)];
+    mOk = assurance.conformalFit(sOk, yBad, 0.1);
+    tc.verifyLessThan(mOk.qhat, 1.0);
+    tc.verifyEqual(nnz(assurance.conformalPredict(mOk, 0.95)), 1, ...
+        'a well-behaved group must still commit');
+    tc.verifyGreaterThan(mBad.qhat, mOk.qhat);
+    assert(numel(bad) == n);   % the 12% figure is the point; keep it visible
+end
