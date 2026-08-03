@@ -875,6 +875,85 @@ machinery, in the eight frames.**
 
 ---
 
+## 11. The lever arm, tested directly — confirmed, and it reframes the ECCM numbers
+
+`experiments.leverArm(20, 1:5, [8 12 16])`, 2731 s. P1/P2/P3 and the competing
+outcome were committed before launch (`c0266874`), as was the note that P3 is
+under-powered (`8329c37c`). F = 8 reproduced the original calibration set
+bit-for-bit (35.0 % inline / 19.0 % judge), so the `framesPerEpisode` refactor
+disturbed nothing `[MEASURED]`.
+
+| F | slow \|v\|=25 `judge_real` | fast \|v\|=50 `judge_real` | overall |
+|---|---|---|---|
+| 8 | 16.3 % [8.5, 29.0] | 21.6 % [12.5, 34.6] | **19.0 %** |
+| 12 | 28.3 % [18.5, 40.8] | 67.5 % [52.0, 79.9] | 44.0 % |
+| 16 | **42.1 % [30.2, 55.0]** | **76.7 % [62.3, 86.8]** | **57.0 %** |
+
+**P1 HOLDS** — the slow arm rises +25.8 pp, clearing the Wilson criterion fixed
+in the file. **The lever-arm account is confirmed by direct test**, not left as
+two agreeing inferences.
+
+**P2 is REFUTED, and the reason is instructive.** The fast arm was predicted to
+*fall* at F = 16 as the CFAR floor clamped it flat; it rose to 76.7 %. The
+mechanism was right and the magnitude was wrong: a −50 m/s entity from 1800 m
+crosses 1124.2 m at frame ~15, so only **~2 of 16 frames** are clamped, and
+fourteen frames of doubled lever arm outweigh two flat ones. The prediction
+failed because it weighed a real effect without estimating its size — worth
+recording, because the clamp *is* there and would dominate at larger F still.
+
+### 11.1 P3: the screen stops being a coin flip, and it is not the speed confound
+
+The concern with a pooled AUC is that speed itself predicts the judge (§10), so
+a pooled rise could be speed leaking in. Measured **inside each speed
+separately**, where no speed confound is possible `[MEASURED]`:
+
+| F | AUC, slow arm | AUC, fast arm |
+|---|---|---|
+| 8 | 0.492 [0.318, 0.686] | 0.509 [0.343, 0.695] |
+| 12 | 0.557 [0.411, 0.703] | 0.625 [0.394, 0.843] |
+| 16 | 0.634 [0.485, 0.779] | **0.797 [0.604, 0.946]** — clears chance |
+
+**Both arms rise monotonically and independently**, so the effect is the episode
+length, not the speed. The fast arm at F = 16 clears chance on its own. The slow
+arm remains directional at n ≈ 57 — exactly as the pre-committed power note said
+it would, so this is a limitation anticipated rather than discovered.
+
+### 11.2 What this does to the ECCM numbers — the reframing
+
+**The structural generator is physically consistent.** It renders a genuine
+1/R² amplitude law from a single propagated entity; there is nothing wrong with
+its physics for a screen to find. So the screen's verdict on it is a measurement
+of the *screen*, not of the phantom.
+
+At **F = 8** that screen scores **AUC 0.492–0.509 — a coin flip — and rejects
+81 % of these phantoms.** It is not detecting inconsistency, because there is
+none to detect. **It is rejecting by measurement noise.** Give it 16 frames and
+the same generator passes 57 %, while the screen simultaneously becomes
+*genuinely* informative (0.634 / 0.797).
+
+**This qualifies the ECCM results from the opposite side to everything else in
+this document.** Every "the radar rejects the phantom" number at the default
+8-frame dwell measures an instrument too short-armed to make the measurement it
+is being credited with. The radar's apparent discrimination there is
+substantially noise — which is the same conclusion §7 reached about the
+*engine's* belief, now reached about the *judge's* screen, by a different route.
+
+**It does not make the radar's wins disappear**, and the distinction matters: the
+monopulse angle veto (§7.5 Win 1) is a geometric argument that owes nothing to
+the amplitude screen, and the naive-DRFM arm is caught 10/10 on a flat amplitude
+history that no lever arm length would rescue. What is qualified is specifically
+the amplitude screen's verdicts on *physically consistent* phantoms at short
+dwell.
+
+**The actionable consequence, and it is cheap:** the single highest-value change
+available to this radar is not a new screen or a better planner — it is **more
+frames**. Doubling the dwell moved the screen from AUC 0.50 to 0.72 pooled. The
+bound is real and already documented (the CFAR blind zone below, `v_ua` above),
+but at F = 16 only ~2 frames of a fast closer are lost to it, so the constraint
+does not bind yet at twice the current dwell.
+
+---
+
 ## Honest limits of this layer
 
 - **Coverage is conditional on exchangeability, and §3 shows the condition is

@@ -63,7 +63,11 @@ working, not a problem with it.
 |---|---|---|---|
 | E1 | The amplitude screen's weakness is its **lever arm** — a slope over a 1.27× range change in 8 frames, bounded above by the CFAR blind zone (1124.2 m) and below by `v_ua` | **STANDS** | §8.3 |
 | E2 | The only variable with established predictive power over the judge is a **direct proxy for that lever arm** | **STANDS** | §10 |
-| E3 | Frames and speed are interchangeable levers on the same quantity | *pending* — `experiments.leverArm`, P1/P2/P3 pre-registered | — |
+| E3 | Frames and speed are interchangeable levers on the same quantity | **STANDS** — P1 holds, slow arm +25.8 pp from F=8 to F=16 | `leverArm.m` |
+| E4 | At the default 8-frame dwell the amplitude screen scores **AUC ≈ 0.50** and rejects physically-consistent phantoms **by measurement noise, not by discrimination** | **STANDS** | `leverArm.m` §11.2 |
+| E5 | Doubling the dwell to 16 frames takes the screen to **AUC 0.634 (slow) / 0.797 (fast)** and the same generator's pass rate from 19 % to 57 % | **STANDS** — rise measured *inside* each speed, so it is not the speed confound | `leverArm.m` §11.1 |
+| E6 | A fast closer clamped at the CFAR floor goes flat and is caught | **QUALIFIED — predicted and refuted at F=16.** Only ~2 of 16 frames clamp; the mechanism is real but is outweighed by the longer lever arm at this F | `leverArm.m` P2 |
+| E7 | "The radar's ECCM rejects the structural swarm" at the default dwell | **QUALIFIED** — that verdict measures a screen too short-armed to make the measurement. Does **not** extend to the monopulse veto (geometric, A3) or to naive-DRFM arms (flat history, no lever arm would rescue) | §11.2 |
 
 ---
 
