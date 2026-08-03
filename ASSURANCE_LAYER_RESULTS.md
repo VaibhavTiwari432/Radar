@@ -720,6 +720,124 @@ Not the screen it was built on, not the regime it commands.
 
 ---
 
+## 9. The other direction — coverage collapses to 23.3 %
+
+§5 tested observers that *lower* the judge's real rate and got **VALID**. That
+verdict was flagged as direction-specific: *"a shift in the opposite direction —
+one that raises the judge's real rate under a frozen belief — attacks coverage
+from the side this grid never probes, and is untested."* Now tested, 1200 rows,
+same locked rule, same qhat 0.6255 `[MEASURED]`:
+
+| observer | `judge_real` (structural) | coverage | set size | |
+|---|---|---|---|---|
+| nominal | 19.0 % | 90.3 % | 1.05 | *training* |
+| amplitude screen only | 10.0 % | 91.7 % | 1.05 | PASS |
+| confirm [2 3] | 31.0 % | **78.3 %** | 1.05 | FAIL |
+| **doppler screen only** | **100.0 %** | **23.3 %** | 1.05 | **FAIL** |
+
+```
+  A_coverage = 23.3%
+  VERDICT: UNDER-COVERS: conformal limit binds; recommend POOLED
+```
+
+**The exchangeability limit binds, and it binds hard — 23.3 % against a 90 %
+guarantee.** Read with §5 the pair is decisive:
+
+| direction of shift | `judge_real` | coverage | verdict |
+|---|---|---|---|
+| **down** (`training 32`) | 19 % → 8 % | 78.0 % → 84.0 % — *improves* | VALID |
+| **up** (`doppler only`) | 19 % → 100 % | 90.3 % → **23.3 %** | UNDER-COVERS |
+
+**Both are the same fact §7 established.** The predictor emits `{not real}`
+almost always. A shift that makes `{not real}` *more* true improves coverage; a
+shift that makes it false destroys it. **Coverage here tracks the base rate, not
+the belief** — which is exactly what AUC 0.502 predicts, and it is now
+demonstrated from both sides rather than argued from one.
+
+### 9.1 The rule's own recommended repair is vacuous — a limitation of the rule
+
+The verdict says *"recommend POOLED"*. Regime B was measured in the same run:
+
+```
+  B POOLED -- qhat fitted on a random half of ALL observers (n=600, qhat=1.0000):
+    held-out half   coverage 100.0% [99.4, 100.0]   set size 2.00   -> PASS
+```
+
+**It "passes" at 100 % coverage with mean set size 2.00 of 2** — `qhat`
+saturates to 1.0 and every prediction set becomes the whole outcome space. The
+pooled predictor answers nothing, on every episode, and scores perfect coverage
+for it.
+
+**The locked rule cannot see this**, because set size deliberately does not enter
+its branch. That was a known trade recorded when the rule was written — *"an
+OVER-COVERS verdict at set size 2.00 is a vacuous predictor, not a pass"* — and
+the data has now produced the case rather than the argument. Per the amendment
+policy the rule is **not** changed and its verdict stands; this is the
+limitation, recorded beside it:
+
+> **Any verdict this rule produces must be read with the mean set size printed
+> next to it.** `UNDER-COVERS → recommend POOLED` is sound advice only where
+> pooling leaves a predictor that still commits. Here it does not, and the
+> recommendation should be read as *"this belief cannot support a 90 % guarantee
+> across these observers at all"* rather than as a repair.
+
+---
+
+## 10. The n = 400 run: the RCS lead was noise, and speed is the one real signal
+
+§8 named the decisive experiment — 4× the episodes on the structural arm — and
+predicted commanded RCS would land at ≈[0.53, 0.67] if its 0.603 held. Run:
+400 episodes, 20 seeds, 2350 s, 94 positives (23.5 % base rate) `[MEASURED]`:
+
+| predictor | AUC @ n=100 | **AUC @ n=400** | bootstrap 95 % CI | |
+|---|---|---|---|---|
+| `inline_s_amp` (the ECCM screen) | 0.502 | 0.526 | [0.470, 0.583] | contains 0.5 |
+| `rcs_dbsm` (commanded RCS) | **0.603** | **0.488** | [0.423, 0.555] | **contains 0.5 — regressed** |
+| `abs(vel_mps)` (commanded speed) | 0.543 | **0.576** | **[0.520, 0.633]** | **clears chance** |
+
+**The RCS lead was noise, and it is withdrawn.** At 4× the data it fell to 0.488
+— below chance — and the per-cell rates are flat within noise across the whole
+sweep (27.9 / 20.5 / 24.4 / 22.0 / 23.8 %). §8's non-monotone trend and
+overlapping intervals were the honest warning signs, and refusing to claim it
+then was the right call.
+
+**Commanded speed is established, and it survives correction for multiple
+testing.** Three candidates were tried, so the Bonferroni-corrected level is
+98.33 %:
+
+| interval | | |
+|---|---|---|
+| 95 % | [0.520, 0.633] | clears |
+| **98.33 % (Bonferroni, 3 candidates)** | **[0.506, 0.644]** | **clears** |
+| 99 % | [0.501, 0.650] | clears |
+
+```
+  |v| 25.0 m/s   n=191   judge_real 17.8%  [13.0, 23.8]
+  |v| 50.0 m/s   n=209   judge_real 28.7%  [23.0, 35.2]
+```
+
+### 10.1 And the mechanism closes the loop back onto the amplitude screen
+
+AUC 0.576 is a weak predictor in absolute terms — consistent with §1's 84 %
+aleatoric fraction. What makes it worth reporting is **what it is**:
+
+**A faster target walks further in range over the same 8 frames, which is
+precisely the lever arm the amplitude screen is starved of.** §3 and the report's
+§8.3 identify the screen's weakness as a slope fitted over a 1.27× range change
+in 8 frames, bounded above by the CFAR blind zone and below by `v_ua`. Doubling
+the radial speed doubles the range walk, lengthens the lever arm, stabilises the
+`polyfit(log R, log A)` slope, and the judge accepts more tracks.
+
+**So the only variable in this engine with established predictive power over the
+judge is a direct proxy for the amplitude screen's lever arm.** The assurance
+layer set out to find a belief and instead arrived, from the opposite direction,
+at the same root cause the report had already named. That is a convergent result
+from two independent lines of evidence, and it is the strongest argument in this
+document for where the engineering effort belongs: **not in the assurance
+machinery, in the eight frames.**
+
+---
+
 ## Honest limits of this layer
 
 - **Coverage is conditional on exchangeability, and §3 shows the condition is

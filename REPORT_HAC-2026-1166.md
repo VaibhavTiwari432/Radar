@@ -2083,9 +2083,37 @@ episodes land on `not real`, which this predictor calls well. Coverage rose beca
 easy label got more common.
 
 **So the coverage numbers in this section are licensed across the observer grid measured
-here, and the reason is weaker than the verdict alone suggests.** A shift in the
-opposite direction — one that *raises* the judge's real rate under a frozen belief —
-attacks coverage from the side this grid never probes, and is untested.
+here, and the reason is weaker than the verdict alone suggests.**
+
+### The other direction: coverage collapses to 23.3 %
+
+The paragraph above flagged that a shift *raising* the judge's real rate was untested.
+Tested — 1200 more rows, same locked rule, same qhat `[MEASURED]`:
+
+| observer | `judge_real` | coverage | |
+|---|---|---|---|
+| nominal | 19.0 % | 90.3 % | *training* |
+| amplitude screen only | 10.0 % | 91.7 % | PASS |
+| confirm [2 3] | 31.0 % | 78.3 % | FAIL |
+| **doppler screen only** | **100.0 %** | **23.3 %** | **FAIL** |
+
+`A_coverage = 23.3 %` → **UNDER-COVERS: conformal limit binds.** Read as a pair, the
+two grids settle it:
+
+| shift direction | `judge_real` | coverage | verdict |
+|---|---|---|---|
+| **down** (`training 32`) | 19 % → 8 % | 78.0 % → 84.0 %, *improves* | VALID |
+| **up** (`doppler only`) | 19 % → 100 % | 90.3 % → **23.3 %** | UNDER-COVERS |
+
+**Both are the same fact.** The predictor emits `{not real}` almost always; a shift
+making that more true improves coverage, a shift making it false destroys it.
+**Coverage tracks the base rate, not the belief** — demonstrated from both sides.
+
+**And the rule's own repair is vacuous here.** Its `recommend POOLED` was measured in
+the same run: pooling gives 100.0 % coverage at **mean set size 2.00 of 2** — `qhat`
+saturates to 1.0, every set becomes the whole outcome space, and the predictor answers
+nothing on every episode while scoring perfect coverage. **No verdict from this rule may
+be quoted without the set size beside it.**
 
 ### The predictor carries no information — and it explains everything above
 
@@ -2155,11 +2183,38 @@ regime made the belief worse.** The 16 % epistemic figure is an in-sample
 decomposition and does not promise a predictor can recover it out-of-sample; this is
 the measurement showing it cannot at this *n*.
 
-Settling it needs **20 seeds × 20 episodes on the structural arm** (bootstrap
-half-width ±0.14 → ±0.07), which would clear commanded RCS of chance if the point
-estimate holds. Until then the honest statement is the strong one: **no variable this
-engine logs is established as predictive of the independent judge's verdict** — not
-the screen it was built on, not the regime it commands.
+That experiment has now been run — **400 episodes, 20 seeds, 94 positives**
+`[MEASURED]`:
+
+| predictor | AUC @ n=100 | **AUC @ n=400** | 95 % CI | |
+|---|---|---|---|---|
+| `inline_s_amp` (the ECCM screen) | 0.502 | 0.526 | [0.470, 0.583] | contains 0.5 |
+| commanded RCS | **0.603** | **0.488** | [0.423, 0.555] | **regressed — withdrawn** |
+| **commanded speed** | 0.543 | **0.576** | **[0.520, 0.633]** | **clears chance** |
+
+**The RCS lead was noise.** At 4× the data it fell below chance and its per-cell rates
+are flat across the whole sweep (27.9 / 20.5 / 24.4 / 22.0 / 23.8 %). Not claiming it at
+n = 100 — on the strength of a non-monotone trend and overlapping intervals — was the
+right call.
+
+**Commanded speed is established**, and survives Bonferroni correction for the three
+candidates tested (98.33 % CI [0.506, 0.644]): 17.8 % `judge_real` at |v| = 25 m/s
+against 28.7 % at 50 m/s.
+
+**And its mechanism closes the loop onto §8.3.** AUC 0.576 is weak in absolute terms —
+consistent with the 84 % aleatoric fraction — but *what it is* matters more than its
+size. **A faster target walks further in range over the same 8 frames, which is exactly
+the lever arm the amplitude screen is starved of.** §8.3 names that screen's weakness as
+a slope fitted over a 1.27× range change in 8 frames, bounded above by the CFAR blind
+zone and below by `v_ua`. Doubling radial speed doubles the range walk and stabilises
+the fit.
+
+**So the only variable in this engine with established predictive power over the judge
+is a direct proxy for the amplitude screen's lever arm.** The assurance layer set out to
+find a belief and arrived, from the opposite direction, at the root cause this report
+had already named — two independent lines of evidence converging on the same eight
+frames. That is the strongest available argument for where the engineering effort
+belongs, and it is not in the assurance machinery.
 
 Two further boundaries: the guarantee is about the **belief**, not the deception — an
 engine that is reliably detected has excellent coverage. And the Simplex fallback is
