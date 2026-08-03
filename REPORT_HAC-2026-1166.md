@@ -2258,7 +2258,10 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
 6. **The five-rung ladder is assembled from three different scenes and seed counts**,
    not swept in one run (§4.12). This is the largest methodological weakness in §7.
 
-7. **Three MATLAB tests remain failing, named and root-caused, not excluded:**
+7. **Four MATLAB tests remain failing, named and root-caused, not excluded**
+   (corrected from three on 4 August — the fourth was found by a full-suite run and
+   had been failing undocumented; its root cause was already written up in §9, but
+   the assertion encoding the superseded expectation was never re-derived):
    - `test_angle_channel/..._genuine_targets_not_flagged` — genuine spread formation
      falsely flagged 6/8 seeds; the scene's amplitude compensation was tuned around a
      420 m walk and is now 280 m. Needs the **scene** re-derived; bears directly on the
@@ -2268,6 +2271,21 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
      strongest line genuinely is 200 Hz. The test should key on comb spacing.
    - `test_far_phantom_range_correction` — the range-correction was calibrated against a
      2998 m ceiling and the search space is now 6.25× wider. Needs re-deriving.
+     *(Re-confirmed 4 Aug: 0/5 real, all five seeds `decoy`.)*
+   - `test_monopulse_snr_boundary/test_d2_the_boundary_is_cross_range_not_snr` —
+     **the assertion is superseded by this report's own §9.** It asserts that the
+     *widest* genuine formation (160 m spread) must not be flagged, encoding the
+     pre-discovery assumption that wider spread is always safer. §9 measured the
+     opposite: beyond the ±2.866° unambiguous sector the azimuth **phase-wraps**,
+     the apparent spread collapses, and the false-accusation rate rises **back to
+     75 %** at 160 m. The test measures exactly that — **6 of 8 seeds** — and fails
+     against its own stale expectation. **The finding is right and the assertion is
+     wrong**, which is the reverse of the usual case and is why it is called out
+     rather than folded in silently. §9 itself records that the phase-wrap limit
+     was *found by a failing assertion in this file*; what did not happen is the
+     assertion being re-derived afterwards. The correct form keys on the
+     unambiguous sector — flagging must be low only for spreads **inside**
+     `R·tan(2.866°)` — which is a scene change, not a threshold change.
 
 8. **Not measured, declared future work:** full ablation matrix (P9), IMM validation
    against a discriminator that reads filter state, `J/S` sweep
