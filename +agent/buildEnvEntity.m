@@ -101,7 +101,15 @@ function [env, spec] = buildEnvEntity(C, opts)
     % exercised at all. A test can now start the entity near a bound and make
     % it fire.
     if ~isfield(opts, 'R0'); opts.R0 = 1800; end
-    F = 8; dt = 1.0; R0 = opts.R0; nFast = 400;
+    % EPISODE LENGTH is the amplitude screen's LEVER ARM, so it has to be
+    % settable to be measured (experiments.leverArm). Default 8 is unchanged,
+    % so every existing caller and every published number is unaffected.
+    % Raising it is NOT free: the entity walks further, and rangeMinM below is
+    % the CA-CFAR blind zone -- a fast closer clamps against it and its
+    % amplitude goes FLAT, which is the naive-DRFM signature screen 1 exists
+    % to catch. That is the documented "two constraints close on each other".
+    if ~isfield(opts, 'framesPerEpisode'); opts.framesPerEpisode = 8; end
+    F = opts.framesPerEpisode; dt = 1.0; R0 = opts.R0; nFast = 400;
 
     % RANGE BOUNDS, DERIVED (2 Aug 2026). Were [200, 3000] m: the ceiling
     % tracked the REJECTED 50 kHz PRF's R_ua (2997.9 m), the floor sat inside

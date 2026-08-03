@@ -1,4 +1,4 @@
-function T = calibrationLog(nEp, seeds, outCsv, observers, armsWanted)
+function T = calibrationLog(nEp, seeds, outCsv, observers, armsWanted, envOpts)
 %CALIBRATIONLOG  Per-episode (twin-belief, judge-actual) pairs -- the
 %   calibration set the Assurance Layer's conformal predictor is fitted on.
 %
@@ -81,14 +81,21 @@ function T = calibrationLog(nEp, seeds, outCsv, observers, armsWanted)
     % would triple the cost for nothing.
     if nargin < 5 || isempty(armsWanted); armsWanted = {'structural', 'shaped', 'stats'}; end
     if ischar(armsWanted) || isstring(armsWanted); armsWanted = cellstr(armsWanted); end
+    % Extra options merged into the structural arm's environment (e.g.
+    % framesPerEpisode, for experiments.leverArm). Empty = this file's own
+    % defaults, so existing callers are unaffected. Not applied to the agent
+    % arms: a trained policy's observation space is fixed at training time and
+    % re-shaping its environment would measure the mismatch, not the arm.
+    if nargin < 6 || isempty(envOpts); envOpts = struct(); end
 
     C = physics.Constants();
     rows = {};
 
     % ---- arm 1: the structural CV-coherent generator (t4JudgeGap's recipe)
     if any(strcmp(armsWanted, 'structural'))
-    [env, spec] = agent.buildEnvEntity(C, struct('shaping', false, ...
-                        'keepCube', true, 'swerling', 1));
+    eo = struct('shaping', false, 'keepCube', true, 'swerling', 1);
+    for f = fieldnames(envOpts)'; eo.(f{1}) = envOpts.(f{1}); end
+    [env, spec] = agent.buildEnvEntity(C, eo);
     nVel = numel(spec.velOptionsMps);
     nRcs = numel(spec.rcsOptionsDbsm);
     zeroVel = find(abs(spec.velOptionsMps) < 1e-9);   % see t4JudgeGap's header
