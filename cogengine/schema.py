@@ -55,6 +55,29 @@ class RadarState:
             raise ValueError(f"vel_gate_mps must be [lo,hi] with lo<=hi, got {self.vel_gate_mps}")
         if self.prf_hz <= 0 or self.pri_s <= 0 or self.carrier_hz <= 0:
             raise ValueError("prf_hz, pri_s, carrier_hz must be positive")
+        # pri_s IS 1/prf_hz -- they are one physical fact carried in two
+        # fields, and nothing used to make them agree. They silently drifted:
+        # +engine/sceneContract.m kept pri_s=20e-6 (the old 50 kHz PRI) after
+        # prf_hz was retargeted to 8 kHz, a 6.25x disagreement. renderer.py
+        # builds its Doppler phasor from pri_s while the MATLAB judge measures
+        # Doppler from prf_hz, so every scene exported across that seam
+        # carried a Doppler 6.25x too small and slow phantoms were labelled
+        # `decoy` for a contradiction the units bug invented.
+        #
+        # Checked here rather than derived (pri_s stays a field) because every
+        # existing caller already passes a consistent pair, so validation is
+        # the smaller change and it fails LOUDLY at the boundary instead of
+        # quietly correcting a caller that believes something false. The
+        # reference implementation (cognitive_engine/) made pri_s a derived
+        # @property and never had this bug -- that is the other valid answer.
+        if abs(self.pri_s - 1.0 / self.prf_hz) > 1e-9 * max(self.pri_s, 1.0 / self.prf_hz):
+            raise ValueError(
+                f"pri_s ({self.pri_s:g} s) contradicts prf_hz ({self.prf_hz:g} Hz), "
+                f"which implies pri_s = {1.0/self.prf_hz:g} s. They are the same "
+                f"physical quantity; renderer.py takes Doppler from pri_s and the "
+                f"MATLAB judge takes it from prf_hz, so a mismatch scales every "
+                f"rendered Doppler by {(1.0/self.prf_hz)/self.pri_s:g}x."
+            )
 
     def to_dict(self) -> dict:
         d = asdict(self)

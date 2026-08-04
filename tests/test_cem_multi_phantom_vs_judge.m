@@ -82,7 +82,13 @@ classdef test_cem_multi_phantom_vs_judge < matlab.unittest.TestCase
             naivePhantoms = repmat(engine.sceneContract().phantom, 1, numel(ranges));
             for i = 1:numel(ranges)
                 naivePhantoms(i).range_m = ranges(i);
-                naivePhantoms(i).radial_vel_mps = -60.0;
+                % Velocity INHERITED from engine.sceneContract's canonical
+                % phantom, not restated. This line hard-coded -60.0 and so
+                % kept the OLD canonical after the contract was retargeted to
+                % -40.0: -60 is past v_ua = 59.958 m/s, so every naive phantom
+                % folded (measured range-rate +59.96, sign flipped against a
+                % closing range) and the arm scored 0.00/4 by units artefact
+                % rather than by any property of the baseline.
                 naivePhantoms(i).accel_mps2 = 0.0;
                 naivePhantoms(i).rcs_dbsm = 0.0;
                 naivePhantoms(i).swerling = 0;

@@ -61,7 +61,11 @@ function phantoms = buildSceneFromControls(controls, budgetW)
     phantoms = repmat(engine.sceneContract().phantom, 1, n);
     for i = 1:n
         phantoms(i).range_m = ranges(i);
-        phantoms(i).radial_vel_mps = -60.0;   % this project's canonical closing rate
+        % Canonical closing rate INHERITED from engine.sceneContract above,
+        % not restated here. It was hard-coded -60.0 and went stale when the
+        % contract retargeted to -40.0: -60 exceeds v_ua = 59.958 m/s, so the
+        % Doppler folds to +59.96 (sign flipped against a closing range) and
+        % the discriminator condemns a physically consistent phantom.
         phantoms(i).accel_mps2 = 0.0;
         phantoms(i).rcs_dbsm = 0.0;
         phantoms(i).swerling = 0;

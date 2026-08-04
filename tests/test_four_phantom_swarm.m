@@ -62,7 +62,8 @@ classdef test_four_phantom_swarm < matlab.unittest.TestCase
             phantoms = repmat(engine.sceneContract().phantom, 1, numel(ranges));
             for i = 1:numel(ranges)
                 phantoms(i).range_m = ranges(i);
-                phantoms(i).radial_vel_mps = -60.0;
+                % Velocity inherited from engine.sceneContract (was a stale
+                % restated -60.0, past v_ua = 59.958 m/s -> folded -> decoy).
                 phantoms(i).accel_mps2 = 0.0;
                 phantoms(i).rcs_dbsm = 0.0;
                 phantoms(i).swerling = 0;
@@ -143,8 +144,30 @@ classdef test_four_phantom_swarm < matlab.unittest.TestCase
             fprintf(['Distinct physical phantoms represented among confirmed tracks: ' ...
                 '%d (of %d transmitted)\n'], numel(distinctRanges), numel(ranges));
 
-            tc.verifyGreaterThanOrEqual(feedback.confirmed_tracks, 0);
-            tc.verifyTrue(all(ismember(string(feedback.track_label), ["real", "decoy", "unscreened"])));
+            % ==== THESE ASSERTIONS USED TO BE "confirmed_tracks >= 0" AND ====
+            % ==== "every label is one of the three valid strings" -- both  ====
+            % ==== true by construction. The test could not fail.           ====
+            % It was green on 4 Aug 2026 while the judge returned
+            % surviving_real=0, flagged_decoy=4, labels decoy/decoy/decoy/decoy,
+            % because a stale restated -60.0 m/s (past v_ua = 59.958 m/s) folded
+            % every phantom's Doppler into a sign that contradicted its own
+            % range walk. This file is the named source of a HEADLINE claim, so
+            % it now asserts the claim (CLAUDE.md Rule 5).
+            %
+            % MEASURED, 4 Aug 2026, corrected instrument: confirmed=4,
+            % surviving_real=4, flagged_decoy=0, all four labels `real`.
+            tc.verifyEqual(numel(distinctRanges), numel(ranges), ...
+                sprintf(['Only %d of %d transmitted phantoms are represented among the ' ...
+                         'confirmed tracks -- a DETECTION change, before any ECCM question.'], ...
+                         numel(distinctRanges), numel(ranges)));
+            tc.verifyEqual(feedback.false_tracks_surviving, numel(ranges), ...
+                sprintf(['The 4-phantom swarm no longer survives the judge intact ' ...
+                         '(surviving_real=%d, flagged_decoy=%d, labels: %s). This is the ' ...
+                         'headline deception result -- investigate the chain before ' ...
+                         'restating it.'], feedback.false_tracks_surviving, ...
+                         feedback.flagged_decoys, strjoin(string(feedback.track_label), ',')));
+            tc.verifyEqual(feedback.flagged_decoys, 0, ...
+                'A physically consistent phantom was flagged -- which screen fired, and why?');
         end
 
     end

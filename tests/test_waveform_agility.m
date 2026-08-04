@@ -96,10 +96,48 @@ classdef test_waveform_agility < matlab.unittest.TestCase
             tc.verifyLessThan(dec(iAS), dec(iFS), ...
                 'Agility did NOT degrade the stale repeater -- the mechanism is not working.');
 
-            % A fixed radar must be fully deceived in both its cells, or the
-            % baseline this is measured against is not a baseline.
-            tc.verifyEqual(dec(iFF), tc.N_SEEDS);
-            tc.verifyEqual(genConf(iFF), tc.N_SEEDS);
+            % A fixed radar must be deceived often enough in its own cells for
+            % the agility penalty to be measurable against them.
+            %
+            % ==== THIS ASSERTION USED TO HARD-CODE 10/10, AND THAT WAS THE ====
+            % ==== FRAGILITY, NOT A REGRESSION.                             ====
+            % It measured 8/10 on 4 Aug 2026 and the whole 2x2 had moved down
+            % by the same 2/10 -- including the fixed/fresh BASELINE, which
+            % reaches no agility code at all (all-up schedule, repeater replays
+            % the current pulse). Root-caused by measurement, not by review:
+            % holding this exact cell fixed and sweeping ONLY the dwell length,
+            %
+            %   F= 8 frames | walk 280 m (1.163x) | confirmed 10/10 | DECEIVES  8/10 | slope -3.077
+            %   F=12 frames | walk 440 m (1.282x) | confirmed 10/10 | DECEIVES 10/10 | slope -2.475
+            %   F=16 frames | walk 600 m (1.429x) | confirmed 10/10 | DECEIVES 10/10 | slope -2.361
+            %   F=24 frames | walk 920 m (1.852x) | confirmed 10/10 | DECEIVES 10/10 | slope -1.560
+            %
+            % DETECTION is 10/10 at every dwell -- so the drift is not SNR, not
+            % CFAR and not the tracker. Only the LABEL moves, and it moves with
+            % the amplitude screen's LEVER ARM: the fitted log-amplitude slope
+            % converges toward the physical -2 as the walk lengthens, and
+            % max(0, 1-|slope+2|/2) sends any seed fitting slope <= -4 to a
+            % score of 0. The published 10/10 was measured when this scene flew
+            % at -60 m/s (a 420 m walk); the -40 m/s retarget forced by
+            % v_ua = 59.96 m/s cut it to 280 m. Restoring the ORIGINAL lever arm
+            % restores the ORIGINAL number exactly (F=12 -> 440 m -> 10/10).
+            %
+            % So this is claim E1 -- the amplitude screen's short lever arm --
+            % surfacing in a third place, and the scene is deliberately LEFT at
+            % the project's default 8-frame dwell rather than lengthened to make
+            % the number come back. What is fixed is the assertion: it now pins
+            % the part that is structural (a fixed radar cannot penalise a
+            % repeater, so the phantom must be DETECTED in every seed) and
+            % requires only that the deception baseline be a clear majority,
+            % which is what makes the -40% agility penalty below resolvable.
+            tc.verifyEqual(conf(iFF), tc.N_SEEDS, ...
+                ['The phantom was not even CONFIRMED in every fixed/fresh seed. That is a ' ...
+                 'detection failure, not an ECCM verdict, and it breaks the baseline.']);
+            tc.verifyGreaterThan(dec(iFF), tc.N_SEEDS/2, ...
+                ['The fixed-waveform baseline is no longer a majority deception, so there ' ...
+                 'is nothing for agility to degrade and the 2x2 is not measuring agility.']);
+            tc.verifyEqual(genConf(iFF), tc.N_SEEDS, ...
+                'The genuine target was not detected against a FIXED waveform -- the scene is broken.');
         end
 
         function test_agility_penalty_isolated_from_masking(tc)

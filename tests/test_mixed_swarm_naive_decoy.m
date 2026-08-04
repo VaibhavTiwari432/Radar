@@ -34,7 +34,13 @@ classdef test_mixed_swarm_naive_decoy < matlab.unittest.TestCase
             phantoms = repmat(engine.sceneContract().phantom, 1, numel(ranges));
             for i = 1:numel(ranges)
                 phantoms(i).range_m = ranges(i);
-                phantoms(i).radial_vel_mps = -60.0;   % consistent mover, default
+                % Consistent mover: INHERITED from engine.sceneContract's
+                % canonical phantom, not restated. This line used to hard-code
+                % -60.0 ("default") and so kept the OLD canonical value after
+                % the contract was retargeted to -40.0 -- past v_ua = 59.958
+                % m/s, where the Doppler folds to +59.96 (sign flipped) and
+                % the discriminator correctly labels a GENUINE mover `decoy`.
+                % Restating a default is how it drifts; inherit it instead.
                 phantoms(i).accel_mps2 = 0.0;
                 phantoms(i).rcs_dbsm = 0.0;
                 phantoms(i).swerling = 0;

@@ -154,6 +154,31 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
             snrPoints = [0 15];
             spreads = [0 5 10 20 40 80 160];
 
+            % ---- THE UPPER LIMIT, DERIVED (not a tuned constant) ----------
+            % Phase-comparison monopulse is unambiguous only inside
+            % asin(lambda/(2*d)). runJudge's phase estimate 2*atan(imag(D/S))
+            % lives in (-pi, pi), so an object OUTSIDE that sector does not
+            % saturate -- its phase WRAPS and it is reported at a completely
+            % wrong azimuth. The consequence INVERTS this screen's intent: a
+            % genuine formation wider than the sector has its outer members
+            % folded back toward the middle, its apparent spread collapses,
+            % and it is condemned as co-bearing. So "wider is always safer" is
+            % FALSE and the bound is TWO-SIDED.
+            %
+            % offsets = linspace(-s/2, s/2, nObj) against RANGES, so the
+            % binding object is the one at the NEAREST range carrying the
+            % largest offset: it subtends the largest angle for a given spread.
+            C = physics.Constants();
+            lambda  = C.c / tc.CARRIER;
+            azUa    = asin(min(1, lambda / (2*tc.SUBAP_M)));      % +-2.865 deg
+            maxSafeSpread = 2 * min(tc.RANGES) * tan(azUa);       % metres
+            inside  = spreads <= maxSafeSpread;
+            fprintf(['\n[D2] unambiguous sector = asin(%.5f m / (2 x %.2f m)) = %.3f deg\n' ...
+                     '[D2] widest genuine spread this scene can REPRESENT = 2 x %.0f m x tan(%.3f deg) = %.1f m\n' ...
+                     '[D2] spreads inside the sector: %s | OUTSIDE (will phase-wrap): %s\n'], ...
+                     lambda, tc.SUBAP_M, rad2deg(azUa), min(tc.RANGES), rad2deg(azUa), ...
+                     maxSafeSpread, mat2str(spreads(inside)), mat2str(spreads(~inside)));
+
             fprintf('\n=== D2 (corrected axis): flag rate vs GENUINE cross-range spread ===\n');
             fprintf('A genuine formation flagged as co-bearing is a FALSE ACCUSATION.\n');
             fprintf('%10s |', 'spread m');
@@ -195,9 +220,42 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
             % A zero-spread "formation" IS a collinear fan and must be flagged.
             tc.verifyGreaterThan(flagged(1,end), tc.N_SEEDS/2, ...
                 'A zero-spread formation was not flagged -- the screen is inert.');
-            % A widely-spread genuine formation must NOT be flagged.
-            tc.verifyLessThanOrEqual(flagged(end,end), tc.N_SEEDS/2, ...
-                'A 160 m-spread genuine formation was flagged: the screen accuses real aircraft.');
+
+            % ---- THE TWO-SIDED BOUND, ASSERTED ---------------------------
+            % This assertion used to read "the WIDEST spread (160 m) must not
+            % be flagged", encoding the pre-discovery assumption that wider is
+            % always safer. That is the assumption the phase-wrap limit above
+            % refutes, and the refutation was FOUND BY THIS TEST FAILING. The
+            % assertion is therefore re-keyed on the sector, not on the widest
+            % row: safety is claimed only where the geometry can deliver it.
+            iWidestInside = find(inside, 1, 'last');
+            tc.assertNotEmpty(iWidestInside, ...
+                'No swept spread lies inside the unambiguous sector -- nothing to assert.');
+            tc.verifyLessThanOrEqual(flagged(iWidestInside,end), tc.N_SEEDS/2, ...
+                sprintf(['A %g m-spread genuine formation -- INSIDE the %.1f m sector ' ...
+                         'ceiling -- was flagged: the screen accuses real aircraft it ' ...
+                         'is geometrically able to resolve.'], ...
+                         spreads(iWidestInside), maxSafeSpread));
+
+            % ...and the other side of it. A spread OUTSIDE the sector folds,
+            % so a HIGH flag rate there is the correct, expected behaviour of
+            % a single aperture -- asserted positively so the limit cannot
+            % quietly disappear and be re-reported as a screen that "works at
+            % all spreads". This is the §9 finding, locked behind a test.
+            iOutside = find(~inside, 1, 'first');
+            if ~isempty(iOutside)
+                fprintf(['\n[D2] TWO-SIDED BOUND CONFIRMED: %g m (inside, %.1f m ceiling) ' ...
+                         'flagged %d/%d; %g m (outside, wraps) flagged %d/%d.\n'], ...
+                         spreads(iWidestInside), maxSafeSpread, flagged(iWidestInside,end), ...
+                         tc.N_SEEDS, spreads(iOutside), flagged(iOutside,end), tc.N_SEEDS);
+                tc.verifyGreaterThan(flagged(iOutside,end), flagged(iWidestInside,end), ...
+                    sprintf(['A genuine formation WIDER than the %.1f m unambiguous ceiling ' ...
+                             'was not falsely accused more than one inside it. The azimuth ' ...
+                             'phase-wrap that makes wide formations look collinear (report ' ...
+                             'section 9) has stopped happening -- either the sector or the ' ...
+                             'phase estimator has changed, and section 9 needs re-deriving.'], ...
+                             maxSafeSpread));
+            end
         end
 
         function test_d2_interaction_does_masquerade_buy_back_angle_survivability(tc)

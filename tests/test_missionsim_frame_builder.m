@@ -33,7 +33,8 @@ classdef test_missionsim_frame_builder < matlab.unittest.TestCase
             phantoms = repmat(engine.sceneContract().phantom, 1, numel(ranges));
             for i = 1:numel(ranges)
                 phantoms(i).range_m = ranges(i);
-                phantoms(i).radial_vel_mps = -60.0;
+                % Velocity inherited from engine.sceneContract (was a stale
+                % restated -60.0, past v_ua -> folded -> decoy).
                 phantoms(i).accel_mps2 = 0.0;
                 phantoms(i).rcs_dbsm = 0.0;
                 phantoms(i).swerling = 0;

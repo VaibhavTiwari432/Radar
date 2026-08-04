@@ -36,7 +36,8 @@ classdef test_four_phantom_swarm_seeds < matlab.unittest.TestCase
                 phantoms = repmat(engine.sceneContract().phantom, 1, numel(ranges));
                 for i = 1:numel(ranges)
                     phantoms(i).range_m = ranges(i);
-                    phantoms(i).radial_vel_mps = -60.0;
+                    % Velocity inherited from engine.sceneContract (was a
+                    % stale restated -60.0, past v_ua -> folded -> decoy).
                     phantoms(i).accel_mps2 = 0.0;
                     phantoms(i).rcs_dbsm = 0.0;
                     phantoms(i).swerling = 0;
@@ -90,8 +91,27 @@ classdef test_four_phantom_swarm_seeds < matlab.unittest.TestCase
                 'Per-phantom real rate: %d/%d (%.1f%%)\n'], ...
                 N, nnz(allFourReal), N, 100*rate, sum(realCount), numel(ranges)*N, 100*phantomRealRate);
 
-            tc.verifyGreaterThanOrEqual(rate, 0);
-            tc.verifyLessThanOrEqual(rate, 1);
+            % ==== THESE ASSERTIONS USED TO BE 0 <= rate <= 1, WHICH IS TRUE ====
+            % ==== BY CONSTRUCTION. The test could not fail, and it is the   ====
+            % ==== named source of a HEADLINE claim (4/4 real in 8/8 seeds). ====
+            % It was passing green on 4 Aug 2026 while the judge was actually
+            % returning 0/4 real and 4/4 flagged, because a stale restated
+            % -60.0 m/s (past v_ua = 59.958) folded every phantom's Doppler.
+            % A claim whose test cannot fail is not evidence (CLAUDE.md Rule 5),
+            % so the measured result is pinned here instead.
+            %
+            % MEASURED, 4 Aug 2026, on the corrected instrument (pri_s derived
+            % from prf_hz, canonical velocity inside v_ua): 8/8 seeds all-four-
+            % real, per-phantom 32/32 = 100.0%.
+            tc.verifyEqual(rate, 1, ...
+                sprintf(['The 4-phantom swarm no longer deceives the judge in every seed ' ...
+                         '(%d/%d). This is a RECORDED headline result, not a threshold to ' ...
+                         'tune: if it has moved, find out what changed in the chain before ' ...
+                         'restating the claim.'], nnz(allFourReal), N));
+            tc.verifyEqual(phantomRealRate, 1, ...
+                sprintf('Per-phantom real rate fell to %d/%d.', sum(realCount), numel(ranges)*N));
+            tc.verifyTrue(all(distinctCount == numel(ranges)), ...
+                'Not every seed resolved all 4 distinct phantoms -- a detection change, not an ECCM one.');
         end
 
     end
