@@ -1429,14 +1429,28 @@ inflating results.
 ## 6.4 Suite state
 
 ```
-MATLAB   188 tests total | 175 passed | 13 failed | 0 incomplete   (before −40 m/s retarget)
-         of those 13:  10 fixed, 3 remain (named in §8)
-Python   83 passed
+MATLAB   232 tests total | 231 passed | 1 failed | 0 incomplete   (4 Aug 2026, one clean
+                                                                   fresh-session run)
+Python   83 passed  (cogengine/tests)
+         11 passed  (cognitive_engine/tests, reference implementation)
+web/     vite production build clean; verify:no-physics PASS on src/, on the built
+         dist/ bundle, and on its own planted-violation self-test
 ```
 
-`[MEASURED]`. The three remaining failures are named, root-caused and open in §8 — none
-is quietly excluded. The assurance layer (§7.9) adds `tests/test_conformal.m` **6/6** and
-`tests/test_provenance_ledger.m` **5/5** on top of this count `[MEASURED]`.
+`[MEASURED]`. The **one** remaining failure is
+`test_cem_multi_phantom_vs_judge/test_cem_planned_vs_rescaled_naive_baseline`, named and
+root-caused in §8 — not quietly excluded. The assurance layer's `tests/test_conformal.m`
+and `tests/test_provenance_ledger.m` are **inside** this 232 count, not added on top of it.
+
+**This count supersedes the previous "188 total | 175 passed | 13 failed". Read that line
+as measured on a different instrument**, for two reasons found on 4 Aug 2026 and recorded
+in §8.7: a `pri_s`/`prf_hz` units disagreement that suppressed every Doppler crossing the
+MATLAB seam by **6.25×**, and a canonical closing rate of −60.0 m/s sitting **past**
+`v_ua` = 59.958 m/s. Both are fixed. Every number in this report that was produced through
+`cogengine.matlab_judge.export_scene_for_judge` was measured with a Doppler screen that
+could not fold, i.e. one that was structurally more permissive than the radar it claims to
+model — the same failure *class* as the 25 July tautological-Doppler screen, and it is
+called out here rather than absorbed silently.
 
 **A methodological note that changes how the earlier suite state should be read.**
 Before `startup.m` was fixed to insert the project root on MATLAB's embedded
@@ -2272,11 +2286,66 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
 6. **The five-rung ladder is assembled from three different scenes and seed counts**,
    not swept in one run (§4.12). This is the largest methodological weakness in §7.
 
-7. **Five MATLAB tests remain failing, named and root-caused, not excluded**
-   (corrected from three on 4 August: a full-suite run found **two** that had been
-   failing undocumented. Both are cases where the *measurement* is sound and the
-   *assertion* or the *published constant* is stale — which is why neither showed up
-   as a suspected defect and why a periodic full run is not optional):
+7. **ONE MATLAB test remains failing, named and root-caused, not excluded.** *(This item
+   read "five" earlier on 4 August. All five are resolved and the list is kept below with
+   its outcomes, because how they resolved is more informative than the fact that they
+   did: **two were already passing and the list itself was stale**, two were stale
+   assertions, and the fifth was a genuine units bug whose fix then exposed a second
+   genuine bug. The one open failure is new, and is item 7f.)*
+
+   **The single root cause behind most of this: a default RESTATED instead of INHERITED.**
+   Six sites did `phantoms(i).radial_vel_mps = -60.0` immediately after
+   `repmat(engine.sceneContract().phantom, ...)` — overwriting the canonical value with a
+   copy of what the canonical *used to* say. `pri_s = 20e-6` was the same mistake against
+   `prf_hz`. Every fix was **deleting the restatement**, not changing the number.
+
+   - `test_angle_channel/..._genuine_targets_not_flagged` — **was already passing; the
+     report was wrong.** Measured 4 Aug: genuine formation co-bearing **0/12**, phantom
+     fan **12/12**, 100-point separation. The recorded "falsely flagged 6/8 seeds" did not
+     reproduce and the seed count in it (8) was not even this test's (12).
+   - `test_drone_models/..._distinguishable_combs` — **was already passing.** Already
+     re-keyed on comb spacing (Mavic 97.66 Hz vs Phantom 199.22 Hz, 1-bin tolerance
+     derived from the dwell). The item described a fix that had already been made.
+   - `test_far_phantom_range_correction` — **FIXED, and not where the report said.** The
+     range correction was working correctly (2545.6 m = `1800·√(3.0/1.5)`, well inside its
+     own 5000 m assertion). The real cause was the `pri_s` units bug (§8.7): the planned
+     phantom closes at −8.36 m/s, which rendered as f_d ≈ 86 Hz where `2v/λ` = 558 Hz, so
+     the judge measured range-rate **0.000 m/s on a track whose range was visibly
+     walking** — which `+track/discriminator.m` correctly calls a physical contradiction
+     and scores 0. One seed had a near-perfect amplitude slope (−1.834, screen-1 score
+     0.917) and was condemned anyway: (0.917 + 0)/2 = 0.459 < 0.5. **Phantoms were being
+     condemned by a units bug, not by ECCM.** Now **5/5 `real`**, assertion untouched.
+   - `test_monopulse_snr_boundary/test_d2_the_boundary_is_cross_range_not_snr` — **FIXED,
+     4/4.** The assertion was superseded by §9 exactly as recorded. Re-keyed on the
+     **derived** unambiguous sector (`asin(λ/2d)` = 2.864°, a 90.1 m cross-range ceiling at
+     the scene's nearest range) instead of on the widest swept row, and the phase-wrap
+     boundary is now asserted **positively** so §9's finding is locked behind a test that
+     can fail: 80 m (inside the sector) flagged **0/8**, 160 m (outside, wraps) flagged
+     **6/8**. The measured curve reproduces §9's non-monotonic 100/50/38/25/12/0 % → 75 %.
+   - `test_waveform_agility/test_agility_only_breaks_the_stale_repeater` — **FIXED, 3/3.**
+     Root-caused by measurement, not review: holding the cell fixed and sweeping only the
+     dwell, **detection is 10/10 at every dwell** while only the *label* moves, tracking
+     the amplitude screen's lever arm (F=8 → 8/10, slope −3.077; F=12 → 10/10, −2.475;
+     F=24 → −1.560 against a physical −2). Restoring the pre-retarget 420 m walk restores
+     the published 10/10 exactly. The scene was **deliberately left** at the default
+     8-frame dwell rather than lengthened to make the number come back; the assertion now
+     pins what is structural (confirmation) plus a majority baseline. Claim E1's lever arm,
+     surfacing in a third place.
+   - **7f (OPEN).** `test_cem_multi_phantom_vs_judge/test_cem_planned_vs_rescaled_naive_baseline`.
+     Its two recorded constants (CEM 1.00/4, naive 3.60/4, 25 July) were measured under the
+     `pri_s` units bug and are **stale by construction**. They are deliberately **not**
+     re-baselined onto today's numbers, because doing so would enshrine a **third bug**
+     found while investigating it: `planner_cem._enforce_max_range_for_power` pulls a
+     phantom **below the search space's own 600 m lower `range_m` bound** whenever its
+     post-budget power falls under ≈4 W — this run it placed a phantom at **52.5 m with
+     0.03 W**, inside the 1124.2 m CFAR near-range blind zone and undetectable by
+     construction. Since the `power_w` bound floor is 0.1 W (→ 103.9 m), *any* phantom the
+     search de-powers is teleported somewhere it cannot be seen. With that bug live the
+     arms measure CEM **0.20/4** and naive **0.00/4** — **both at the floor, so the
+     CEM-vs-naive comparison is UNMEASURABLE, not flipped** (the same floor effect that
+     withdrew claim B4). The informative number is the twin↔judge gap, which survives:
+     CEM **+2.80**, naive **+0.00** — the twin-only-exploit pattern, still present.
+     **Claim B3 stays WITHDRAWN and is not re-derived until the bound is fixed.**
    - `test_angle_channel/..._genuine_targets_not_flagged` — genuine spread formation
      falsely flagged 6/8 seeds; the scene's amplitude compensation was tuned around a
      420 m walk and is now 280 m. Needs the **scene** re-derived; bears directly on the
@@ -2310,6 +2379,53 @@ Stated as engineering boundaries. Each has a consequence, not an apology.
      fixed/fresh **baseline** locates the cause upstream in the shared chain, not in
      agility. Needs root-causing before the absolute cells are re-published; a test
      that hard-codes an absolute pass count is itself the fragility here.
+
+7g. **TWO GENUINE BUGS FOUND 4 AUGUST 2026, both fixed, and they change how every
+   seam-crossing number in this report must be read.** Neither was a stale assertion;
+   both were live defects that made the radar look weaker at screening than it is.
+
+   **(a) `pri_s` contradicted `prf_hz` by 6.25×.** `+engine/sceneContract.m` carried
+   `prf_hz = physics.Constants().PRF` (retargeted to 8 kHz) alongside a hard-coded
+   `pri_s = 20e-6` — the PRI of the *old* 50 kHz PRF. `cogengine/renderer.py` builds its
+   Doppler phasor from `pri_s` (`pulse_times = arange(num_pulses) * pri_s`) while
+   `+engine/runJudge.m` **measures** Doppler from `prf_hz`. So every scene exported across
+   the MATLAB seam carried a Doppler **6.25× too small**, and nothing ever folded: the
+   radar appeared to have 6.25× the velocity coverage it physically has, and its Doppler
+   screen was correspondingly permissive. Fixed by deriving `pri_s = 1/prf_hz`, plus a
+   boundary check in `cogengine/schema.py`'s `RadarState` that rejects an inconsistent
+   pair outright. **All 83 Python tests passed throughout** — they could not catch it,
+   because every fixture passes a consistent pair and `test_renderer.py` constructs
+   `prf_hz = 1/pri_s`, deriving one from the other. The reference implementation
+   (`cognitive_engine/`) made `pri_s` a derived `@property` and never had this bug.
+
+   **(b) The canonical closing rate was outside the radar's own unambiguous velocity.**
+   With (a) fixed, `sceneContract`'s canonical −60.0 m/s is past `v_ua` = 59.958 m/s.
+   Measured directly, holding all else fixed: −40 reads −41.22 m/s and labels `real`,
+   while −59 and −60 **both read +59.96 m/s — the sign flips** — and label `decoy`,
+   because "range closing, Doppler opening" is a physical contradiction. Retargeted to
+   −40.0 m/s, following the decision the rest of the project had already made for the same
+   reason (planner bounds clamped to ±`v_ua` in Phase 4.1; `test_waveform_agility` at −40;
+   `test_angle_channel` at −35…−25). Six sites restated the stale −60.0 and were corrected
+   to inherit it.
+
+   **What this cost, stated plainly:** between (a) and (b), `test_missionsim_controls`'s
+   **C2 positive control** — "a single, consistent real target must confirm and be
+   labelled `real`" — was returning `decoy`, and the canonical 4-phantom swarm was
+   returning **0/4 real, 4/4 flagged**. Both are correct again (C2 `real`; swarm 4/4 real,
+   0 flagged, 8/8 seeds, 32/32 per-phantom = 100.0 %).
+
+7h. **Two headline tests could not fail, and were green while measuring the opposite of
+   their claim.** `tests/test_four_phantom_swarm.m` asserted only
+   `confirmed_tracks >= 0` and "every label is one of the three valid strings";
+   `tests/test_four_phantom_swarm_seeds.m` asserted only `0 <= rate <= 1`. All four are
+   true by construction. These two files are the **named source of claims A1 and A3**, and
+   on 4 Aug they were passing green while the judge returned `decoy, decoy, decoy, decoy`.
+   A claim whose test cannot fail is not evidence (Rule 5). Both now assert the measured
+   result — surviving-real count, flagged count, distinct-phantom count, per-phantom rate —
+   so the headline can fail if the chain moves. **The claim itself is unharmed: on the
+   corrected instrument it measures 4/4 real, 0 flagged, in 8/8 seeds.** The lesson is
+   that a vacuous assertion is indistinguishable from a passing one in a suite summary,
+   and only reading the assertion catches it.
 
 8. **Not measured, declared future work:** full ablation matrix (P9), IMM validation
    against a discriminator that reads filter state, `J/S` sweep
