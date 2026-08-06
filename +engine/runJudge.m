@@ -338,7 +338,7 @@ function feedback = runJudge(matFile, varargin)
     trkArgs = localNameValue(opts, {'AssignmentThreshold', ...
         'ConfirmationThreshold', 'DeletionThreshold', 'FilterModel', 'TrackerType'});
 
-    [confirmedTracks, history] = track.runTracker(dets, times, C, trkArgs{:});
+    [confirmedTracks, history, modeProbHistory] = track.runTracker(dets, times, C, trkArgs{:});
     confirmedCount = numel(confirmedTracks);
 
     % Per-frame track log (additive -- Mission Simulator's animated replay,
@@ -408,6 +408,7 @@ function feedback = runJudge(matFile, varargin)
     rateByID  = containers.Map('KeyType', 'double', 'ValueType', 'any');
     azByID    = containers.Map('KeyType', 'double', 'ValueType', 'any');
     combByID  = containers.Map('KeyType', 'double', 'ValueType', 'any');
+    modeProbByID = containers.Map('KeyType', 'double', 'ValueType', 'any');
     for id = confirmedIDs
         rangeByID(id) = zeros(0,1);
         ampByID(id)   = zeros(0,1);
@@ -415,6 +416,7 @@ function feedback = runJudge(matFile, varargin)
         rateByID(id)  = zeros(0,1);
         azByID(id)    = zeros(0,1);
         combByID(id)  = zeros(0,1);
+        modeProbByID(id) = zeros(0,3);   % nModels fixed by initekfimm's CV/CA/CT bank
     end
     for k = 1:numFrames
         tk = history{k};
@@ -430,10 +432,22 @@ function feedback = runJudge(matFile, varargin)
             rateByID(id)  = [rateByID(id);  peakRate{k}(im)];
             azByID(id)    = [azByID(id);    peakAz{k}(im)];
             combByID(id)  = [combByID(id);  peakComb{k}(im)];
+            % IMM mode probabilities, THIS track, THIS frame -- direct
+            % TrackID lookup (track.runTracker's own map), no nearest-match
+            % needed since this is the tracker's own per-track filter
+            % state, not a CFAR peak. Empty Map (FilterModel ~= 'imm') ->
+            % isKey false for every id -> modeProbByID stays 0-row, so
+            % track.discriminator's screen 2b sees an absent field and
+            % no-ops, exactly as documented.
+            mpMap = modeProbHistory{k};
+            if isKey(mpMap, id)
+                modeProbByID(id) = [modeProbByID(id); mpMap(id)];
+            end
         end
     end
 
     trackLabel = strings(1, confirmedCount);
+    trackConfidence = nan(1, confirmedCount);
     trackRange = cell(1, confirmedCount);
     trackAmp   = cell(1, confirmedCount);
     trackTime  = cell(1, confirmedCount);
@@ -493,11 +507,21 @@ function feedback = runJudge(matFile, varargin)
             if ~isempty(opts.ExpectMicroDoppler)
                 ts.expectMicroDoppler = logical(opts.ExpectMicroDoppler);
             end
+            % IMM mode-probability series (screen 2b). Absent entirely for
+            % CV/CA (modeProbByID(id) stays 0-row -- see the assembly loop
+            % above), so the field is only set when there is something to
+            % screen, matching .modeProbSeq's documented "absent, not empty"
+            % contract in track.discriminator's header.
+            mpSeq = modeProbByID(id);
+            if ~isempty(mpSeq)
+                ts.modeProbSeq = mpSeq;
+            end
             if ~isempty(opts.EccmScreens)     % ablation mask, absent -> all screens on
                 ts.screensEnabled = cellstr(opts.EccmScreens);
             end
-            [lbl, ~] = track.discriminator(ts, C);
+            [lbl, conf] = track.discriminator(ts, C);
             trackLabel(i) = string(lbl);
+            trackConfidence(i) = conf;
         else
             trackLabel(i) = "unscreened";
         end
@@ -640,6 +664,12 @@ function feedback = runJudge(matFile, varargin)
         feedback.eccm_label = 'mixed';
     end
     feedback.track_label  = cellstr(trackLabel);
+    % Recoverable mean-screen SCORE (0.5 +/- confidence/2, signed by label)
+    % from track.discriminator's own confidence output -- additive column,
+    % same pattern as track_nis_mean below, so a caller comparing two runs
+    % (e.g. FilterModel cv vs imm) can report an actual score delta instead
+    % of only a label flip.
+    feedback.track_confidence = trackConfidence;
     feedback.track_range_m = trackRange;
     feedback.track_amp     = trackAmp;
     feedback.track_time_s  = trackTime;

@@ -1,8 +1,9 @@
-function [confirmed, history] = runTracker(detsPerFrame, times, C, varargin) %#ok<INUSD>
+function [confirmed, history, modeProbHistory] = runTracker(detsPerFrame, times, C, varargin) %#ok<INUSD>
 %RUNTRACKER  Run trackerGNN over a sequence of per-frame detections.
 %
 %   confirmed = track.runTracker(detsPerFrame, times, C)
 %   [confirmed, history] = track.runTracker(detsPerFrame, times, C)
+%   [confirmed, history, modeProbHistory] = track.runTracker(detsPerFrame, times, C)
 %       detsPerFrame : {1 x F} cell array of objectDetection arrays, one
 %                      cell per frame (a cell may be empty -- no detections
 %                      that frame; may hold MULTIPLE detections in one
@@ -24,6 +25,19 @@ function [confirmed, history] = runTracker(detsPerFrame, times, C, varargin) %#o
 %                      just once globally). Second output, additive --
 %                      existing single-output callers (Stage3_Test.m)
 %                      are unaffected.
+%       modeProbHistory : {1 x F} cell array, parallel to history. Each
+%                      cell is a containers.Map (TrackID -> [1 x nModels]
+%                      IMM model-probability row, via
+%                      getTrackFilterProperties). Only populated when
+%                      'FilterModel' is 'imm' -- for cv/ca every cell is an
+%                      empty containers.Map, so a caller can tell "no IMM
+%                      this run" apart from "IMM but this track had no
+%                      hits yet" (an empty Map vs. a missing key). Third
+%                      output, additive -- existing 1- and 2-output
+%                      callers are unaffected. This is what
+%                      +engine/runJudge.m threads into
+%                      track.discriminator's new manoeuvre-plausibility
+%                      screen (see that file's .modeProbSeq assembly).
 %
 %   ONLY SOURCE of the deception/success metric (CLAUDE.md Rule 2): +synth
 %   must never call this to grade itself. Uses trackerGNN with
@@ -102,8 +116,11 @@ function [confirmed, history] = runTracker(detsPerFrame, times, C, varargin) %#o
                 'TrackerType must be gnn|jpda, got ''%s''', char(o.TrackerType));
     end
 
+    isImm = strcmpi(char(o.FilterModel), 'imm');
+
     tracks = objectTrack.empty(0,1);
     history = cell(1, numel(detsPerFrame));
+    modeProbHistory = cell(1, numel(detsPerFrame));
     for k = 1:numel(detsPerFrame)
         dets = detsPerFrame{k};
         if isempty(dets)
@@ -117,6 +134,21 @@ function [confirmed, history] = runTracker(detsPerFrame, times, C, varargin) %#o
             tracks = tracker(dets, times(k));
         end
         history{k} = tracks;
+
+        % IMM mode probabilities, THIS frame, THIS live tracker -- must be
+        % read now, not reconstructed afterward: the tracker only ever
+        % holds its CURRENT per-track filter state (verified interactively,
+        % see track.getFilterState's header), so a mode-probability
+        % TIME SERIES only exists if snapshotted here, frame by frame.
+        mpMap = containers.Map('KeyType', 'double', 'ValueType', 'any');
+        if isImm
+            for t = 1:numel(tracks)
+                id = tracks(t).TrackID;
+                mp = getTrackFilterProperties(tracker, id, 'ModelProbabilities');
+                mpMap(id) = mp{1}(:)';
+            end
+        end
+        modeProbHistory{k} = mpMap;
     end
 
     if isempty(tracks)

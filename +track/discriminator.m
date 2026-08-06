@@ -21,6 +21,14 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
 %                             at all, so a zero carries no information.
 %                             +engine/runJudge.m sets this true only on its
 %                             pulse-cube path. See "MISSING vs ABSENT" below.
+%           .modeProbSeq      [K x nModels] this track's own IMM model
+%                             probabilities at each hit, oldest first.
+%                             ABSENT for CV/CA tracks and for any caller
+%                             that predates it -- the manoeuvre-
+%                             plausibility screen (2b, opt-in via
+%                             screensEnabled) is then a no-op. See
+%                             track.getFilterState, which is what extracts
+%                             this from a live tracker.
 %
 %   Two independent screens, averaged over whichever are informative for
 %   this track (a degenerate all-constant track only has one to go on):
@@ -82,14 +90,15 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     if isfield(trackStruct, 'screensEnabled')
         enabled = cellstr(trackStruct.screensEnabled);
     else
-        % 'residual' is DELIBERATELY NOT in this default -- see the screen's
-        % own block below for the measurement that put it here. Opt in with
-        % screensEnabled = {'amplitude','doppler','micro','residual'}.
+        % 'residual' and 'maneuver' are DELIBERATELY NOT in this default --
+        % see each screen's own block below for why. Opt in with
+        % screensEnabled = {'amplitude','doppler','micro','residual','maneuver'}.
         enabled = {'amplitude', 'doppler', 'micro'};
     end
     useAmplitude = any(strcmpi(enabled, 'amplitude'));
     useDoppler   = any(strcmpi(enabled, 'doppler'));
     useResidual  = any(strcmpi(enabled, 'residual'));
+    useManeuver  = any(strcmpi(enabled, 'maneuver'));
 
     scores = [];
 
@@ -122,6 +131,50 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
         % impossible, so this is a failed screen, not an absent one.
         scores(end+1) = 0; %#ok<AGROW>
     end
+
+    % ---- 2b. Manoeuvre-plausibility (IMM mode-probability transition rate) ----
+    % BENCHMARK_RESULTS.md's "Tracker model" generalization sweep found CV,
+    % IMM and CA produced BYTE-IDENTICAL evasion/F1: this discriminator reads
+    % only raw CFAR range/amplitude/Doppler series and never asked the
+    % tracker's own filter anything, so the motion model could change
+    % whether a track exists but structurally could not change its label.
+    % This screen is what makes that sweep non-null.
+    %
+    % trackStruct.modeProbSeq, when present, is a [K x nModels] matrix of
+    % this track's OWN IMM model probabilities at each hit, oldest first
+    % (+track/runTracker.m's optional filterHistory output, threaded per
+    % track the same way +engine/runJudge.m already rebuilds .range/
+    % .amplitude from history). Absent for any CV/CA track and for every
+    % caller that predates this field -- this screen must then be a total
+    % no-op (score neutral, not vetoed), same "caller never had the
+    % evidence" posture as .dopplerMeasured above.
+    %
+    % [ASSUMED], not measured (no real-aircraft IMM telemetry in this
+    % project to calibrate against -- flagged plainly rather than dressed
+    % up as derived, CLAUDE.md Rule 1/7). A genuine manoeuvring aircraft's
+    % turns/climbs last many dwells at this project's 1 Hz revisit cadence,
+    % not one dwell -- inertia, not signal processing, is what keeps a real
+    % aircraft's IMM dominant-mode estimate from flipping every update. A
+    % planner/entity walked through an abrupt, frame-to-frame commanded
+    % acceleration profile (this project's CV entity carries a
+    % "commandable" Rddot, CLAUDE.md's VEE section) has no such inertia
+    % constraint and can flip the IMM's dominant mode far faster.
+    % MAX_PLAUSIBLE_SWITCH_RATE = 1 dominant-mode switch per 4 dwells is the
+    % stated assumption; tD1_imm_discriminates.m and the re-run tracker-model
+    % sweep are what test whether it is doing useful work, not this comment.
+    MAX_PLAUSIBLE_SWITCH_RATE = 0.25;   % [ASSUMED] switches/frame, see above
+    if useManeuver && isfield(trackStruct, 'modeProbSeq') && ~isempty(trackStruct.modeProbSeq)
+        mp = trackStruct.modeProbSeq;
+        if size(mp, 1) >= 2
+            [~, dominant] = max(mp, [], 2);
+            switchRate = nnz(diff(dominant) ~= 0) / (numel(dominant) - 1);
+            scores(end+1) = max(0, 1 - switchRate / MAX_PLAUSIBLE_SWITCH_RATE); %#ok<AGROW>
+        end
+        % else: too short to compute a transition rate -- uninformative, skip.
+    end
+    % else: no IMM mode data at all (CV/CA filter, or a caller that never
+    % supplied it) -- genuinely uninformative, screen skipped exactly like
+    % screen 2's dopplerMeasured==false case.
 
     % ---- 3. micro-Doppler comb (the anti-repeater one) ----
     % A DRFM repeater retransmits a delayed, scaled, CONSTANT-phase copy of

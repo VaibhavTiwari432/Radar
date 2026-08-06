@@ -221,6 +221,19 @@ project on MATLAB's embedded `py.sys.path`, without which a large part of the
 MATLAB test suite had been silently self-filtering to `Incomplete` on this
 machine.
 
+**7 August 2026 — the CV/IMM/CA "byte-identical" generalization result is
+fixed.** `BENCHMARK_RESULTS.md`'s tracker-model sweep found swapping the
+motion model changed nothing because `track.discriminator` never read the
+tracker's own filter state. `+track/getFilterState.m` (new) + `+track/
+runTracker.m`'s new `modeProbHistory` output + `discriminator.m`'s new
+manoeuvre-plausibility screen (2b, opt-in) close that gap: CV and IMM can now
+disagree. Measured honestly, both ways — a dedicated maneuvering-phantom scene
+(`tests/tD1_imm_discriminates.m`) shows the screen doing its intended job, but
+the re-run of the actual published sweep (non-manoeuvring phantom) shows a
+small net-negative F1 move, not a free win. See "IMM manoeuvre-plausibility
+screen" under "Radar improvements" below for the full, unflattering-included
+account.
+
 **Last Updated:** 1 August 2026
 
 ---
@@ -1082,6 +1095,104 @@ question: NO.** Getting the amplitude law right does not buy back angle
 survivability — it puts the phantom at a GENUINE target's SNR (+29.3 dB), which
 is exactly where monopulse works best. **The more convincing the amplitude, the
 more visible the bearing.** The two corrections pull in opposite directions.
+
+### 6. IMM manoeuvre-plausibility screen — the CV/IMM byte-identical bug, fixed (7 August 2026)
+
+`BENCHMARK_RESULTS.md`'s "Tracker model" generalization sweep found CV, IMM
+and CA gave **byte-identical** evasion/F1/confusion counts, root-caused there
+as structural: `track.discriminator` reads only raw CFAR range/amplitude/
+Doppler series and never asked the tracker's own filter anything, so swapping
+the motion model could change whether a track exists but never its label.
+`+track/nisConsistency.m` (Tier 1.1) had already closed half of this gap with
+an independent per-track NIS — reported as its own `feedback.track_nis_*`
+column, deliberately NOT folded into the ECCM label. This closes the other
+half: the tracker's **own IMM mode probabilities**, folded into the label.
+
+**`+track/getFilterState.m`** (new): given a live `trackerGNN`/`trackerJPDA`
+and a `TrackID`, reads `getTrackFilterProperties(tracker, trackID,
+'ModelProbabilities')` — empty and gracefully caught, not errored, for a
+plain CV/CA `trackingEKF` (verified interactively: MATLAB throws
+`"Unrecognized ... 'ModelProbabilities' ... trackingEKF"`, only that specific
+message is swallowed). Its NIS field reuses `track.nisConsistency` — explicitly
+**not** `+engine/+track/shadowEKF.m`, which is the ADVERSARY's model of the
+radar and off-limits to the judge by Rule 2 (`shadowEKF`'s own header says so,
+and `test_package_separation.m` greps for exactly this). `tests/
+tD0_filter_state_extraction.m` (3/3, hand-built `trackerGNN` fed detections
+directly — no scene, no CFAR): IMM mode probabilities sum to 1, CV returns
+empty with no error, and the NIS matches `track.nisConsistency` on the
+identical series exactly.
+
+**`+track/runTracker.m`** gained a third, additive output, `modeProbHistory`:
+a `{1 x F}` cell of `containers.Map(TrackID -> [1 x nModels])`, snapshotted
+**live, frame by frame**, because a `trackerGNN` object only ever holds its
+CURRENT per-track filter state — a mode-probability time series has to be
+captured as the loop runs, not reconstructed afterward. Populated only when
+`FilterModel='imm'`; existing 1- and 2-output callers are unaffected.
+
+**`+track/discriminator.m`** gained screen 2b, manoeuvre-plausibility, reading
+an optional `trackStruct.modeProbSeq` (`[K x nModels]`, threaded by
+`+engine/runJudge.m` from `modeProbHistory` the same way `.range`/`.amplitude`
+are already rebuilt from `history`). Scores `1 - switchRate/0.25` where
+switchRate is dominant-mode switches per frame — **[ASSUMED]**, not measured
+(no real-aircraft IMM telemetry in this project to calibrate against, stated
+plainly rather than dressed up as derived): a genuine aircraft's manoeuvres
+last many dwells at this project's 1 Hz cadence, inertia not signal
+processing is what keeps its dominant mode from flipping every update, while
+a commanded, frame-to-frame accelerating VEE entity has no such constraint.
+Opt-in via `screensEnabled`/`EccmScreens` (not in the default three, same
+posture as `residual`); absent `modeProbSeq` (CV/CA, or any caller that
+predates this field) is a **no-op**, never a veto — same "caller never had
+the evidence" posture as the Doppler screen's `dopplerMeasured` guard.
+`+engine/runJudge.m` also gained `feedback.track_confidence`, the recoverable
+mean-screen score (`0.5 ± confidence/2`, signed by label) — additive, so a
+caller comparing two runs can report a score delta, not just a label flip.
+
+**`tests/tD1_imm_discriminates.m` (1/1, passing) proves the mechanism, on a
+scene built to exercise it:** one genuine CV target (only the VEE's own small
+process noise) and one VEE phantom commanded through a per-frame
+**alternating** acceleration (`range_accel_mps2` set directly between
+`engine.entity.propagate` calls — the entity's own documented "carried and
+commandable" Rddot, not a change to `+engine/+entity` itself) — an
+F-matrix-consistent but implausibly fast "flutter" no real aircraft holds.
+CV→IMM: phantom score **0.7971 → 0.7435** (penalised), genuine score
+**0.6030 → 0.7353** (raised, since its own switch rate stays near zero) — both
+stay correctly labelled `real`, no false-alarm regression.
+
+**Re-run of the actual "Tracker model" table** (`BENCHMARK_RESULTS.md`, same
+scene/config, N=20 seeds): at baseline (screen 2b off) CV and IMM are **still
+byte-identical** (27/19/1/1, F1 0.730 both) — expected, the screen is opt-in.
+With it enabled, **CV and IMM now differ** (IMM: 22/11/9/6, F1 0.721, evasion
+21.4%; CV unchanged; CA unchanged, also a plain `trackingEKF`). Read honestly,
+not as a one-sided win: FP fell 19→11 (fewer wrongly-flagged genuine tracks)
+but TP fell 27→22 (some previously-caught phantoms now evade, since this
+scene's phantom is non-manoeuvring and sits comfortably under the 0.25/frame
+ceiling) — net F1 moves slightly negative (0.730→0.721) on THIS
+non-manoeuvring scene. The screen was built to catch manoeuvring phantoms
+(tD1, above) and was never expected to help against a phantom that doesn't
+manoeuvre; it doesn't, and that is stated rather than hidden. Full numbers,
+both configs: `BENCHMARK_RESULTS.md`'s "Tracker model" section.
+
+**Also noted, out of this fix's scope:** the re-run's baseline confusion
+counts (27/19/1/1) do not match the file's original 25 July 2026 headline
+(0/1/19/20) at all — this judge has changed substantially since then (the
+Doppler-measurement fix the same day, the angle channel, Phase 3's
+calibration work) and nobody re-ran this specific table in between. Reported
+honestly as a fresh re-derivation, not reconciled against the stale number.
+
+**Full regression, all 68 `tests/*.m` files (two batches, background, this
+session): 231 individual test methods passed, 0 failed, 0 incomplete beyond
+one pre-existing, unrelated failure.** `test_cem_multi_phantom_vs_judge/
+test_cem_planned_vs_rescaled_naive_baseline` fails against its own hard-coded
+25 July baseline (naive survivor count drifted 3.60→0.00) — confirmed
+pre-existing, not a regression from this fix: the test file was last touched
+2026-08-04 (three days before this session, commit `fda79567`), has zero
+references to `FilterModel`/`EccmScreens`/`getFilterState`/`modeProbHistory`/
+`modeProbSeq`/`screensEnabled` (grepped), and is explicitly named as an open,
+deferred bug ("Bug C" — the planner's range clamp breaching its own 600 m
+floor) in the immediately-prior session's own handoff commit `f7ce7898`
+("231/232 complete, Bug C deferred"). No file under `+synth/` or
+`+engine/+entity/` was touched; `checkcode` is clean on every new/modified
+file.
 
 ### Still not built
 

@@ -239,6 +239,69 @@ the ECCM would have to consume filter-derived quantities (NIS, IMM mode
 probabilities) — which is exactly what the VEE's shadow EKF already computes and
 the judge currently ignores.
 
+### FIXED, 7 August 2026 — the discriminator now reads the tracker's own filter
+
+`+track/getFilterState.m` extracts each track's IMM model probabilities (via
+`getTrackFilterProperties`, empty/no-op for CV/CA — verified interactively,
+CV's `trackingEKF` has no such property at all) and `+track/runTracker.m`'s new
+`modeProbHistory` output snapshots them per frame per track (the tracker only
+ever holds ITS CURRENT filter state, so a time series has to be captured live,
+not reconstructed after the fact). `+engine/runJudge.m` threads this into
+`track.discriminator`'s new **manoeuvre-plausibility screen** (2b, opt-in via
+`EccmScreens` — not in the default three, same posture as `residual`):
+dominant-mode switches per frame, scored against an **[ASSUMED]**, not
+measured, plausibility ceiling (0.25 switches/frame — this project has no real
+manoeuvring-aircraft IMM telemetry to calibrate against; flagged plainly
+rather than dressed up as derived).
+
+**Re-run of this exact table, same scene/config as above, N=20 seeds, screens
+= amplitude+doppler (baseline, screen 2b NOT enabled):**
+
+| model | evasion | F1 | TP/FP/TN/FN |
+|---|---|---|---|
+| CV (initcvekf) | 3.6% | 0.730 | 27/19/1/1 |
+| IMM (initekfimm) | 3.6% | 0.730 | 27/19/1/1 |
+| CA (initcaekf) | 4.3% | 0.688 | 22/19/1/1 |
+
+**CV and IMM are still byte-identical at baseline — expected, since the new
+screen is opt-in and contributes nothing until asked for.** (Note also: these
+counts do not match the 0/1/19/20 headline above at all — this project's judge
+has changed substantially since that number was published 25 July 2026, e.g.
+the Doppler-measurement fix and the angle channel; nobody re-ran this specific
+table in between. Re-deriving it here, honestly, not chasing that
+reconciliation further — out of this fix's scope.)
+
+**Same re-run, screens = amplitude+doppler+maneuver (2b enabled), N=20:**
+
+| model | evasion | F1 | TP/FP/TN/FN |
+|---|---|---|---|
+| CV (initcvekf) | 3.6% | 0.730 | 27/19/1/1 |
+| **IMM (initekfimm)** | **21.4%** | **0.721** | **22/11/9/6** |
+| CA (initcaekf) | 4.3% | 0.688 | 22/19/1/1 |
+
+**CV and IMM now differ, and CA still doesn't (expected — CA is also a plain
+`trackingEKF` with no mode probabilities to read).** Read the IMM delta
+honestly, not as a one-sided win: FP fell 19→11 and TN rose 1→9 (many
+genuine tracks that baseline wrongly flagged decoy are now correctly passed,
+because a non-manoeuvring genuine target's dominant IMM mode rarely switches,
+pulling its averaged score up) — but TP fell 27→22 and FN rose 1→6 (some
+phantoms that baseline correctly caught now evade, because their own
+mode-switch rate still sits under the 0.25/frame [ASSUMED] ceiling and the
+extra near-1 screen score pulls their average up too). Net effect on F1 is a
+small decline (0.730→0.721) on THIS scene, whose phantom does not maneuver at
+all — the screen was never expected to help against a non-maneuvering
+phantom, and it doesn't; `tests/tD1_imm_discriminates.m` is the dedicated,
+purpose-built scene (one CV genuine target, one phantom walked with a
+commanded, per-frame-alternating "flutter" acceleration) that shows the
+screen doing its intended job: phantom score 0.7971→0.7435 under CV→IMM
+(penalized) while the non-maneuvering genuine's score rises 0.6030→0.7353
+(same direction as above) and both stay correctly labelled `real`.
+
+**Bottom line: the byte-identical structural bug is fixed — CV and IMM can now
+disagree — but on the specific non-maneuvering scene this benchmark has always
+used, enabling the new screen is a net-neutral-to-slightly-negative trade, not
+a free win.** That is the honest reading, not the flattering one.
+
 ### Phantom range
 
 | R0 | evasion | TP/FP/TN/FN | reading |
