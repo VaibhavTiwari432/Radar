@@ -5,7 +5,7 @@ function startup()
 %       >> startup
 %
 %   Adds the project root (so the package folders +physics, +data, +radar,
-%   +synth, +track, +agent resolve) plus tests/ and experiments/.
+%   +track, +generator, +engine resolve) plus tests/ and experiments/.
 
     here = fileparts(mfilename('fullpath'));
     addpath(here);
@@ -13,19 +13,19 @@ function startup()
     fprintf('[radar-sim] paths added from: %s\n', here);
 
     % Same job, other language: put the project root on MATLAB's EMBEDDED
-    % Python path too, so `py.importlib.import_module('cogengine')` resolves.
-    % MATLAB's embedded interpreter does NOT inherit the current folder the
-    % way `python script.py` does, so without this every Python-driven test
-    % (test_four_phantom_swarm, test_missionsim_*, test_tradeoff_sweep, ...)
-    % silently filters itself to Incomplete with "cogengine not importable
-    % from this MATLAB's Python environment (pyenv)" on a machine where
-    % cogengine is in fact perfectly importable. Fixed here, once, rather
-    % than in each test's own localPythonReady().
+    % Python path too, so `py.importlib.import_module('generator')` /
+    % `('common')` resolve. MATLAB's embedded interpreter does NOT inherit
+    % the current folder the way `python script.py` does, so without this
+    % any Python-driven MATLAB test silently filters itself to Incomplete
+    % on a machine where the package is in fact perfectly importable.
+    % NOTE (7 Aug 2026): this used to import 'cogengine', archived to
+    % trash/legacy-generator-20260807/ along with the rest of the old
+    % generator -- the packages this now enables are common/ and generator/.
     try
         if count(py.sys.path, here) == 0
             insert(py.sys.path, int32(0), here);
         end
-        fprintf('[radar-sim] cogengine importable from pyenv (%s)\n', pyenv().Version);
+        fprintf('[radar-sim] generator/common importable from pyenv (%s)\n', pyenv().Version);
     catch ME
         % No usable Python on this machine -- MATLAB-only work is
         % unaffected, and the tests' own assumption filters still report

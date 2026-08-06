@@ -126,20 +126,31 @@ def causality_veto(apparent_range_m: np.ndarray,
 # ============================================================================
 # 2.3 -- Doppler / range-rate coherence (correct BY CONSTRUCTION, not vetoed)
 # ============================================================================
-# phi_i(t) = phi_i(t-1) + (4*pi/lambda)*(R_i(t) - R_i(t-1)). Because this
+# phi_i(t) = phi_i(t-1) - (4*pi/lambda)*(R_i(t) - R_i(t-1)). Because this
 # module always DERIVES phase from the same range trajectory the delay comes
 # from, a phantom built through it cannot present "moving in range, static in
 # Doppler" -- that failure mode only exists for a generator that sets range
 # and phase independently, which is exactly the old per-frame-knob design
 # this rebuild replaces.
+#
+# SIGN, verified against +engine/runJudge.m rather than assumed: the judge
+# recovers range-rate from a measured Doppler bin as Rdot = -lambda*f_d/2
+# (its own comment: "Negative = closing"), i.e. f_d = -2*Rdot/lambda. A
+# round-trip phase of phi(t) = -4*pi*R(t)/lambda gives f_d = (1/2pi)*dphi/dt
+# = -2*Rdot/lambda, matching that convention exactly. The Blueprint's
+# illustrative Part 2.3 formula uses the opposite sign; that formula didn't
+# know this project's own convention, and Gate A (build_gate_a_scenes.py's
+# genuine_consistent case) caught the mismatch the first time it was run
+# end-to-end against the real judge -- see generator/tests/build_gate_a_scenes.py.
 
 def phase_progression_rad(range_m: np.ndarray, lambda_m: float = C.lambda_m) -> np.ndarray:
     """Per-sample carrier phase implied by a range trajectory. phase[0] = 0
     (arbitrary reference); every subsequent sample advances by exactly the
-    two-way phase its own range step implies."""
+    two-way phase its own range step implies, SIGNED to match
+    +engine/runJudge.m's f_d = -2*Rdot/lambda convention."""
     range_m = np.asarray(range_m, dtype=float)
     dR = np.diff(range_m, prepend=range_m[0])
-    dphi = (4.0 * np.pi / lambda_m) * dR
+    dphi = -(4.0 * np.pi / lambda_m) * dR
     return np.cumsum(dphi)
 
 

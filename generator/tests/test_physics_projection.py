@@ -97,14 +97,41 @@ def test_causality_boundary_respects_stated_latency():
 # ============================================================================
 
 def test_phase_progression_matches_stated_formula():
+    """Sign convention verified against +engine/runJudge.m's own
+    f_d = -2*Rdot/lambda ("Negative = closing"): a round-trip phase of
+    -4*pi*R/lambda is what recovers that. dphi = -4*pi/lambda * dR."""
     range_m = np.array([1000.0, 1010.0, 1005.0])
     lam = 0.03
     phi = phase_progression_rad(range_m, lambda_m=lam)
     assert phi[0] == pytest.approx(0.0)
-    expected_step1 = (4 * np.pi / lam) * (1010.0 - 1000.0)
+    expected_step1 = -(4 * np.pi / lam) * (1010.0 - 1000.0)
     assert phi[1] == pytest.approx(expected_step1)
-    expected_step2 = expected_step1 + (4 * np.pi / lam) * (1005.0 - 1010.0)
+    expected_step2 = expected_step1 - (4 * np.pi / lam) * (1005.0 - 1010.0)
     assert phi[2] == pytest.approx(expected_step2)
+
+
+def test_phase_sign_matches_judge_doppler_convention():
+    """A CLOSING target (range_rate<0) must produce a POSITIVE Doppler
+    frequency under +engine/runJudge.m's f_d=-2*Rdot/lambda convention.
+    Checked via an FFT of the synthesized phase, the same measurement the
+    judge itself performs (slow-time FFT -> argmax bin -> Rdot=-lambda*fd/2)."""
+    lam = C.lambda_m
+    n = 256
+    pri = C.PRI   # this radar's actual PRI (8 kHz PRF) -- an arbitrary PRI
+                  # aliases: -40 m/s at 10 GHz implies f_d ~= 2.67 kHz, which
+                  # needs > 5.3 kHz sampling (Nyquist), well inside 8 kHz but
+                  # not inside an ad hoc 2 kHz one.
+    times = np.arange(n) * pri
+    range_rate_mps = -40.0   # closing, within this radar's +-60 m/s v_unambiguous
+    range_m = 2000.0 + range_rate_mps * times
+    phi = phase_progression_rad(range_m, lambda_m=lam)
+
+    spectrum = np.fft.fftshift(np.fft.fft(np.exp(1j * phi)))
+    freqs = np.fft.fftshift(np.fft.fftfreq(n, d=pri))
+    f_d_measured = freqs[np.argmax(np.abs(spectrum))]
+    rdot_recovered = -lam * f_d_measured / 2.0
+
+    assert rdot_recovered == pytest.approx(range_rate_mps, abs=2.0)
 
 
 def test_phase_progression_zero_for_static_target():

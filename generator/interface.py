@@ -53,6 +53,20 @@ class RadarWaveformParams:
     frame_interval_s: float = 1.0            # ASSUMED: this project's 1 Hz revisit cadence
 
 
+def frame_pulse_times(num_frames: int, num_pulses_per_frame: int,
+                       frame_interval_s: float, pri_s: float) -> np.ndarray:
+    """Frame-major slow-time sample times: frame k starts at k*frame_interval_s
+    and its num_pulses_per_frame pulses are spaced pri_s apart within it. Not
+    a uniform array (it jumps at each frame boundary) -- this is what a real
+    'stare a dwell, retask, stare again' revisit pattern actually looks like,
+    and physics_projection.cv_trajectory/project_action take an arbitrary
+    times_s array, so this shape is exactly as valid an input as a uniform one.
+    """
+    frame_idx = np.repeat(np.arange(num_frames), num_pulses_per_frame)
+    pulse_idx = np.tile(np.arange(num_pulses_per_frame), num_frames)
+    return frame_idx * frame_interval_s + pulse_idx * pri_s
+
+
 @dataclass
 class PhantomExport:
     """One phantom's PhysicsProjection-approved plan, ready to be handed to
@@ -73,6 +87,7 @@ class PhantomExport:
 def export_plan_for_render(phantoms: list[PhantomExport],
                             waveform: RadarWaveformParams,
                             mat_path: str,
+                            num_pulses_per_frame: int,
                             sweep_schedule: Optional[np.ndarray] = None) -> None:
     """Writes the PRE-render .mat that +generator/render.m consumes: each
     phantom's approved (range, amplitude, phase) trajectory plus the radar
@@ -91,6 +106,14 @@ def export_plan_for_render(phantoms: list[PhantomExport],
     if not phantoms:
         raise ValueError("export_plan_for_render: no phantoms to export")
 
+    n_samples_total = phantoms[0].plan.range_m.shape[0]
+    if n_samples_total % num_pulses_per_frame != 0:
+        raise ValueError(
+            f"phantom sample count {n_samples_total} is not a multiple of "
+            f"num_pulses_per_frame={num_pulses_per_frame}; "
+            "times_s must be laid out frame-major (num_frames * num_pulses_per_frame)."
+        )
+
     out = {
         "fs": float(waveform.fs),
         "pulse_width_s": float(waveform.pulse_width_s),
@@ -99,6 +122,7 @@ def export_plan_for_render(phantoms: list[PhantomExport],
         "carrier_hz": float(waveform.carrier_hz),
         "frame_interval_s": float(waveform.frame_interval_s),
         "num_phantoms": float(len(phantoms)),
+        "num_pulses_per_frame": float(num_pulses_per_frame),
     }
     if sweep_schedule is not None:
         out["sweep_schedule"] = np.asarray(sweep_schedule, dtype=np.float64)
