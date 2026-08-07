@@ -15,7 +15,7 @@ import numpy as np
 from generator.decision.baselines import ScriptedHeuristic, TabularBandit
 from generator.decision.d3qn_agent import D3QNAgent, D3QNConfig
 from generator.decision.env import (
-    MOTHER_RANGE_HELDOUT, MOTHER_RANGE_HELDOUT_BINDING, MOTHER_RANGE_TRAIN,
+    ACTION_GRID, MOTHER_RANGE_HELDOUT, MOTHER_RANGE_HELDOUT_BINDING, MOTHER_RANGE_TRAIN,
     MOTHER_RANGE_TRAIN_BINDING, N_ACTIONS, PhantomPlacementEnv,
 )
 from generator.decision.matlab_bridge import MatlabBridge
@@ -35,7 +35,14 @@ def wilson_ci(successes: int, n: int, z: float = 1.96):
 def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed: int = 0,
           train_contexts: tuple = MOTHER_RANGE_TRAIN):
     env = PhantomPlacementEnv(bridge, mother_ranges=train_contexts, rng=np.random.default_rng(seed))
-    agent = D3QNAgent(D3QNConfig(n_actions=N_ACTIONS), seed=seed)
+    # Size the epsilon decay to the ACTUAL episode budget. The first run of
+    # this file used D3QNConfig's default 300 decay steps against 150
+    # episodes and finished still exploring 62% of the time -- i.e. the
+    # reported greedy policy came from an agent that had barely stopped
+    # acting randomly. Decay over 60% of the run so the tail is exploitation.
+    agent = D3QNAgent(D3QNConfig(n_actions=N_ACTIONS,
+                                  epsilon_decay_steps=max(1, int(0.6 * train_episodes))),
+                       seed=seed)
     bandit = TabularBandit(train_contexts, epsilon=0.1, seed=seed)
     buf = ReplayBuffer()
 
@@ -73,12 +80,19 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
                "heuristic": lambda o, r: heuristic.act(r)}
     results = {name: {c: 0 for c in heldout_contexts} for name in methods}
 
+    # Which action each (deterministic, greedy) policy actually picks per
+    # context -- logged because it is what makes the N below interpretable:
+    # a greedy policy picks ONE action per context, so N repeats are N noise
+    # draws of the SAME decision, not N independent decisions.
+    chosen = {name: {} for name in methods}
+
     for context in heldout_contexts:
         for _ in range(eval_episodes_per_context):
             for name, policy in methods.items():
                 env.mother_range_m = context
                 obs = env._obs()
                 action = policy(obs, context)
+                chosen[name].setdefault(context, set()).add(action)
                 res = env.step(action)
                 if res.outcome == "confirmed_real":
                     results[name][context] += 1
@@ -97,6 +111,15 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
             total_n += n
         p, lo, hi = wilson_ci(total_s, total_n)
         print(f"  POOLED               P_confirm={p:.2f}  N={total_n}  95% CI=[{lo:.2f},{hi:.2f}]")
+
+    print("\n=== actions actually chosen (greedy policies are deterministic) ===")
+    print("A single action per context means the N above is N NOISE DRAWS of one")
+    print("decision, not N independent decisions -- read the CIs accordingly.")
+    for name in methods:
+        for context in heldout_contexts:
+            acts = sorted(chosen[name].get(context, set()))
+            decoded = [ACTION_GRID[a] for a in acts]
+            print(f"  {name:>10} ctx={context:>6.0f}m -> action(s) {acts} = {decoded}")
 
     return results
 
