@@ -61,18 +61,21 @@ class MatlabBridge:
         return judge_mat_path
 
     def run_judge(self, judge_mat_path: str, **judge_kwargs) -> dict:
-        """Calls engine.runJudge(judgeMatPath, Name, value, ...) and returns
-        the feedback struct as a plain Python dict (only the fields this
-        project's env.py actually reads -- the full struct has many more,
-        see +engine/runJudge.m's header)."""
+        """Calls generator.judgeSummary (NOT engine.runJudge directly --
+        see +generator/judgeSummary.m for why: engine.runJudge's
+        feedback.frame_log can contain a non-scalar nested struct array,
+        which MATLAB Engine API for Python cannot auto-convert at all,
+        crashing the WHOLE call with "only a scalar struct can be
+        returned" -- found by a real training run failing after ~75
+        episodes, not by inspection) and returns a plain Python dict."""
         nv = _flatten_name_value(judge_kwargs)
-        fb = self._eng.engine.runJudge(judge_mat_path, *nv, nargout=1)
+        fb = self._eng.generator.judgeSummary(judge_mat_path, *nv, nargout=1)
         return {
             "confirmed_tracks": int(fb["confirmed_tracks"]),
             "false_tracks_surviving": int(fb["false_tracks_surviving"]),
             "flagged_decoys": int(fb["flagged_decoys"]),
             "eccm_label": str(fb["eccm_label"]),
-            "track_label": list(fb["track_label"]) if fb["track_label"] else [],
+            "track_label": str(fb["track_label"]).split(",") if fb["track_label"] else [],
         }
 
 
