@@ -68,13 +68,37 @@ NUM_PULSES_PER_FRAME = 32
 FRAME_INTERVAL_S = 1.0
 MIN_LATENCY_S = 1e-6   # plausible DRFM digital-delay latency, matches Gate A/B
 
-# Episode context: mother platform's own range to the radar. ASSUMED spread
-# -- wide enough that causality actually binds for some (range0, rate)
-# choices at the far/fast end (see the worked example in PHASE_C notes) and
-# is slack for others, so there is a real decision to make, not a fixed
-# ceiling every action clears.
+# Episode context: mother platform's own range to the radar.
+#
+# MEASURED CORRECTION (generator/decision/analyze_action_space.py, run
+# 7 Aug 2026): this first pair of context sets was chosen believing
+# causality would bind "at the far/fast end". It does NOT -- every context
+# from 500 to 1100 m sits below the SMALLEST range0 choice (1900 m), so the
+# veto removes 0% of the grid at 5 of 6 contexts and 5% at the sixth. The
+# physics-projection layer is very nearly inert here, which materially
+# changes how any result on these contexts must be read: the task reduces
+# to "avoid the rate=0 flat-amplitude actions", not "search a
+# physics-constrained space". Kept as the DEFAULT so the run already
+# published against them stays reproducible; use the BINDING sets below
+# for an experiment that actually exercises the veto.
 MOTHER_RANGE_TRAIN = (500.0, 800.0, 1100.0)      # train on these
 MOTHER_RANGE_HELDOUT = (650.0, 950.0, 1400.0)    # DISJOINT eval set, Blueprint 5.5
+
+# Contexts where causality genuinely BINDS: comparable to / above the
+# range0 choices (1900-3400 m), so a large, context-dependent fraction of
+# the grid is physically impossible and the agent must actually respect it.
+# Measured veto rates (analyze_action_space.py): train 25/55/85%,
+# heldout 30/80/85%.
+#
+# The heldout set tops out at 3250 m, found empirically rather than
+# guessed (two earlier guesses, 3500 m and 3300 m, were both DEGENERATE --
+# 100% vetoed, no legal action at all, so every method scores 0 by
+# construction and the cell measures nothing about any policy). The
+# binding constraint is tighter than the range0 grid suggests because the
+# latency term alone demands c*min_latency/2 = 149.9 m of standoff on top
+# of the mother's own range.
+MOTHER_RANGE_TRAIN_BINDING = (1800.0, 2600.0, 3200.0)
+MOTHER_RANGE_HELDOUT_BINDING = (2100.0, 2900.0, 3250.0)
 
 
 @dataclass

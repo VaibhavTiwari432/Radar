@@ -14,7 +14,10 @@ import numpy as np
 
 from generator.decision.baselines import ScriptedHeuristic, TabularBandit
 from generator.decision.d3qn_agent import D3QNAgent, D3QNConfig
-from generator.decision.env import MOTHER_RANGE_HELDOUT, MOTHER_RANGE_TRAIN, N_ACTIONS, PhantomPlacementEnv
+from generator.decision.env import (
+    MOTHER_RANGE_HELDOUT, MOTHER_RANGE_HELDOUT_BINDING, MOTHER_RANGE_TRAIN,
+    MOTHER_RANGE_TRAIN_BINDING, N_ACTIONS, PhantomPlacementEnv,
+)
 from generator.decision.matlab_bridge import MatlabBridge
 from generator.decision.replay_buffer import ReplayBuffer
 
@@ -29,10 +32,11 @@ def wilson_ci(successes: int, n: int, z: float = 1.96):
     return p_hat, max(0.0, center - half), min(1.0, center + half)
 
 
-def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed: int = 0):
-    env = PhantomPlacementEnv(bridge, mother_ranges=MOTHER_RANGE_TRAIN, rng=np.random.default_rng(seed))
+def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed: int = 0,
+          train_contexts: tuple = MOTHER_RANGE_TRAIN):
+    env = PhantomPlacementEnv(bridge, mother_ranges=train_contexts, rng=np.random.default_rng(seed))
     agent = D3QNAgent(D3QNConfig(n_actions=N_ACTIONS), seed=seed)
-    bandit = TabularBandit(MOTHER_RANGE_TRAIN, epsilon=0.1, seed=seed)
+    bandit = TabularBandit(train_contexts, epsilon=0.1, seed=seed)
     buf = ReplayBuffer()
 
     t0 = time.time()
@@ -60,14 +64,16 @@ def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed:
 
 
 def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
-             heuristic: ScriptedHeuristic, eval_episodes_per_context: int, seed: int = 1000):
-    env = PhantomPlacementEnv(bridge, mother_ranges=MOTHER_RANGE_HELDOUT, rng=np.random.default_rng(seed))
+             heuristic: ScriptedHeuristic, eval_episodes_per_context: int, seed: int = 1000,
+             heldout_contexts: tuple = MOTHER_RANGE_HELDOUT,
+             train_contexts: tuple = MOTHER_RANGE_TRAIN):
+    env = PhantomPlacementEnv(bridge, mother_ranges=heldout_contexts, rng=np.random.default_rng(seed))
     methods = {"d3qn": lambda o, r: agent.act(o, greedy=True),
                "bandit": lambda o, r: bandit.act(r, greedy=True),
                "heuristic": lambda o, r: heuristic.act(r)}
-    results = {name: {c: 0 for c in MOTHER_RANGE_HELDOUT} for name in methods}
+    results = {name: {c: 0 for c in heldout_contexts} for name in methods}
 
-    for context in MOTHER_RANGE_HELDOUT:
+    for context in heldout_contexts:
         for _ in range(eval_episodes_per_context):
             for name, policy in methods.items():
                 env.mother_range_m = context
@@ -78,11 +84,11 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
                     results[name][context] += 1
 
     print(f"\n=== Gate C eval: N={eval_episodes_per_context} per held-out context ===")
-    print(f"held-out mother_range_m contexts: {MOTHER_RANGE_HELDOUT} (train used {MOTHER_RANGE_TRAIN})")
+    print(f"held-out mother_range_m contexts: {heldout_contexts} (train used {train_contexts})")
     for name in methods:
         print(f"\n-- {name} --")
         total_s, total_n = 0, 0
-        for context in MOTHER_RANGE_HELDOUT:
+        for context in heldout_contexts:
             s = results[name][context]
             n = eval_episodes_per_context
             p, lo, hi = wilson_ci(s, n)
@@ -100,11 +106,22 @@ if __name__ == "__main__":
     parser.add_argument("--train-episodes", type=int, default=250)
     parser.add_argument("--eval-episodes", type=int, default=10)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--binding-contexts", action="store_true",
+                        help="Use the mother_range sets where the causality veto actually "
+                             "bites (25-85%% of the action grid vetoed) instead of the "
+                             "default sets, where analyze_action_space.py measured it "
+                             "removing 0%% at 5 of 6 contexts.")
     args = parser.parse_args()
+
+    train_ctx = MOTHER_RANGE_TRAIN_BINDING if args.binding_contexts else MOTHER_RANGE_TRAIN
+    heldout_ctx = MOTHER_RANGE_HELDOUT_BINDING if args.binding_contexts else MOTHER_RANGE_HELDOUT
 
     with MatlabBridge() as bridge:
         print(f"MATLAB engine startup: {bridge.startup_seconds:.1f}s")
+        print(f"contexts: train={train_ctx} heldout={heldout_ctx} "
+              f"({'BINDING veto' if args.binding_contexts else 'default, veto near-inert'})")
         print(f"Training D3QN + bandit for {args.train_episodes} episodes each (shared env draws)...")
-        agent, bandit = train(bridge, args.train_episodes, seed=args.seed)
+        agent, bandit = train(bridge, args.train_episodes, seed=args.seed, train_contexts=train_ctx)
         heuristic = ScriptedHeuristic()
-        evaluate(bridge, agent, bandit, heuristic, args.eval_episodes, seed=1000 + args.seed)
+        evaluate(bridge, agent, bandit, heuristic, args.eval_episodes, seed=1000 + args.seed,
+                 heldout_contexts=heldout_ctx, train_contexts=train_ctx)

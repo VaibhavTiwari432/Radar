@@ -16,7 +16,8 @@ Run: python -m generator.decision.analyze_action_space
 from common.constants import C
 from generator.decision.env import (
     ACTION_GRID, FRAME_INTERVAL_S, MIN_LATENCY_S, MOTHER_RANGE_HELDOUT,
-    MOTHER_RANGE_TRAIN, NUM_FRAMES,
+    MOTHER_RANGE_HELDOUT_BINDING, MOTHER_RANGE_TRAIN, MOTHER_RANGE_TRAIN_BINDING,
+    NUM_FRAMES,
 )
 from generator.interface import frame_pulse_times
 from generator.physics_projection import project_action
@@ -46,7 +47,12 @@ def analyze(contexts, times):
 def main():
     times = frame_pulse_times(NUM_FRAMES, 32, FRAME_INTERVAL_S, C.PRI)
     print(f"action grid size: {len(ACTION_GRID)}")
-    for label, contexts in (("TRAIN", MOTHER_RANGE_TRAIN), ("HELDOUT", MOTHER_RANGE_HELDOUT)):
+    for label, contexts in (
+        ("TRAIN (default)", MOTHER_RANGE_TRAIN),
+        ("HELDOUT (default)", MOTHER_RANGE_HELDOUT),
+        ("TRAIN (binding)", MOTHER_RANGE_TRAIN_BINDING),
+        ("HELDOUT (binding)", MOTHER_RANGE_HELDOUT_BINDING),
+    ):
         print(f"\n-- {label} --")
         print(f"{'context_m':>10} {'feasible':>10} {'vetoed':>8} {'%vetoed':>9} {'%static':>9}")
         for r in analyze(contexts, times):
