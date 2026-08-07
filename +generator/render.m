@@ -18,6 +18,28 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
 %       'SourceAzimuthRad'   0     ONE scalar for the WHOLE scene (see below)
 %       'SubapertureSepM'    0.30  monopulse subaperture separation [m]
 %       'IncludeAngleChannel' true  write rx_frames_delta or not
+%       'PhantomSweepSchedule' []  what the PHANTOM believes it should
+%                          transmit each frame (+1/-1 per frame, same
+%                          length convention as sweep_schedule in the .mat).
+%                          Default [] = identical to the radar's actual
+%                          schedule, i.e. omniscient repeater (this
+%                          project's historical, "known radar" behaviour).
+%                          Pass a DIFFERENT array (e.g. all-ones, or the
+%                          previous frame's actual value) to model a
+%                          repeater synthesizing from a stale intercept --
+%                          this is what actually lets waveform agility cost
+%                          a repeater anything; with the default, agility
+%                          is invisible to this generator by construction,
+%                          since it always happens to retransmit the
+%                          correct chirp direction.
+%       'NumPulsesPerFrame == 1' collapses rx_frames/rx_frames_delta to a
+%                          legacy 2-D [fastTime x numFrames] shape (matches
+%                          num_pulses_per_frame read from the .mat) --
+%                          this is what actually reproduces "range-only,
+%                          no Doppler measurement possible", not merely a
+%                          cube with one degenerate pulse (see
+%                          +engine/runJudge.m's own isCube = ndims==3 check,
+%                          which a [400 1 8] cube would still satisfy).
 %
 %   WHY THIS FUNCTION EXISTS, AND WHY IT NEVER TAKES A PER-PHANTOM ANGLE.
 %   Blueprint Part 2.4: a single transmit aperture cannot be projected into
@@ -57,6 +79,7 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
     p.addParameter('SourceAzimuthRad', 0, @isscalar);
     p.addParameter('SubapertureSepM', 0.30, @(x) isscalar(x) && x > 0);
     p.addParameter('IncludeAngleChannel', true, @islogical);
+    p.addParameter('PhantomSweepSchedule', [], @isnumeric);
     p.parse(varargin{:});
     opts = p.Results;
 
@@ -92,6 +115,14 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
         sweepSched = ones(1, numFrames);
     end
 
+    if isempty(opts.PhantomSweepSchedule)
+        phantomSched = sweepSched;   % omniscient default -- see header
+    else
+        phantomSched = double(opts.PhantomSweepSchedule(:)');
+        assert(numel(phantomSched) >= numFrames, 'generator:render:shortPhantomSchedule', ...
+            'PhantomSweepSchedule has %d entries for %d frames', numel(phantomSched), numFrames);
+    end
+
     fastN = opts.FastTimeSamples;
     rxFrames = complex(zeros(fastN, numPulsesPerFrame, numFrames));
     if opts.IncludeAngleChannel
@@ -102,7 +133,12 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
     end
 
     for k = 1:numFrames
-        [~, pulseSamples] = radar.agileWaveform(sweepSched(k), fs, pulseWidthS, prfHz, bandwidthHz);
+        % The PHANTOM's own transmitted copy is built from its BELIEF of the
+        % schedule (phantomSched), not necessarily the radar's real one
+        % (sweepSched) -- see 'PhantomSweepSchedule' above. They are equal
+        % by default, which is why agility costs nothing until a caller
+        % deliberately supplies a stale belief.
+        [~, pulseSamples] = radar.agileWaveform(phantomSched(k), fs, pulseWidthS, prfHz, bandwidthHz);
         pulseSamples = pulseSamples(:);
         pulseLen = numel(pulseSamples);
 
@@ -131,6 +167,19 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                 noiseDelta = opts.NoiseAmplitude * (randn(fastN,1) + 1i*randn(fastN,1)) / sqrt(2);
                 rxFramesDelta(:, pIdx, k) = sigBuf * deltaRatio + noiseDelta;
             end
+        end
+    end
+
+    if numPulsesPerFrame == 1
+        % Squeeze to a true legacy 2-D [fastTime x numFrames] shape -- a
+        % [fastTime x 1 x numFrames] cube would still satisfy runJudge.m's
+        % ndims==3 "isCube" check and get a (degenerate, 1-sample) Doppler
+        % FFT, which is not the same thing as "this radar cannot measure
+        % Doppler at all". This is what actually reproduces the range-only
+        % judge path (doppler_source='none-2d-export-screen-disabled').
+        rxFrames = reshape(rxFrames, fastN, numFrames);
+        if opts.IncludeAngleChannel
+            rxFramesDelta = reshape(rxFramesDelta, fastN, numFrames);
         end
     end
 
