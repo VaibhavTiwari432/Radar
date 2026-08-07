@@ -1,5 +1,52 @@
 # AI Swarm Hallucination – Agentic Loop Guardrails for MATLAB + Python Simulation
 
+> # ⚠ READ FIRST — 7 AUGUST 2026: THE GENERATOR WAS ARCHIVED AND REBUILT
+>
+> **Everything below this banner that describes `cogengine/`, `cognitive_engine/`,
+> `+synth/`, `+agent/`, `+features/`, `+engine/+entity/` (the Virtual Entity
+> Engine), `+engine/+track/shadowEKF.m`, or `+engine/decideScene.m` describes
+> the ARCHIVED generator.** Those paths are no longer in the active tree; they
+> live in `trash/legacy-generator-20260807/` with full git history. Rollback
+> tag: `archive-point-20260807`.
+>
+> **The judge was NOT touched.** `+radar/`, `+track/`, `+physics/`,
+> `+engine/runJudge.m`, `+engine/runJudgeJson.m`, `+data/` are exactly as they
+> were. Every judge-side result in this file still stands.
+>
+> **What replaced the generator** (see `GOVERNANCE.md` for the dependency rule,
+> `trash/README.md` for what moved and why, `trash/BROKEN_DOWNSTREAM.md` for
+> what this broke on purpose):
+>
+> | New | Role |
+> |---|---|
+> | `common/constants.py`, `common/provenance.py` | Rule 1 physics mirrored from `+physics/Constants.m`; MEASURED/DERIVED/ASSUMED/UNVALIDATED tagging |
+> | `generator/physics_projection.py` | Blueprint §2.1–2.3: causality **veto**, amplitude law, phase-tracks-range. The only path from an action to a renderable scene. 12/12 tests |
+> | `generator/interface.py` | The generator→judge contract, field names verified against `+engine/runJudge.m` itself |
+> | `+generator/render.m` | Synthesis. Uses `radar.agileWaveform`'s own samples, never an analytic chirp. **One** `SourceAzimuthRad` per call — §2.4 enforced architecturally |
+> | `+generator/judgeSummary.m` | Scalar-only wrapper over `engine.runJudge` (MATLAB-Engine-for-Python cannot convert `frame_log`'s nested struct arrays) |
+> | `generator/decision/` | Phase C: single-step env, dueling-DQN, scripted + bandit baselines, persistent-engine training loop. 11/11 tests |
+>
+> **Results on the rebuild, measured against the real judge:**
+> - **Gate A PASS** — `tests/test_generator_gate_a.m`, 4/4. Consistent phantom
+>   → `real`; flat-phase pull-off → flagged; two phantoms from one aperture →
+>   both flagged co-bearing; angle-blind control → not flagged.
+> - **Gate B** — `PHASE_B_RESULTS.md`. Single phantom P_confirm=1.00 across
+>   every radar class; **2-phantom swarm 1.00 → 0.00 the instant monopulse is
+>   on**. The §2.4 wall, reproduced independently on a from-scratch generator.
+> - **Phase C** — code complete and unit-tested; the training/eval run's
+>   numbers are NOT in this file yet. Do not quote a Gate C result until
+>   `PHASE_C_RESULTS.md` exists.
+>
+> **Two real bugs the rebuild's own gates caught, worth knowing about:**
+> (1) `phase_progression_rad`'s sign was the Blueprint's illustrative
+> convention, the OPPOSITE of `runJudge.m`'s `Rdot = -λ·f_d/2` — a genuine
+> phantom scored `decoy` until Gate A caught it. (2) The Python bridge
+> crashed ~75 episodes into a training run on `frame_log`'s non-scalar
+> nested struct, which only occurs once a frame holds >1 track.
+>
+> Nothing below is deleted (Rule 5 — superseded results stay visible). Read it
+> as history of the archived generator, not as a description of the tree.
+
 > ## THREAT MODEL THIS BUILD ASSUMES: **CONSTANT VELOCITY**
 >
 > The Virtual Entity Engine (`+engine/+entity`, `+engine/+track/shadowEKF.m`)
