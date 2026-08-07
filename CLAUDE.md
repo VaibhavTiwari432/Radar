@@ -33,9 +33,17 @@
 > - **Gate B** — `PHASE_B_RESULTS.md`. Single phantom P_confirm=1.00 across
 >   every radar class; **2-phantom swarm 1.00 → 0.00 the instant monopulse is
 >   on**. The §2.4 wall, reproduced independently on a from-scratch generator.
-> - **Phase C** — code complete and unit-tested; the training/eval run's
->   numbers are NOT in this file yet. Do not quote a Gate C result until
->   `PHASE_C_RESULTS.md` exists.
+> - **Phase C — Gate C NOT MET** (`PHASE_C_RESULTS.md`). Two runs, one on an
+>   easy environment and one where the causality veto genuinely binds
+>   (25–85% of the action grid refused). Both times **D3QN 1.00 pooled ties
+>   the scripted heuristic 1.00 pooled** — Gate C asks it to *beat* the
+>   baseline. The bandit (0.67, then 0.33) is under-explored in both and is
+>   **not** a baseline anything can be said to have beaten. The agent's
+>   learned policy is a **constant** — the same action at every context,
+>   ignoring its observation. Its falling veto rate (52%→0%) is explained
+>   arithmetically by ε annealing alone (random base rate 55%, observed 52%
+>   at ε=1.0; predicted 2.7% at ε=0.05, observed 0%). Do not quote Phase C
+>   as evidence that RL helps here.
 >
 > **Two real bugs the rebuild's own gates caught, worth knowing about:**
 > (1) `phase_progression_rad`'s sign was the Blueprint's illustrative
