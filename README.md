@@ -24,19 +24,24 @@ Radar/
 ├── +data/               # loadRadChar.m  (Kaggle HDF5 loader)
 ├── +radar/              # cfarDetect.m, cfarDefaults.m, pulseCompress.m,
 │                        #   rangeDoppler.m, agileWaveform.m   (independent judge)
-├── +synth/              # synthesizeSwarm.m  (DRFM false-target synthesis)
 ├── +track/              # runTracker.m, trackerDefaults.m, discriminator.m
-├── +features/           # characterizeInterceptDechirp.m, coherentReplica.m,
-│                        #   synthesizeTxPulse.m, 54-D polyphase channelizer
-├── +agent/              # buildEnv.m, buildEnvWithFeatures.m  (D3QN, exploratory)
-├── +engine/             # runJudge.m, decideScene.m, sceneContract.m,
-│                        #   +entity/ (Virtual Entity Engine), +track/shadowEKF.m
-├── +experiments/        # runBenchmark.m, benchmarkSuite.m, demoSwarmFlood.m
+├── +engine/             # runJudge.m, runJudgeJson.m        (judge bridge)
+│
+│   # ---- generator, rebuilt 7 Aug 2026 (see GOVERNANCE.md) ----
+├── common/              # constants.py (mirrors +physics/Constants.m),
+│                        #   provenance.py (MEASURED/DERIVED/ASSUMED/UNVALIDATED)
+├── generator/           # physics_projection.py (2.1-2.3 veto), interface.py,
+│                        #   decision/ (env, dueling-DQN, baselines, training)
+├── +generator/          # render.m (synthesis), runGateA.m, phaseBSweep.m,
+│                        #   judgeSummary.m
+│
+├── +experiments/        # benchmarkSuite.m, demoSwarmFlood.m, ...
 ├── +missionsim/         # MATLAB mission-simulator app + frame-log export
-├── cogengine/           # Phase 2 Python brain: schema, renderer, radar_twin,
-│                        #   planner_cem, features, radar_params, matlab_judge
-├── cognitive_engine/    # READ-ONLY reference implementation (never modified)
 ├── server/              # FastAPI bridge: Python planner + MATLAB judge over HTTP
+├── trash/               # ARCHIVED pre-rebuild generator (+synth, +agent,
+│                        #   +features, cogengine, cognitive_engine, the VEE).
+│                        #   Full git history; tag archive-point-20260807.
+│                        #   Nothing in the active tree imports from here.
 ├── web/                 # React + three.js clients (replay, HiFi, live console)
 ├── data/                # RadChar-*.h5 goes here (see data/README.md)
 ├── results/             # figures, metrics, trained agents
@@ -69,12 +74,19 @@ The suite reports three outcomes, deliberately:
 
 **All ten stage files pass.** They are no longer "executable specifications"
 waiting to be implemented -- Stages 0-8 and DataIntegration all run green, and
-the suite has grown well beyond them (Virtual Entity Engine, angle channel,
-waveform agility, link budget, range ambiguity, mission simulator, and the
-Python `cogengine/` suite). Run `runAllTests.m`, or
+the suite has grown well beyond them (angle channel, waveform agility, link
+budget, range ambiguity, mission simulator). Run `runAllTests.m`, or
 `matlab -batch "cd('E:\Radar'); startup; runtests('tests')"`, for the current
 count -- and note that `startup` is required, since without it the
 Python-driven tests silently self-filter to Incomplete.
+
+**Caveat, 7 Aug 2026:** the generator was archived and rebuilt (see
+`GOVERNANCE.md`). Tests that built their scenes via the archived
+`engine.entity.*` are knowingly broken until they are rewired against the new
+generator -- the full list is in `trash/BROKEN_DOWNSTREAM.md`. Judge-side code
+(`+radar/`, `+track/`, `+engine/runJudge.m`) is untouched. The rebuilt
+generator's own gate is `tests/test_generator_gate_a.m` (4/4 passing) plus the
+Python suites (`python -m pytest generator/`, 23/23).
 
 ## Stage → claim → test map
 
