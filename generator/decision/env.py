@@ -179,7 +179,9 @@ class PhantomPlacementEnv:
         from generator.decision.baselines import Context
         pw_est = (self.sensed.pulse_width_est_s if self.sensed is not None
                   else C.pulse_width)
-        return Context(mother_range_m=self.mother_range_m, pulse_width_est_s=pw_est)
+        sigma = self.sensed.pulse_width_sigma_s if self.sensed is not None else 0.0
+        return Context(mother_range_m=self.mother_range_m, pulse_width_est_s=pw_est,
+                        pulse_width_sigma_s=sigma)
 
     def step(self, action_idx: int) -> StepResult:
         range0_m, range_rate_mps, rcs_m2 = ACTION_GRID[action_idx]

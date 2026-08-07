@@ -25,17 +25,20 @@ from generator.physics_projection import blind_range_m, project_action
 class Context:
     """What every policy is allowed to condition on. pulse_width_est_s is
     the SENSED value with its estimation noise -- the true width is never
-    in here, by design."""
+    in here, by design. pulse_width_sigma_s is the estimator's own stated
+    uncertainty, which the interceptor genuinely knows (it follows from the
+    measured intercept SNR) and which a policy may legitimately hedge on."""
     mother_range_m: float
     pulse_width_est_s: float
+    pulse_width_sigma_s: float = 0.0
 
 
 class ScriptedHeuristic:
-    """Domain rule, not learned, and now waveform-aware:
+    """Domain rule, not learned, and waveform-aware:
 
-      1. Reject anything inside the ESTIMATED blind range c*PW_est/2 -- a
-         phantom there is never seen at all, so it is the single most
-         costly mistake available in this action space.
+      1. Reject anything whose WHOLE TRAJECTORY is not clear of the
+         estimated blind range -- a phantom eclipsed at any point in the
+         dwell loses those detections.
       2. Reject anything that violates causality.
       3. Among what survives, take the CLOSEST range (strongest received
          power, since Pr ~ 1/R^4), the maximum RCS, and a non-zero
@@ -43,24 +46,40 @@ class ScriptedHeuristic:
          flat, which this project's own amplitude screen already treats as
          the classic decoy giveaway.
 
-    Note it reasons about the blind range with the same noisy estimate the
-    agent gets, so a bad intercept hurts it exactly as much.
+    `safety_sigmas` hedges against the interceptor's OWN estimation error:
+    the blind range is treated as c*(PW_est + k*sigma)/2. k=0 trusts the
+    estimate completely. This knob exists because the first RadChar run
+    exposed that trusting it is exactly where a closest-first rule breaks:
+    at low intercept SNR sigma reaches 5 us, so the "closest range that
+    clears my estimate" is frequently inside the TRUE blind range.
+
+    BUG FOUND AND FIXED HERE, recorded rather than quietly corrected: the
+    first version tested only `range0 < blind_range`, i.e. the INITIAL
+    range, so it would happily pick a phantom starting at 2600 m that
+    closes to 2250 m -- inside a 2398 m blind zone, eclipsed mid-track.
+    That made the baseline lose for a reason that had nothing to do with
+    the agent being better. It now checks the full trajectory by handing
+    pulse_width_s to project_action, which applies eclipse_veto across
+    every sample.
     """
 
-    def __init__(self):
+    def __init__(self, safety_sigmas: float = 0.0):
+        self.safety_sigmas = safety_sigmas
         self._times = frame_pulse_times(NUM_FRAMES, 32, FRAME_INTERVAL_S, C.PRI)
+
+    def _believed_pulse_width_s(self, ctx: Context) -> float:
+        return ctx.pulse_width_est_s + self.safety_sigmas * ctx.pulse_width_sigma_s
 
     def _feasible(self, idx: int, ctx: Context, require_preferred: bool) -> bool:
         range0_m, rate, rcs = ACTION_GRID[idx]
         if require_preferred and (rate == 0.0 or rcs < 1.0):
             return False
-        # Believed-eclipsed actions are rejected on the ESTIMATE, since that
-        # is all this policy can see.
-        if range0_m < blind_range_m(ctx.pulse_width_est_s):
-            return False
+        # Full-trajectory causality AND eclipse check, evaluated against
+        # what this policy BELIEVES the pulse width to be.
         plan = project_action(
             range0_m=range0_m, range_rate_mps=rate, times_s=self._times,
             mother_range_m=ctx.mother_range_m, min_latency_s=MIN_LATENCY_S, rcs_m2=rcs,
+            pulse_width_s=self._believed_pulse_width_s(ctx),
         )
         return plan.feasible
 
@@ -72,7 +91,11 @@ class ScriptedHeuristic:
                     best_idx, best_range0 = idx, range0_m
             if best_idx is not None:
                 return best_idx
-        return 0   # everything vetoed at this context; the index is moot
+        # Everything believed-infeasible: fall back to the farthest range,
+        # which is the most likely to clear a blind range this policy has
+        # evidently underestimated. Returning action 0 (the CLOSEST range)
+        # here, as the first version did, is the worst possible guess.
+        return max(range(len(ACTION_GRID)), key=lambda i: ACTION_GRID[i][0])
 
 
 class TabularBandit:

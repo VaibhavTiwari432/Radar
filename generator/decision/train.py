@@ -100,9 +100,15 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
              sensor: Optional[RadCharSensor] = None):
     env = PhantomPlacementEnv(bridge, mother_ranges=heldout_contexts,
                                rng=np.random.default_rng(seed), sensor=sensor, split="eval")
+    # 'heuristic_hedged' is the honest control on any D3QN win: if the
+    # agent's only real advantage is hedging against its own sensing error,
+    # a one-line rule (treat the blind range as c*(PW_est + 2*sigma)/2)
+    # should recover it -- and then the finding is "hedge", not "RL".
+    hedged = ScriptedHeuristic(safety_sigmas=2.0)
     methods = {"d3qn": lambda o, c: agent.act(o, greedy=True),
                "bandit": lambda o, c: bandit.act(c, greedy=True),
-               "heuristic": lambda o, c: heuristic.act(c)}
+               "heuristic": lambda o, c: heuristic.act(c),
+               "heuristic_hedged": lambda o, c: hedged.act(c)}
     results = {name: {c: 0 for c in heldout_contexts} for name in methods}
 
     # Which action each (deterministic, greedy) policy actually picks per
