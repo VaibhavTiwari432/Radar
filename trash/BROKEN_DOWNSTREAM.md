@@ -45,10 +45,33 @@ scene-construction call sites, not screens/tracker/CFAR code.
 - `test_waveform_agility.m`
 
 ## Not broken, checked and confirmed comment-only mentions
-`+engine/runJudge.m`, `+engine/runJudgeJson.m`, `+track/discriminator.m`,
+~~`+engine/runJudge.m`, `+engine/runJudgeJson.m`, `+track/discriminator.m`,
 `+track/amplitudeResidualScreen.m`, `+experiments/calibrationLog.m`,
 `+experiments/screenAttribution.m`, `+experiments/t9RealIntercept.m` —
-grepped for real (non-`%`) calls into the archived packages, found none.
+grepped for real (non-`%`) calls into the archived packages, found none.~~
+
+**CORRECTED 7 August 2026 — this claim was right for the four judge files
+and WRONG for all three `+experiments/` files.** Re-grepped excluding
+comment lines:
+
+| file | verdict | evidence |
+|---|---|---|
+| `+engine/runJudge.m` | **clean, confirmed** | no non-comment call |
+| `+engine/runJudgeJson.m` | **clean, confirmed** | no non-comment call |
+| `+track/discriminator.m` | **clean, confirmed** | no non-comment call |
+| `+track/amplitudeResidualScreen.m` | **clean, confirmed** | no non-comment call |
+| `+experiments/calibrationLog.m` | **BROKEN** | `agent.buildEnvEntity` (line 98), `agent.buildEnvDoppler` (line 130) |
+| `+experiments/screenAttribution.m` | **BROKEN** | `agent.buildEnvEntity` (line 53) |
+| `+experiments/t9RealIntercept.m` | **BROKEN** | `features.buildChannelizer` (47), `features.synthesizeTxPulse` (72, 74), `features.featureVector` (79) |
+
+The load-bearing half of the original claim survives: **the retained judge
+is untouched**, and the full-suite run above corroborates it independently
+with 119 passing methods.
+
+`+experiments/screenAttribution.m` is the notable loss — it was this
+project's per-SCREEN ECCM attribution experiment. Replaced by
+`+generator/screenAblation.m`, which asks the same question through the
+rebuilt generator instead of `agent.buildEnvEntity`.
 
 ---
 
@@ -88,6 +111,31 @@ files, including `Stage0/1/2/4/5/8_Test`, `DataIntegration_Test`,
 `test_range_rate_consistency`, `test_doppler_screen_coherence`,
 `test_micro_doppler_screen`, `test_link_budget`, `test_conformal` and the
 rebuild's own `test_generator_gate_a` (4/4).
+
+### `+experiments/` is 21 of 34 broken, not the 7 listed
+
+Same non-comment grep, run over the whole package:
+
+`agilityPredictability` `benchmarkSuite` `calibrationLog` `cliffRootCause`
+`demoSwarmFlood` `eccmLadder` `evalFeatureAgent` `ledgerAudit`
+`microDopplerScreenability` `nisConsistencyD3QN` `observerSweep`
+`plotDopplerStudy` `reportFigures` `reproduceHeadline` `screenAttribution`
+`t1TrajectoryDof` `t4JudgeGap` `t6JudgeGap` `t9RealIntercept`
+`trainDopplerAgent` `trainFeatureAgent`
+
+**Two of these matter more than the rest, and neither was flagged
+anywhere:**
+
+- **`benchmarkSuite.m` is the harness behind `BENCHMARK_RESULTS.md`.** Its
+  headline numbers (VEE evasion 100% CI[83.9,100], radar F1 0.000, regret
+  0.0%) are therefore **not currently reproducible** — the code that
+  produced them is archived. The numbers are not withdrawn (they were
+  honestly measured against the judge of the day), but nothing in the
+  active tree can re-derive them, and `BENCHMARK_RESULTS.md` does not say
+  so. Quote it as history, not as a re-runnable benchmark.
+- **`reproduceHeadline.m`** — the script whose entire purpose is
+  one-command reproduction of the project's headline result — is broken for
+  the same reason.
 
 ### The twelve files the list above misses
 

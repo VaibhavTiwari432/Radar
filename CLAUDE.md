@@ -111,6 +111,17 @@
   not feasible for this radar at this PRF**. Worse: the declared PRF implies a
   64-sample listening window and this project uses 400 — the radar has been
   having the range–Doppler ambiguity trade both ways.
+  > **STALE AS OF 7 AUGUST 2026 — do not quote the "N ≥ 4 is not feasible"
+  > sentence.** It is true only at the 50 kHz PRF it names. `common/
+  > constants.py` and `+physics/Constants.m` put this project at **PRF =
+  > 8000 Hz**, where **R_ua = 18737 m**, not 2998 m. Measured consequence:
+  > an 8-phantom scene spanning 1900–10300 m builds with **no ambiguity veto
+  > and no causality veto**, and the judge confirms **8/8**
+  > (`generator.phantomCountSweep`, `CLAIMABLE_RESULTS.md` F7). The binding
+  > constraint on N is not ambiguity — geometry allows ~16, given the
+  > 1124.2 m CFAR train+guard separation across a 1799–18737 m window. It is
+  > the **monopulse angle channel**, which flags every phantom at N ≥ 2
+  > regardless of N or power allocation.
   **(4)** The "shared 60 W GaN budget" is **not a physical constraint**. A
   masquerading phantom needs 7.8 mW; `planner_cem.py`'s watts-to-amplitude
   anchor overstates required power by 35.8 dB. Every N-vs-budget curve in this

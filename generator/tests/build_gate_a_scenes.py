@@ -40,6 +40,7 @@ from generator.physics_projection import (
     PhantomPlan,
     amplitude_trajectory,
     cv_trajectory,
+    phase_progression_rad,
     project_action,
 )
 
@@ -92,6 +93,41 @@ def build_naive_zero_doppler(out_path: str) -> None:
     )
 
 
+def build_flat_amplitude(out_path: str) -> None:
+    """Constant-ERP repeater: range walks and the phase tracks it correctly
+    (so screen 2 is SATISFIED), but received amplitude is held flat instead
+    of following the 1/R^2 law -- isolating discriminator screen 1.
+
+    Like build_naive_zero_doppler this bypasses project_action, which
+    derives amplitude from range and structurally cannot emit this. Built
+    only as the known-bad reference the amplitude screen must catch.
+
+    The flat level is the trajectory's own mean, so this arm is not merely
+    louder or quieter than the genuine one -- only the SLOPE differs, which
+    is what screen 1 actually fits.
+    """
+    times = _times()
+    range_m = cv_trajectory(range0_m=2200.0, range_rate_mps=-35.0, times_s=times)
+    amp = amplitude_trajectory(range_m, rcs_m2=1.0)
+    flat = np.full_like(np.asarray(amp, dtype=float), float(np.mean(amp)))
+    # Phase IS derived from range here, through the SAME function
+    # project_action uses -- the whole point is to leave screen 2 satisfied
+    # so any flag can only come from screen 1. (Not hand-rolled: this
+    # convention's sign was a real bug once, caught by Gate A.)
+    phase = phase_progression_rad(range_m, lambda_m=C.lambda_m)
+    plan = PhantomPlan(
+        feasible=True, range_m=range_m,
+        amplitude=tag(flat, Provenance.ASSUMED,
+                       "deliberately flattened -- constant-ERP repeater negative "
+                       "control, not producible via project_action"),
+        phase_rad=tag(phase, Provenance.DERIVED, "phase tracks range (2.3), left correct on purpose"),
+    )
+    export_plan_for_render(
+        [PhantomExport(plan=plan, rcs_m2=1.0)], WAVEFORM, out_path,
+        num_pulses_per_frame=NUM_PULSES_PER_FRAME,
+    )
+
+
 def build_cobearing_pair(out_path: str) -> None:
     times = _times()
     plan1 = project_action(
@@ -114,6 +150,8 @@ if __name__ == "__main__":
     build_genuine_consistent(f"{out_dir}/gateA_genuine.mat")
     build_naive_zero_doppler(f"{out_dir}/gateA_naive_zero_doppler.mat")
     build_cobearing_pair(f"{out_dir}/gateA_cobearing_pair.mat")
+    build_flat_amplitude(f"{out_dir}/gateA_flat_amplitude.mat")
     print(f"{out_dir}/gateA_genuine.mat")
     print(f"{out_dir}/gateA_naive_zero_doppler.mat")
     print(f"{out_dir}/gateA_cobearing_pair.mat")
+    print(f"{out_dir}/gateA_flat_amplitude.mat")
