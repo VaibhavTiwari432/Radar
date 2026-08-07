@@ -47,12 +47,21 @@ def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed:
     buf = ReplayBuffer()
 
     t0 = time.time()
+    # Outcome RATES over each reporting block, not a single sampled episode.
+    # The first binding-context run reported only `last_d3qn_outcome`, which
+    # made "the agent learned to stop proposing physically impossible
+    # actions" rest on 8 sampled points across 200 episodes -- suggestive,
+    # not measured. These counters make it a real number.
+    block = {"vetoed": 0, "confirmed_real": 0, "not_confirmed_or_flagged": 0}
+    veto_curve = []
+
     for ep in range(train_episodes):
         obs = env.reset()
         mother_range_m = env.mother_range_m
 
         d3qn_action = agent.act(obs)
         result = env.step(d3qn_action)
+        block[result.outcome] += 1
         buf.push(obs, d3qn_action, result.reward)
         if len(buf) >= batch_size:
             ob, ac, rw = buf.sample(batch_size)
@@ -64,10 +73,16 @@ def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed:
 
         if (ep + 1) % 25 == 0:
             elapsed = time.time() - t0
+            n = sum(block.values())
+            veto_rate = block["vetoed"] / n
+            success_rate = block["confirmed_real"] / n
+            veto_curve.append((ep + 1, veto_rate, success_rate))
             print(f"  episode {ep+1}/{train_episodes}  elapsed={elapsed:.0f}s  "
-                  f"epsilon={agent.epsilon():.2f}  last_d3qn_outcome={result.outcome}")
+                  f"epsilon={agent.epsilon():.2f}  "
+                  f"d3qn over last {n}: vetoed={veto_rate:.0%} confirmed_real={success_rate:.0%}")
+            block = {k: 0 for k in block}
 
-    return agent, bandit
+    return agent, bandit, veto_curve
 
 
 def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
@@ -144,7 +159,17 @@ if __name__ == "__main__":
         print(f"contexts: train={train_ctx} heldout={heldout_ctx} "
               f"({'BINDING veto' if args.binding_contexts else 'default, veto near-inert'})")
         print(f"Training D3QN + bandit for {args.train_episodes} episodes each (shared env draws)...")
-        agent, bandit = train(bridge, args.train_episodes, seed=args.seed, train_contexts=train_ctx)
+        agent, bandit, veto_curve = train(bridge, args.train_episodes, seed=args.seed,
+                                           train_contexts=train_ctx)
         heuristic = ScriptedHeuristic()
         evaluate(bridge, agent, bandit, heuristic, args.eval_episodes, seed=1000 + args.seed,
                  heldout_contexts=heldout_ctx, train_contexts=train_ctx)
+
+        if veto_curve:
+            first, last = veto_curve[0], veto_curve[-1]
+            print(f"\n=== did the agent learn the physics constraint? ===")
+            print(f"  first block (ep {first[0]}): vetoed {first[1]:.0%}, confirmed_real {first[2]:.0%}")
+            print(f"  last  block (ep {last[0]}): vetoed {last[1]:.0%}, confirmed_real {last[2]:.0%}")
+            print("  (a falling veto rate = the agent proposing fewer physically")
+            print("   impossible actions; confounded with epsilon decay, since a")
+            print("   random action is vetoed at the grid's base rate regardless)")
