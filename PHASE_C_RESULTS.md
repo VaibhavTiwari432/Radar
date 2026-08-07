@@ -94,7 +94,7 @@ caveat.
 
 ---
 
-## Run 2 — binding contexts (in progress at time of writing)
+## Run 2 — binding contexts (the informative experiment)
 
 The experiment that actually exercises the veto: `--binding-contexts` uses
 mother ranges comparable to or above the phantom range choices, so a large,
@@ -113,8 +113,92 @@ constraint is tighter than the range grid alone implies, because the latency
 term demands `c·min_latency/2 = 149.9 m` of standoff on top of the mother's
 own range.
 
-**Results: to be filled from the run. Do not quote this section until it
-contains pasted output.**
+### Run 2 results (200 train episodes, 10 eval per context, ε decayed to 0.05)
+
+| method | 2100 m | 2900 m | 3250 m | **POOLED** | 95% Wilson CI |
+|---|---|---|---|---|---|
+| **D3QN** | 1.00 | 1.00 | 1.00 | **1.00** (30/30) | [0.89, 1.00] |
+| **scripted heuristic** | 1.00 | 1.00 | 1.00 | **1.00** (30/30) | [0.89, 1.00] |
+| tabular bandit | 1.00 | 0.00 | 0.00 | 0.33 (10/30) | [0.19, 0.51] |
+
+**Gate C still NOT met: D3QN ties the scripted heuristic, it does not beat
+it** — now on an environment where the physics veto genuinely binds, so
+this is no longer explicable as a too-easy task.
+
+### The agent learned a CONSTANT policy — it ignores its own observation
+
+The action log is the most informative output of this run:
+
+| method | 2100 m | 2900 m | 3250 m |
+|---|---|---|---|
+| **D3QN** | (3400, +20, 1.0) | **(3400, +20, 1.0)** | **(3400, +20, 1.0)** |
+| heuristic | (2400, −20, 1.0) | (3400, −20, 1.0) | (3400, +20, 1.0) |
+| bandit | (2400, +50, 1.0) | (2900, −20, 0.15) | (1900, −50, 0.05) |
+
+D3QN emits **the same action at every context**. The state input, and the
+dueling `V(s)`/`A(s,a)` decomposition built to exploit it, do no work here.
+The heuristic, by contrast, is genuinely context-dependent.
+
+That constant is nonetheless close to optimal, verified rather than
+assumed: exactly **12 of 80 actions are feasible at all six binding
+contexts**, all at `range0 = 3400 m`. Among those 12, the agent's choice
+has the maximum RCS (1.0) *and* a non-zero range-rate, i.e. it avoids the
+flat-amplitude signature the judge's amplitude screen punishes. At the
+hardest context its causality margin is **+0.10 m** — sitting essentially
+exactly on the physical boundary.
+
+So the honest statement is: **the agent did not learn a policy, it learned
+a constant** — and that is a property of this action space (a
+universally-safe, high-RCS action exists) rather than a defect in the
+agent. Given such an action exists, a constant IS optimal, and the agent
+found it.
+
+### Did it learn to respect the physics constraint? Partly — and the confound is quantified
+
+Measured outcome rates per 25-episode block (not sampled single episodes —
+that weakness in the first binding run is why this instrumentation exists):
+
+| episodes | ε | vetoed | confirmed_real |
+|---|---|---|---|
+| 1–25 | 1.00 | **52%** | 36% |
+| 26–50 | 0.85 | 48% | 40% |
+| 51–75 | 0.65 | 60% | 32% |
+| 76–100 | 0.45 | 36% | 56% |
+| 101–125 | 0.26 | 28% | 60% |
+| 126–150 | 0.06 | 4% | 92% |
+| 151–175 | 0.05 | 4% | 96% |
+| 176–200 | 0.05 | **0%** | **100%** |
+
+The veto rate falls 52% → 0% and success rises 36% → 100%. **But this is
+almost entirely explained by ε decay, and the arithmetic says so:**
+
+- Uniform-random veto base rate over the training contexts (25/55/85%
+  vetoed) = **55%**. Observed first block, at ε=1.00 (fully random):
+  **52%**. These match — block 1 *is* the random baseline.
+- If the greedy action is feasible everywhere, predicted veto rate at
+  ε=0.05 is `0.05 × 55% =` **2.7%**. Observed: **0%** over 25 episodes.
+  Consistent.
+
+So the curve is what you would get from *any* policy whose greedy action
+happens to be universally feasible, simply by annealing ε. What the agent
+genuinely learned is **which single action to fix on** — and that action
+being feasible everywhere is the learned content. "Learned to respect
+physics" and "learned which action pays best" are not separable here,
+because when the answer is a constant they are the same statement.
+
+A fixed-ε control (train at constant ε, compare greedy-action quality over
+time) would separate them. **Not run.**
+
+---
+
+### The bandit got *worse* on the harder environment — still an artifact
+
+Bandit pooled: 0.67 (run 1) → **0.33** (run 2). Its action log shows three
+different actions across three contexts, including action 0 at the hardest
+one — still the `argmax`-tie-breaking-on-an-unexplored-Q-table signature.
+With 80 actions, ~67 episodes per context and ε=0.1, most actions are still
+never sampled. **The bandit remains an untrained control, not a baseline
+the D3QN can be said to have beaten.**
 
 ---
 
@@ -122,22 +206,46 @@ contains pasted output.**
 
 - **The full loop works end to end**: action → physics projection → MATLAB
   synthesis → real judge → reward, over a persistent MATLAB engine, for
-  hundreds of consecutive episodes.
-- **Both D3QN and a simple domain heuristic saturate the default
-  environment** (1.00 pooled). Against Blueprint 5.1's own framing, this is
-  the "if D3QN can't beat a well-tuned heuristic, that is itself a finding"
-  branch — with the additional, more important qualification that the
-  environment was too easy for the comparison to be informative either way.
-- **A cheap scripted rule is competitive with the learned policy here.**
-  Nothing in this run justifies the added complexity of an RL agent.
+  hundreds of consecutive episodes, on both an easy and a genuinely
+  constrained action space.
+- **The physics veto is real and binding in run 2** (25–85% of the grid
+  refused, base rate confirmed at 55% by the ε=1.0 block) — infeasible
+  actions never reach the judge.
+- **D3QN converges to a near-optimal action** (max RCS, non-static, feasible
+  at every context, verified against the 12 universally-feasible actions).
+- **A cheap scripted rule matches the learned policy in both runs.** Nothing
+  measured here justifies the added complexity of an RL agent for this
+  action space.
 
-## What is not established
+## What is NOT established
 
-- That D3QN beats *any* baseline (§4 above).
-- That the agent respects physical constraints — it was never asked to (§1).
-- That any of this generalises beyond a single phantom. Phase B already
-  measured the hard limit that matters more than any of the above: a
-  2-phantom co-bearing swarm goes from P_confirm 1.00 to **0.00** the
-  instant a monopulse angle channel is switched on (`PHASE_B_RESULTS.md`),
-  and no amount of agent training changes that, because bearing is fixed by
-  geometry rather than by signal content (Blueprint 2.4).
+- **That D3QN beats any baseline.** It ties the heuristic 1.00 vs 1.00 in
+  both runs; the bandit is under-trained in both and is not a valid
+  comparison.
+- **That the agent learned a context-dependent policy.** It demonstrably did
+  not — it emits one constant action and ignores its observation.
+- **That "learning to respect physics" is separable from ε decay.** The
+  arithmetic above shows the veto curve is consistent with pure annealing.
+  The fixed-ε control that would separate them was not run.
+- **That N=30 means 30 independent trials.** It is 3 deterministic decisions
+  × 10 noise draws in every cell of every table above.
+- **That any of this generalises beyond a single phantom.** Phase B already
+  measured the limit that dominates all of the above: a 2-phantom co-bearing
+  swarm goes from P_confirm 1.00 to **0.00** the instant a monopulse angle
+  channel is switched on (`PHASE_B_RESULTS.md`) — and no amount of agent
+  training changes that, because bearing is fixed by geometry rather than by
+  signal content (Blueprint 2.4).
+
+## Recommended next steps, in order of value
+
+1. **Make the decision genuinely context-dependent, or drop the RL.** If a
+   single constant action is optimal across the whole context set, this is
+   not a sequential-decision problem and Blueprint 5.1's own advice applies:
+   report the bandit/heuristic result and don't ship an agent. Making it
+   context-dependent means an action grid where no action is universally
+   feasible *and* the best feasible action differs by context.
+2. **Fix or drop the bandit baseline** — either far more episodes, or a
+   coarser action grid, or optimistic initialisation instead of zeros.
+3. **Multi-phantom, which is where the real question lives.** Phase B's
+   monopulse wall is the actual scientific result of this project; a
+   single-phantom agent scoring 1.00 does not speak to it.
