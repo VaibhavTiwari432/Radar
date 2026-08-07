@@ -173,6 +173,9 @@ if __name__ == "__main__":
                              "bites (25-85%% of the action grid vetoed) instead of the "
                              "default sets, where analyze_action_space.py measured it "
                              "removing 0%% at 5 of 6 contexts.")
+    parser.add_argument("--save", type=str, default=None,
+                        help="Write the trained policy (D3QN weights + bandit Q table) here, "
+                             "so a run can be re-evaluated without a full retrain.")
     parser.add_argument("--use-radchar", action="store_true",
                         help="Draw each episode's threat radar from a REAL RadChar record "
                              "(Kaggle abcxyzi/radchar-icassp-2023), so the radar's pulse "
@@ -199,6 +202,16 @@ if __name__ == "__main__":
         print(f"Training D3QN + bandit for {args.train_episodes} episodes each (shared env draws)...")
         agent, bandit, veto_curve = train(bridge, args.train_episodes, seed=args.seed,
                                            train_contexts=train_ctx, sensor=sensor)
+        if args.save:
+            # ponytail: one torch.save, no checkpoint manager. Enough to
+            # re-evaluate a policy without retraining (PHASE_C_RESULTS.md
+            # step 4); add periodic checkpointing when a run gets long
+            # enough that losing it mid-way matters.
+            import torch
+            torch.save({"d3qn": agent.net.state_dict(), "bandit_q": bandit.q,
+                        "config": vars(args)}, args.save)
+            print(f"saved policy -> {args.save}")
+
         heuristic = ScriptedHeuristic()
         evaluate(bridge, agent, bandit, heuristic, args.eval_episodes, seed=1000 + args.seed,
                  heldout_contexts=heldout_ctx, train_contexts=train_ctx, sensor=sensor)

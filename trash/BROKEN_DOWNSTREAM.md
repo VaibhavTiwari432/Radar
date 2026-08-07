@@ -49,3 +49,90 @@ scene-construction call sites, not screens/tracker/CFAR code.
 `+track/amplitudeResidualScreen.m`, `+experiments/calibrationLog.m`,
 `+experiments/screenAttribution.m`, `+experiments/t9RealIntercept.m` —
 grepped for real (non-`%`) calls into the archived packages, found none.
+
+---
+
+## MEASURED, 7 August 2026 — the list above was written from a grep and
+## UNDER-COUNTS. Twelve more test files are broken.
+
+First full-suite run since the archive (`results/full_suite_20260807.log`
+/ `.csv`, `runtests('tests')`, 212 test methods, 57 files):
+
+| outcome | count |
+|---|---|
+| passed | **119** |
+| errored (crashed on an archived name) | 63 |
+| gracefully skipped (`assumeFail`, the documented missing-dependency pattern) | 29 |
+| **genuine assertion failures** | **1** — and it is the same cause, see below |
+
+**Every failure resolves to one of nine archived names, all in
+`legacy-generator-20260807/`.** Counted from the log, not assumed:
+
+| unresolved name | occurrences |
+|---|---|
+| `engine.entity.EntityState` | 35 |
+| `engine.sceneContract` | 9 |
+| `agent.buildEnvEntity` | 4 |
+| `agent.buildEnvDoppler` | 3 |
+| `agent.buildEnvFeatureConditioned` | 3 |
+| `synth.synthesizeSwarm` | 3 |
+| `experiments.runBenchmark` | 1 |
+| `features.characterizeInterceptDechirp` | 1 |
+| `engine.entity.checkCausality` | 1 |
+
+**No failure has any other cause. There is no regression in the retained
+judge.** `+radar/`, `+track/`, `+physics/`, `+engine/runJudge.m` and
+`+data/` are confirmed intact by 119 passing methods across 21 fully-green
+files, including `Stage0/1/2/4/5/8_Test`, `DataIntegration_Test`,
+`test_package_separation`, `test_prf_consistency`,
+`test_range_rate_consistency`, `test_doppler_screen_coherence`,
+`test_micro_doppler_screen`, `test_link_budget`, `test_conformal` and the
+rebuild's own `test_generator_gate_a` (4/4).
+
+### The twelve files the list above misses
+
+All error on an archived name; none were named in the original grep:
+
+- `Stage7_Test.m` (`experiments.runBenchmark`)
+- `test_action_grid_unambiguous.m` (`agent.buildEnvDoppler`/`buildEnvEntity`)
+- `test_eccm_ladder.m`
+- `test_feature_agent_env.m` (`agent.buildEnvFeatureConditioned`,
+  `features.characterizeInterceptDechirp`)
+- `test_missionsim_eccm_screens.m`
+- `test_missionsim_lifecycle_rendering.m`
+- `test_missionsim_scene3d.m`
+- `test_missionsim_shell.m`
+- `test_missionsim_track_lifecycle.m`
+- `test_multi_target_judge.m` (`synth.synthesizeSwarm` — fixture only)
+- `test_radchar_three_arm.m` (`synth.synthesizeSwarm` — fixture only)
+- `test_screen_attribution_structural.m`
+
+The `+missionsim/` entries are consistent with the module-level breakage
+already listed above (the app's scene builders are archived), but the test
+files were not enumerated, so a suite run showed unexplained red.
+
+`test_multi_target_judge` and `test_radchar_three_arm` are worth calling out
+because they are **judge-side** tests, and the section above states judge
+logic is unaffected. That claim is still correct in substance — they break
+on `synth.synthesizeSwarm`, which builds their *fixture scene*, not on any
+screen, tracker or CFAR code — but the file list undersold the blast radius.
+
+### The one assertion failure is the same cause in disguise
+
+`test_drone_models/test_bad_model_and_class_mismatch_fail_fast` is a
+`verifyError` test. It expected `engine:entity:badModel` and got
+`MATLAB:undefinedVarOrClass` — it cannot reach the code whose failure it
+exists to check. Counted separately only because MATLAB classifies a wrong
+exception as a verification failure rather than an error; it is archive
+collateral, not a behavioural regression.
+
+### How to re-derive this
+
+```
+matlab -batch "cd('E:\Radar'); startup; clear functions; r = runtests('tests'); \
+    writetable(table(r),'results/full_suite_<date>.csv')"
+```
+Then split `Failed` from `Incomplete`: **Failed AND Incomplete = errored**
+(missing dependency), **Incomplete alone = graceful `assumeFail` skip**,
+**Failed alone = a real assertion failure worth investigating.** Conflating
+the two makes 36 files look red when only 24 actually crash.
