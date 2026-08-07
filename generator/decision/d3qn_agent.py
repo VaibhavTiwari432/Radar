@@ -49,7 +49,8 @@ class DuelingQNetwork(nn.Module):
 
 @dataclass
 class D3QNConfig:
-    obs_dim: int = 2
+    obs_dim: int = 4   # [geometry, sensed pulse width, its sigma, intercept SNR]
+                       # -- see PhantomPlacementEnv._obs (Blueprint 5.2)
     n_actions: int = 80
     hidden: int = 64
     lr: float = 1e-3

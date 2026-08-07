@@ -1,82 +1,123 @@
 """Blueprint Gate C requirement: "Baseline it against the scripted heuristic
 and a bandit... If D3QN can't beat a well-tuned heuristic inside the
-feasible region, that is itself a finding worth reporting." Both baselines
-below are honest, un-tuned-to-the-test-cases rules, not reverse-engineered
-from train.py's results.
+feasible region, that is itself a finding worth reporting."
+
+FAIRNESS RULE, applied throughout: every baseline sees exactly the same
+information the D3QN sees -- the geometry AND the noisy sensed pulse width
+(never the true one). A heuristic denied the waveform estimate would lose
+to the agent for the wrong reason, and reporting that as "RL wins" would be
+a rigged comparison, not a result.
 """
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 
-from generator.decision.env import ACTION_GRID, MIN_LATENCY_S, N_ACTIONS, NUM_FRAMES, FRAME_INTERVAL_S
 from common.constants import C
+from generator.decision.env import (
+    ACTION_GRID, FRAME_INTERVAL_S, MIN_LATENCY_S, N_ACTIONS, NUM_FRAMES,
+)
 from generator.interface import frame_pulse_times
-from generator.physics_projection import project_action
+from generator.physics_projection import blind_range_m, project_action
+
+
+@dataclass(frozen=True)
+class Context:
+    """What every policy is allowed to condition on. pulse_width_est_s is
+    the SENSED value with its estimation noise -- the true width is never
+    in here, by design."""
+    mother_range_m: float
+    pulse_width_est_s: float
 
 
 class ScriptedHeuristic:
-    """Domain rule, not learned: prefer the closest causality-feasible
-    range0 (strongest SNR), max believable RCS, and avoid a zero range-rate
-    -- a static target's amplitude trajectory is exactly flat, which this
-    project's own amplitude screen already treats as the classic decoy
-    giveaway (CLAUDE.md: "dead-flat amplitude scores as decoy on sight").
-    Feasibility is checked with the SAME project_action() the agent's
-    actions go through -- cheap (pure Python, no MATLAB call) since only
-    the veto matters here, not the rendered trajectory."""
+    """Domain rule, not learned, and now waveform-aware:
+
+      1. Reject anything inside the ESTIMATED blind range c*PW_est/2 -- a
+         phantom there is never seen at all, so it is the single most
+         costly mistake available in this action space.
+      2. Reject anything that violates causality.
+      3. Among what survives, take the CLOSEST range (strongest received
+         power, since Pr ~ 1/R^4), the maximum RCS, and a non-zero
+         range-rate -- a static target's amplitude trajectory is exactly
+         flat, which this project's own amplitude screen already treats as
+         the classic decoy giveaway.
+
+    Note it reasons about the blind range with the same noisy estimate the
+    agent gets, so a bad intercept hurts it exactly as much.
+    """
 
     def __init__(self):
         self._times = frame_pulse_times(NUM_FRAMES, 32, FRAME_INTERVAL_S, C.PRI)
 
-    def act(self, mother_range_m: float) -> int:
-        best_idx = None
-        best_range0 = float("inf")
-        for idx, (range0_m, rate, rcs) in enumerate(ACTION_GRID):
-            if rate == 0.0 or rcs < 1.0:
-                continue   # avoid the known-flat-amplitude case; prefer max RCS
-            plan = project_action(
-                range0_m=range0_m, range_rate_mps=rate, times_s=self._times,
-                mother_range_m=mother_range_m, min_latency_s=MIN_LATENCY_S, rcs_m2=rcs,
-            )
-            if plan.feasible and range0_m < best_range0:
-                best_idx = idx
-                best_range0 = range0_m
-        if best_idx is None:
-            # Nothing satisfies the "avoid static, max rcs" preference --
-            # fall back to ANY feasible action rather than refuse to act.
-            for idx, (range0_m, rate, rcs) in enumerate(ACTION_GRID):
-                plan = project_action(
-                    range0_m=range0_m, range_rate_mps=rate, times_s=self._times,
-                    mother_range_m=mother_range_m, min_latency_s=MIN_LATENCY_S, rcs_m2=rcs,
-                )
-                if plan.feasible:
-                    return idx
-            return 0   # every action vetoed at this context; index is moot
-        return best_idx
+    def _feasible(self, idx: int, ctx: Context, require_preferred: bool) -> bool:
+        range0_m, rate, rcs = ACTION_GRID[idx]
+        if require_preferred and (rate == 0.0 or rcs < 1.0):
+            return False
+        # Believed-eclipsed actions are rejected on the ESTIMATE, since that
+        # is all this policy can see.
+        if range0_m < blind_range_m(ctx.pulse_width_est_s):
+            return False
+        plan = project_action(
+            range0_m=range0_m, range_rate_mps=rate, times_s=self._times,
+            mother_range_m=ctx.mother_range_m, min_latency_s=MIN_LATENCY_S, rcs_m2=rcs,
+        )
+        return plan.feasible
+
+    def act(self, ctx: Context) -> int:
+        for require_preferred in (True, False):
+            best_idx, best_range0 = None, float("inf")
+            for idx, (range0_m, _, _) in enumerate(ACTION_GRID):
+                if self._feasible(idx, ctx, require_preferred) and range0_m < best_range0:
+                    best_idx, best_range0 = idx, range0_m
+            if best_idx is not None:
+                return best_idx
+        return 0   # everything vetoed at this context; the index is moot
 
 
 class TabularBandit:
-    """Epsilon-greedy contextual bandit, context discretized to its nearest
-    training mother_range bucket. Incremental sample-mean Q update -- the
-    simplest thing that is still a real bandit, per Blueprint 5.1's own
-    suggestion to keep this as the baseline for a single-step decision."""
+    """Epsilon-greedy contextual bandit over a DISCRETISED context.
 
-    def __init__(self, contexts: tuple, epsilon: float = 0.1, seed: Optional[int] = None):
-        self.contexts = contexts
+    Context is bucketed on both axes the problem actually varies along
+    (mother range, sensed pulse width), so the bandit has access to the
+    same structure as the D3QN. That is the fair comparison -- but note it
+    also multiplies the number of cells it must fill, which is exactly the
+    exploration cost that made this baseline uninformative in Phase C runs
+    1-2. Optimistic initialisation (init_q=1.0) replaces the previous
+    all-zero table, because np.argmax on all-zeros locks onto action 0 and
+    never explores at all under a greedy read.
+    """
+
+    def __init__(self, mother_buckets: tuple, pw_buckets_s: tuple,
+                 epsilon: float = 0.1, seed: Optional[int] = None,
+                 init_q: float = 1.0):
+        self.mother_buckets = mother_buckets
+        self.pw_buckets_s = pw_buckets_s
         self.epsilon = epsilon
         self.rng = np.random.default_rng(seed)
-        self.q = {c: np.zeros(N_ACTIONS) for c in contexts}
-        self.n = {c: np.zeros(N_ACTIONS, dtype=int) for c in contexts}
+        self.init_q = init_q
+        self.q: dict = {}
+        self.n: dict = {}
 
-    def _bucket(self, mother_range_m: float) -> float:
-        return min(self.contexts, key=lambda c: abs(c - mother_range_m))
+    def _key(self, ctx: Context):
+        m = min(self.mother_buckets, key=lambda c: abs(c - ctx.mother_range_m))
+        p = min(self.pw_buckets_s, key=lambda c: abs(c - ctx.pulse_width_est_s))
+        return (m, p)
 
-    def act(self, mother_range_m: float, greedy: bool = False) -> int:
-        c = self._bucket(mother_range_m)
+    def _cell(self, key):
+        if key not in self.q:
+            self.q[key] = np.full(N_ACTIONS, self.init_q, dtype=float)
+            self.n[key] = np.zeros(N_ACTIONS, dtype=int)
+        return self.q[key], self.n[key]
+
+    def act(self, ctx: Context, greedy: bool = False) -> int:
+        q, _ = self._cell(self._key(ctx))
         if not greedy and self.rng.random() < self.epsilon:
             return int(self.rng.integers(N_ACTIONS))
-        return int(np.argmax(self.q[c]))
+        return int(np.argmax(q))
 
-    def update(self, mother_range_m: float, action: int, reward: float) -> None:
-        c = self._bucket(mother_range_m)
-        self.n[c][action] += 1
-        self.q[c][action] += (reward - self.q[c][action]) / self.n[c][action]
+    def update(self, ctx: Context, action: int, reward: float) -> None:
+        key = self._key(ctx)
+        q, n = self._cell(key)
+        n[action] += 1
+        q[action] += (reward - q[action]) / n[action]

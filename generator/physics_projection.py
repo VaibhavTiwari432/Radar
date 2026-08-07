@@ -107,6 +107,39 @@ def amplitude_trajectory(range_m: np.ndarray, rcs_m2: float = 1.0, **link_kwargs
 # must be refused before synthesis, per Blueprint 5.3 ("the agent proposes,
 # physics disposes").
 
+def blind_range_m(pulse_width_s: float, c: float = C.c) -> float:
+    """DERIVED: c*PW/2. While the radar is transmitting its own pulse the
+    receiver is switched off, so an echo arriving before transmission ends
+    is never heard. A phantom placed inside this range is invisible no
+    matter how much power is spent on it -- it is wasted transmission, not
+    a stealthy one. PRF-independent (+physics/Constants.m's blind_range)."""
+    return c * pulse_width_s / 2.0
+
+
+def unambiguous_range_m(prf_hz: float, c: float = C.c) -> float:
+    """DERIVED: c/(2*PRF). Beyond this an echo arrives after the next pulse
+    has gone out and is reported at range - R_ua, i.e. it FOLDS to a wrong
+    range rather than being lost. A phantom placed there does not appear
+    where the generator intended it to."""
+    return c / (2.0 * prf_hz)
+
+
+def eclipse_veto(apparent_range_m: np.ndarray, pulse_width_s: float,
+                  c: float = C.c) -> tuple[bool, np.ndarray]:
+    """Returns (ok, margin_m); margin >= 0 iff the phantom stays outside the
+    radar's blind range at every sample."""
+    margin = np.asarray(apparent_range_m, dtype=float) - blind_range_m(pulse_width_s, c)
+    return bool(np.all(margin >= 0.0)), margin
+
+
+def ambiguity_veto(apparent_range_m: np.ndarray, prf_hz: float,
+                    c: float = C.c) -> tuple[bool, np.ndarray]:
+    """Returns (ok, margin_m); margin >= 0 iff the phantom stays inside the
+    radar's unambiguous range at every sample."""
+    margin = unambiguous_range_m(prf_hz, c) - np.asarray(apparent_range_m, dtype=float)
+    return bool(np.all(margin >= 0.0)), margin
+
+
 def causality_veto(apparent_range_m: np.ndarray,
                     mother_range_m: np.ndarray,
                     min_latency_s: float,
@@ -189,12 +222,25 @@ def project_action(range0_m: float,
                     min_latency_s: float,
                     rcs_m2: float = 1.0,
                     lambda_m: float = C.lambda_m,
+                    pulse_width_s: Optional[float] = None,
+                    prf_hz: Optional[float] = None,
                     **link_kwargs) -> PhantomPlan:
     """Block 3, the whole layer, one call: build a CV trajectory for the
-    proposed action, veto it if it breaks causality (2.1), otherwise return
-    the DERIVED amplitude (2.2) and phase (2.3) trajectories that make it
-    consistent by construction. This is the ONLY path from an agent's action
-    to something Block 4 (synthesis) is allowed to render.
+    proposed action and veto it unless it satisfies EVERY physical
+    constraint; only then return the DERIVED amplitude (2.2) and phase
+    (2.3) trajectories that make it consistent by construction. This is the
+    ONLY path from an agent's action to something Block 4 (synthesis) is
+    allowed to render.
+
+    Three independent vetoes, all DERIVED, none tunable:
+      2.1 causality  -- cannot retransmit a pulse not yet received
+      eclipse        -- cannot be seen inside c*PW/2 (receiver deaf).
+                        Applied only when pulse_width_s is supplied; a
+                        caller that does not know the radar's pulse width
+                        cannot be held to a constraint it cannot evaluate.
+      ambiguity      -- beyond c/(2*PRF) the phantom folds to a DIFFERENT
+                        range than intended. Applied only when prf_hz is
+                        supplied, same reasoning.
     """
     range_m = cv_trajectory(range0_m, range_rate_mps, times_s)
 
@@ -208,6 +254,32 @@ def project_action(range0_m: float,
                          f"(min_latency_s={min_latency_s})"),
             causality_margin_m=margin,
         )
+
+    if pulse_width_s is not None:
+        ok_e, margin_e = eclipse_veto(range_m, pulse_width_s)
+        if not ok_e:
+            return PhantomPlan(
+                feasible=False,
+                veto_reason=(f"eclipsed: inside the radar's blind range "
+                             f"({blind_range_m(pulse_width_s):.0f} m at PW="
+                             f"{pulse_width_s*1e6:.1f} us) by "
+                             f"{-float(np.min(margin_e)):.1f} m -- the receiver "
+                             f"is deaf while transmitting"),
+                causality_margin_m=margin,
+            )
+
+    if prf_hz is not None:
+        ok_a, margin_a = ambiguity_veto(range_m, prf_hz)
+        if not ok_a:
+            return PhantomPlan(
+                feasible=False,
+                veto_reason=(f"range-ambiguous: beyond R_ua "
+                             f"({unambiguous_range_m(prf_hz):.0f} m at PRF="
+                             f"{prf_hz:.0f} Hz) by "
+                             f"{-float(np.min(margin_a)):.1f} m -- would fold "
+                             f"to a different apparent range"),
+                causality_margin_m=margin,
+            )
 
     amp = amplitude_trajectory(range_m, rcs_m2=rcs_m2, **link_kwargs)
     phi = phase_progression_rad(range_m, lambda_m=lambda_m)

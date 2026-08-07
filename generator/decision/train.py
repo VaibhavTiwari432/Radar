@@ -9,10 +9,11 @@ Run: python -m generator.decision.train [--train-episodes N] [--eval-episodes N]
 """
 import argparse
 import time
+from typing import Optional
 
 import numpy as np
 
-from generator.decision.baselines import ScriptedHeuristic, TabularBandit
+from generator.decision.baselines import Context, ScriptedHeuristic, TabularBandit
 from generator.decision.d3qn_agent import D3QNAgent, D3QNConfig
 from generator.decision.env import (
     ACTION_GRID, MOTHER_RANGE_HELDOUT, MOTHER_RANGE_HELDOUT_BINDING, MOTHER_RANGE_TRAIN,
@@ -20,6 +21,7 @@ from generator.decision.env import (
 )
 from generator.decision.matlab_bridge import MatlabBridge
 from generator.decision.replay_buffer import ReplayBuffer
+from generator.sensing import RadCharSensor
 
 
 def wilson_ci(successes: int, n: int, z: float = 1.96):
@@ -32,9 +34,14 @@ def wilson_ci(successes: int, n: int, z: float = 1.96):
     return p_hat, max(0.0, center - half), min(1.0, center + half)
 
 
+PW_BUCKETS_S = (10e-6, 12e-6, 14e-6, 16e-6)   # spans the real RadChar range
+
+
 def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed: int = 0,
-          train_contexts: tuple = MOTHER_RANGE_TRAIN):
-    env = PhantomPlacementEnv(bridge, mother_ranges=train_contexts, rng=np.random.default_rng(seed))
+          train_contexts: tuple = MOTHER_RANGE_TRAIN,
+          sensor: Optional[RadCharSensor] = None):
+    env = PhantomPlacementEnv(bridge, mother_ranges=train_contexts,
+                               rng=np.random.default_rng(seed), sensor=sensor, split="train")
     # Size the epsilon decay to the ACTUAL episode budget. The first run of
     # this file used D3QNConfig's default 300 decay steps against 150
     # episodes and finished still exploring 62% of the time -- i.e. the
@@ -43,7 +50,8 @@ def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed:
     agent = D3QNAgent(D3QNConfig(n_actions=N_ACTIONS,
                                   epsilon_decay_steps=max(1, int(0.6 * train_episodes))),
                        seed=seed)
-    bandit = TabularBandit(train_contexts, epsilon=0.1, seed=seed)
+    bandit = TabularBandit(mother_buckets=train_contexts, pw_buckets_s=PW_BUCKETS_S,
+                            epsilon=0.1, seed=seed)
     buf = ReplayBuffer()
 
     t0 = time.time()
@@ -57,7 +65,7 @@ def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed:
 
     for ep in range(train_episodes):
         obs = env.reset()
-        mother_range_m = env.mother_range_m
+        ctx = env.context()
 
         d3qn_action = agent.act(obs)
         result = env.step(d3qn_action)
@@ -67,9 +75,9 @@ def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed:
             ob, ac, rw = buf.sample(batch_size)
             agent.update(ob, ac, rw)
 
-        bandit_action = bandit.act(mother_range_m)
+        bandit_action = bandit.act(ctx)
         bandit_result = env.step(bandit_action)
-        bandit.update(mother_range_m, bandit_action, bandit_result.reward)
+        bandit.update(ctx, bandit_action, bandit_result.reward)
 
         if (ep + 1) % 25 == 0:
             elapsed = time.time() - t0
@@ -88,11 +96,13 @@ def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed:
 def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
              heuristic: ScriptedHeuristic, eval_episodes_per_context: int, seed: int = 1000,
              heldout_contexts: tuple = MOTHER_RANGE_HELDOUT,
-             train_contexts: tuple = MOTHER_RANGE_TRAIN):
-    env = PhantomPlacementEnv(bridge, mother_ranges=heldout_contexts, rng=np.random.default_rng(seed))
-    methods = {"d3qn": lambda o, r: agent.act(o, greedy=True),
-               "bandit": lambda o, r: bandit.act(r, greedy=True),
-               "heuristic": lambda o, r: heuristic.act(r)}
+             train_contexts: tuple = MOTHER_RANGE_TRAIN,
+             sensor: Optional[RadCharSensor] = None):
+    env = PhantomPlacementEnv(bridge, mother_ranges=heldout_contexts,
+                               rng=np.random.default_rng(seed), sensor=sensor, split="eval")
+    methods = {"d3qn": lambda o, c: agent.act(o, greedy=True),
+               "bandit": lambda o, c: bandit.act(c, greedy=True),
+               "heuristic": lambda o, c: heuristic.act(c)}
     results = {name: {c: 0 for c in heldout_contexts} for name in methods}
 
     # Which action each (deterministic, greedy) policy actually picks per
@@ -103,10 +113,16 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
 
     for context in heldout_contexts:
         for _ in range(eval_episodes_per_context):
+            # One draw of the episode's RADAR per repeat, shared by all
+            # three policies, so they are compared on identical episodes
+            # rather than on independently-drawn ones.
+            env.mother_range_m = context
+            if env.sensor is not None:
+                env.sensed = env.sensor.sample(env.rng, split="eval")
+            obs = env._obs()
+            ctx = env.context()
             for name, policy in methods.items():
-                env.mother_range_m = context
-                obs = env._obs()
-                action = policy(obs, context)
+                action = policy(obs, ctx)
                 chosen[name].setdefault(context, set()).add(action)
                 res = env.step(action)
                 if res.outcome == "confirmed_real":
@@ -127,9 +143,11 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
         p, lo, hi = wilson_ci(total_s, total_n)
         print(f"  POOLED               P_confirm={p:.2f}  N={total_n}  95% CI=[{lo:.2f},{hi:.2f}]")
 
-    print("\n=== actions actually chosen (greedy policies are deterministic) ===")
-    print("A single action per context means the N above is N NOISE DRAWS of one")
-    print("decision, not N independent decisions -- read the CIs accordingly.")
+    print("\n=== actions actually chosen ===")
+    print("With --use-radchar the RADAR varies within a mother_range context, so a")
+    print("policy showing SEVERAL actions per context is genuinely conditioning on")
+    print("the sensed waveform; a SINGLE action means it is ignoring it. Without a")
+    print("sensor the context never changes, so one action per context is expected.")
     for name in methods:
         for context in heldout_contexts:
             acts = sorted(chosen[name].get(context, set()))
@@ -149,7 +167,15 @@ if __name__ == "__main__":
                              "bites (25-85%% of the action grid vetoed) instead of the "
                              "default sets, where analyze_action_space.py measured it "
                              "removing 0%% at 5 of 6 contexts.")
+    parser.add_argument("--use-radchar", action="store_true",
+                        help="Draw each episode's threat radar from a REAL RadChar record "
+                             "(Kaggle abcxyzi/radchar-icassp-2023), so the radar's pulse "
+                             "width -- and therefore its blind range, 1499-2398 m -- varies "
+                             "per episode and the agent sees only a noisy estimate of it. "
+                             "Train/eval use DISJOINT record sets.")
     args = parser.parse_args()
+
+    sensor = RadCharSensor() if args.use_radchar else None
 
     train_ctx = MOTHER_RANGE_TRAIN_BINDING if args.binding_contexts else MOTHER_RANGE_TRAIN
     heldout_ctx = MOTHER_RANGE_HELDOUT_BINDING if args.binding_contexts else MOTHER_RANGE_HELDOUT
@@ -158,12 +184,18 @@ if __name__ == "__main__":
         print(f"MATLAB engine startup: {bridge.startup_seconds:.1f}s")
         print(f"contexts: train={train_ctx} heldout={heldout_ctx} "
               f"({'BINDING veto' if args.binding_contexts else 'default, veto near-inert'})")
+        if sensor is not None:
+            print(f"threat radar: REAL RadChar records, {len(sensor.train_indices)} train / "
+                  f"{len(sensor.eval_indices)} eval (disjoint). Pulse width 10-16 us "
+                  f"=> blind range 1499-2398 m, sensed with SNR-dependent error.")
+        else:
+            print("threat radar: FIXED waveform (no sensing) -- reproduces Phase C runs 1-2.")
         print(f"Training D3QN + bandit for {args.train_episodes} episodes each (shared env draws)...")
         agent, bandit, veto_curve = train(bridge, args.train_episodes, seed=args.seed,
-                                           train_contexts=train_ctx)
+                                           train_contexts=train_ctx, sensor=sensor)
         heuristic = ScriptedHeuristic()
         evaluate(bridge, agent, bandit, heuristic, args.eval_episodes, seed=1000 + args.seed,
-                 heldout_contexts=heldout_ctx, train_contexts=train_ctx)
+                 heldout_contexts=heldout_ctx, train_contexts=train_ctx, sensor=sensor)
 
         if veto_curve:
             first, last = veto_curve[0], veto_curve[-1]

@@ -44,9 +44,41 @@ def analyze(contexts, times):
     return rows
 
 
+def waveform_table(contexts, times, pulse_widths_s):
+    """The table that establishes the environment is CONTEXTUAL: how many
+    actions survive as the real (RadChar-measured) pulse width changes."""
+    from generator.physics_projection import blind_range_m
+    print(f"\n{'ctx_m':>7} " + "".join(f"PW={p*1e6:>4.0f}us " for p in pulse_widths_s))
+    for ctx in contexts:
+        row = f"{ctx:>7.0f} "
+        for pw in pulse_widths_s:
+            n = sum(1 for (r0, rate, rcs) in ACTION_GRID
+                    if project_action(range0_m=r0, range_rate_mps=rate, times_s=times,
+                                       mother_range_m=ctx, min_latency_s=MIN_LATENCY_S,
+                                       rcs_m2=rcs, pulse_width_s=pw, prf_hz=C.PRF).feasible)
+            row += f"{n:>7}  "
+        print(row)
+    print("blind ranges: " + ", ".join(f"{blind_range_m(p):.0f} m" for p in pulse_widths_s))
+    print(f"range0 choices: {sorted(set(a[0] for a in ACTION_GRID))}")
+
+
 def main():
     times = frame_pulse_times(NUM_FRAMES, 32, FRAME_INTERVAL_S, C.PRI)
     print(f"action grid size: {len(ACTION_GRID)}")
+
+    print("\n" + "=" * 66)
+    print("FEASIBLE ACTIONS vs the REAL RadChar pulse width (the eclipse veto)")
+    print("=" * 66)
+    print("This is what makes the environment contextual: the count collapses")
+    print("with pulse width alone, and at PW=16 us only the farthest range0")
+    print("survives at all -- so the optimal action MOVES with the sensed")
+    print("waveform. Mother range barely moves it by comparison.")
+    waveform_table(sorted(set(MOTHER_RANGE_TRAIN + MOTHER_RANGE_HELDOUT)), times,
+                    (10e-6, 12e-6, 14e-6, 16e-6))
+
+    print("\n" + "=" * 66)
+    print("CAUSALITY VETO ONLY (no waveform constraint) -- historical context")
+    print("=" * 66)
     for label, contexts in (
         ("TRAIN (default)", MOTHER_RANGE_TRAIN),
         ("HELDOUT (default)", MOTHER_RANGE_HELDOUT),
