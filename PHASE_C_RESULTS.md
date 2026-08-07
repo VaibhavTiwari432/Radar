@@ -11,7 +11,14 @@ Re-runnable: `python -m generator.decision.train [--binding-contexts]
 
 ---
 
-## Gate C verdict: **NOT MET** — and the reason is a finding, not a failure
+## Gate C verdict: **NOT MET** across three runs — a finding, not a failure
+
+| run | environment | D3QN | best scripted baseline | significant? |
+|---|---|---|---|---|
+| 1 | default contexts, veto inert | 1.00 | 1.00 | tie |
+| 2 | binding causality veto (25–85%) | 1.00 | 1.00 | tie |
+| 3 | **real RadChar waveform context** | 0.97 | 0.94 / 0.92 | **no** (p = 1.00 / 0.61) |
+
 
 Blueprint Gate C: *"agent beats the scripted baseline inside the feasible
 region, measured on held-out radar configs. If it doesn't, report why (the
@@ -202,50 +209,148 @@ the D3QN can be said to have beaten.**
 
 ---
 
+---
+
+## Run 3 — contextual environment driven by REAL RadChar data
+
+The environment was rebuilt to answer run 2's central weakness (a constant
+action was optimal, so context could not matter). Each episode now draws a
+real threat-radar record from RadChar (`generator/sensing.py`); the
+emitter's measured **pulse width** sets the radar's blind range
+`c·PW/2 = 1499–2398 m`, and a phantom inside it is physically invisible.
+The agent sees only a **noisy estimate** of that width, with derived error
+`σ ≈ 1/(B·√SNR)` — 0.05 µs at +20 dB, 5.0 µs at −20 dB. Train and eval draw
+from **disjoint record sets** (40 000 / 10 000).
+
+That the environment is now genuinely contextual is measured, not asserted
+(`generator/decision/analyze_action_space.py`): feasible actions collapse
+**72 → 52 → 36 → 16** as pulse width goes 10 → 16 µs, and at 16 µs only the
+farthest `range0` survives at all.
+
+### A bug in my own baseline, found before reporting
+
+The first run of this environment gave **D3QN 0.97 vs heuristic 0.31** — a
+3× win. It was not real. The heuristic tested only `range0 < blind_range`,
+i.e. the *initial* range, so it would pick a phantom starting at 2600 m
+that closes to 2250 m — inside a 2398 m blind zone, **eclipsed mid-track**
+(verified directly at PW = 16 µs: trajectory minimum 2250 m, eclipsed
+`True`). The baseline was losing for a reason unrelated to the agent.
+
+Fixed (full-trajectory eclipse check via `project_action`), plus a
+deliberate control — `heuristic_hedged`, which treats the blind range as
+`c·(PW_est + 2σ)/2`, hedging against the interceptor's own stated sensing
+error. Both re-run below.
+
+### Run 3 results (400 train episodes, 12 eval per context, ε → 0.05)
+
+| method | 650 m | 950 m | 1400 m | **POOLED** | 95% Wilson CI |
+|---|---|---|---|---|---|
+| **D3QN** | 0.92 | 1.00 | 1.00 | **0.97** (35/36) | [0.86, 1.00] |
+| **heuristic_hedged** | 0.92 | 0.92 | 1.00 | **0.94** (34/36) | [0.82, 0.98] |
+| **scripted heuristic** | 0.83 | 1.00 | 0.92 | **0.92** (33/36) | [0.78, 0.97] |
+| tabular bandit | 0.08 | 0.50 | 0.50 | 0.36 (13/36) | [0.22, 0.52] |
+
+**Gate C: still NOT MET.** Fisher exact, two-sided:
+
+| comparison | p | verdict |
+|---|---|---|
+| D3QN vs scripted heuristic | **0.614** | not significant |
+| D3QN vs heuristic_hedged | **1.000** | not significant |
+| D3QN vs tabular bandit | <0.0001 | significant (but see below) |
+
+D3QN's margin over a *correct* scripted baseline is **two episodes out of
+36**, well inside noise. The entire apparent 3× win was my baseline bug.
+The bandit remains under-explored (400 episodes across 12 context cells at
+80 actions ≈ 33 samples per cell) and is still not a baseline anything can
+claim to have beaten.
+
+### What the agent actually learned, from the action log
+
+D3QN conditions on the sensed waveform — its chosen action varies within a
+fixed mother range (5, 3, 4 distinct actions across the three contexts), so
+unlike runs 1–2 it is **no longer emitting a constant**. But *what* it
+learned is narrower than that suggests: it concentrates on `range0` = 2250
+and 2600 m — the ranges that clear the blind zone for **any** pulse width in
+the dataset. It plays safe-far almost always.
+
+The fixed heuristic ranges more widely (6–7 distinct actions per context),
+moving in to 1550–1900 m when its estimate permits, chasing the stronger
+return that `Pr ~ 1/R⁴` offers — and occasionally getting eclipsed for it.
+The two strategies score the same. **The agent bought robustness, not
+performance**, and a one-line 2σ hedge (`heuristic_hedged`, 0.94) captures
+essentially the same behaviour without any learning.
+
+### Learning the constraint: real, but still confounded
+
+Veto rate over training fell **44% → 12%** and success rose **44% → 88%**.
+The ε-decay confound quantified in run 2 still applies and was not
+separated here either: a fixed-ε control was again **not run**. Unlike run
+2, the endpoint is not a clean 0% — the final block shows 12% vetoed, i.e.
+the trained policy still proposes physically impossible actions ~1 episode
+in 8, which is consistent with a policy acting on a noisy pulse-width
+estimate rather than one that has fully internalised the constraint.
+
+---
+
 ## What is genuinely established
 
 - **The full loop works end to end**: action → physics projection → MATLAB
   synthesis → real judge → reward, over a persistent MATLAB engine, for
-  hundreds of consecutive episodes, on both an easy and a genuinely
-  constrained action space.
-- **The physics veto is real and binding in run 2** (25–85% of the grid
-  refused, base rate confirmed at 55% by the ε=1.0 block) — infeasible
-  actions never reach the judge.
-- **D3QN converges to a near-optimal action** (max RCS, non-static, feasible
-  at every context, verified against the 12 universally-feasible actions).
-- **A cheap scripted rule matches the learned policy in both runs.** Nothing
-  measured here justifies the added complexity of an RL agent for this
-  action space.
+  hundreds of consecutive episodes, across three environment designs.
+- **The physics vetoes are real and binding.** Causality removed 25–85% of
+  the grid in run 2 (base rate confirmed at 55% by the ε=1.0 block); the
+  eclipse veto removes 10–80% in run 3 as a function of the *measured*
+  pulse width. Infeasible actions never reach the judge.
+- **The environment is genuinely contextual in run 3, from real data.**
+  Feasible actions collapse 72 → 52 → 36 → 16 with pulse width alone, and
+  every policy's chosen action moves with the sensed waveform.
+- **The agent conditions on its observation in run 3** (unlike runs 1–2,
+  where it emitted a constant).
+- **A cheap scripted rule matches the learned policy in all three runs.**
+  Nothing measured across any of them justifies the complexity of an RL
+  agent for this action space.
 
 ## What is NOT established
 
-- **That D3QN beats any baseline.** It ties the heuristic 1.00 vs 1.00 in
-  both runs; the bandit is under-trained in both and is not a valid
-  comparison.
-- **That the agent learned a context-dependent policy.** It demonstrably did
-  not — it emits one constant action and ignores its observation.
-- **That "learning to respect physics" is separable from ε decay.** The
-  arithmetic above shows the veto curve is consistent with pure annealing.
-  The fixed-ε control that would separate them was not run.
-- **That N=30 means 30 independent trials.** It is 3 deterministic decisions
-  × 10 noise draws in every cell of every table above.
-- **That any of this generalises beyond a single phantom.** Phase B already
-  measured the limit that dominates all of the above: a 2-phantom co-bearing
-  swarm goes from P_confirm 1.00 to **0.00** the instant a monopulse angle
-  channel is switched on (`PHASE_B_RESULTS.md`) — and no amount of agent
-  training changes that, because bearing is fixed by geometry rather than by
-  signal content (Blueprint 2.4).
+- **That D3QN beats any legitimate baseline.** Runs 1–2: ties at ceiling.
+  Run 3: 0.97 vs 0.92 scripted (p = 0.61) and vs 0.94 hedged (p = 1.00) —
+  neither significant. The only significant win is over an under-explored
+  bandit, which is a broken control rather than a baseline.
+- **That "learning to respect physics" is separable from ε decay.** Run 2's
+  arithmetic showed the veto curve is consistent with pure annealing; run 3
+  did not separate them either. The fixed-ε control was never run.
+- **That the sample sizes mean what they look like.** Run 3's N=36 per
+  method is 3 contexts × 12 radar draws; runs 1–2's N=30 was 3
+  *deterministic decisions* × 10 noise draws.
+- **That any of this generalises beyond a single phantom.** Phase B measured
+  the limit that dominates everything above: a 2-phantom co-bearing swarm
+  goes from P_confirm 1.00 to **0.00** the instant a monopulse angle channel
+  is switched on (`PHASE_B_RESULTS.md`) — and no agent training changes
+  that, because bearing is fixed by geometry, not signal content
+  (Blueprint 2.4).
+
+## The honest one-line summary
+
+Across three environment designs of increasing difficulty — including one
+where the context is drawn from 50 000 real measured radar records and the
+agent must act on a deliberately noisy estimate of it — **a learned D3QN
+policy has never significantly outperformed a short scripted rule.** The
+most useful thing it learned (place the phantom far enough out that a
+mis-estimated blind range cannot eclipse it) is reproduced by a one-line 2σ
+hedge. Per Blueprint 5.1, that is a reportable finding, not a failure — and
+it is the branch the Blueprint explicitly anticipated.
 
 ## Recommended next steps, in order of value
 
-1. **Make the decision genuinely context-dependent, or drop the RL.** If a
-   single constant action is optimal across the whole context set, this is
-   not a sequential-decision problem and Blueprint 5.1's own advice applies:
-   report the bandit/heuristic result and don't ship an agent. Making it
-   context-dependent means an action grid where no action is universally
-   feasible *and* the best feasible action differs by context.
-2. **Fix or drop the bandit baseline** — either far more episodes, or a
-   coarser action grid, or optimistic initialisation instead of zeros.
-3. **Multi-phantom, which is where the real question lives.** Phase B's
-   monopulse wall is the actual scientific result of this project; a
-   single-phantom agent scoring 1.00 does not speak to it.
+1. **Multi-phantom — where the real question lives.** Phase B's monopulse
+   wall is this project's actual scientific result. A single-phantom agent
+   at 0.97 does not speak to it, and a multi-phantom action space is one
+   where a scripted rule genuinely may not suffice (joint power allocation
+   and mutual CFAR interference are not one-line rules).
+2. **Run the fixed-ε control**, so "learned the constraint" stops being
+   confounded with annealing. Cheap: one extra training run.
+3. **Fix or drop the bandit.** At 80 actions × 12 context cells it needs
+   far more episodes, a coarser grid, or it should be removed rather than
+   reported as a beaten baseline.
+4. **Save trained models.** Every run so far has discarded its policy, so
+   no result can be re-evaluated without a full retrain.

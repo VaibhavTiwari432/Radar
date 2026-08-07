@@ -33,17 +33,22 @@
 > - **Gate B** — `PHASE_B_RESULTS.md`. Single phantom P_confirm=1.00 across
 >   every radar class; **2-phantom swarm 1.00 → 0.00 the instant monopulse is
 >   on**. The §2.4 wall, reproduced independently on a from-scratch generator.
-> - **Phase C — Gate C NOT MET** (`PHASE_C_RESULTS.md`). Two runs, one on an
->   easy environment and one where the causality veto genuinely binds
->   (25–85% of the action grid refused). Both times **D3QN 1.00 pooled ties
->   the scripted heuristic 1.00 pooled** — Gate C asks it to *beat* the
->   baseline. The bandit (0.67, then 0.33) is under-explored in both and is
->   **not** a baseline anything can be said to have beaten. The agent's
->   learned policy is a **constant** — the same action at every context,
->   ignoring its observation. Its falling veto rate (52%→0%) is explained
->   arithmetically by ε annealing alone (random base rate 55%, observed 52%
->   at ε=1.0; predicted 2.7% at ε=0.05, observed 0%). Do not quote Phase C
->   as evidence that RL helps here.
+> - **Phase C — Gate C NOT MET across three runs** (`PHASE_C_RESULTS.md`).
+>   Run 3 rebuilt the environment to be genuinely contextual, with each
+>   episode's threat radar drawn from a **real RadChar record** (pulse width
+>   10–16 µs ⇒ blind range 1499–2398 m; agent sees only a noisy estimate,
+>   σ = 0.05 µs at +20 dB to 5.0 µs at −20 dB; train/eval on **disjoint**
+>   record sets). Even so: **D3QN 0.97 vs scripted heuristic 0.92
+>   (Fisher p = 0.61) and vs a 2σ-hedged heuristic 0.94 (p = 1.00) —
+>   neither significant.** Runs 1–2 were ties at ceiling. The only
+>   "significant" win is over a bandit that is under-explored (80 actions ×
+>   12 cells) and is a broken control, not a baseline.
+>   **A first version of run 3 showed 0.97 vs 0.31 — that was a bug in my
+>   own baseline** (it checked only the phantom's INITIAL range against the
+>   blind range, so it picked trajectories that got eclipsed mid-track).
+>   Fixed before reporting. Do not quote Phase C as evidence that RL helps
+>   here; the useful behaviour it learned is reproduced by a one-line 2σ
+>   hedge against sensing error.
 >
 > **Two real bugs the rebuild's own gates caught, worth knowing about:**
 > (1) `phase_progression_rad`'s sign was the Blueprint's illustrative
