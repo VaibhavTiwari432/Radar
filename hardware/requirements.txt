@@ -1,0 +1,10 @@
+# Drone/transmitter payload, Windows side. Python 3.9+.
+#   pip install -r requirements.txt
+numpy>=1.24
+scipy>=1.10          # only for --mat phantom plans (scipy.io.loadmat)
+
+# UHD is TWO halves and this file installs neither -- see README §1.2.
+#   bindings:  pip install --only-binary=:all: --no-deps uhd
+#              (--no-deps: the wheel pins numpy<2.0, which has no cp313 wheel)
+#   uhd.dll + FPGA images: the Ettus Win64 installer, SAME version as the wheel
+#              https://files.ettus.com/binaries/uhd/
