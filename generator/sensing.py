@@ -79,7 +79,8 @@ class SensedRadar:
         return C.c * self.pulse_width_est_s / 2.0
 
 
-def pulse_width_sigma(snr_db: float, bandwidth_hz: float = C.bandwidth) -> float:
+def pulse_width_sigma(snr_db: float, bandwidth_hz: float = C.bandwidth,
+                       num_pulses: int = 1) -> float:
     """DERIVED estimation error on pulse width, from the standard
     time-delay-estimation scaling sigma_tau ~ 1/(B*sqrt(SNR)).
 
@@ -96,11 +97,33 @@ def pulse_width_sigma(snr_db: float, bandwidth_hz: float = C.bandwidth) -> float
                                           of real pulse widths: the estimate
                                           carries almost no information)
 
+    NUMBER OF PULSES (added 16 Aug 2026). An interceptor that observes N
+    pulses of the same emitter estimates a repeated parameter N times and
+    averages, so the error falls as 1/sqrt(N) -- the ordinary
+    standard-error-of-the-mean result, and the same integration scaling this
+    project already applies on the radar side (+physics/linkBudget.m
+    integrates 32 pulses).
+
+    WHY THIS PARTICULAR FIELD, AND WHY NOT THE OTHERS. RadChar carries
+    signal_type, number_of_pulses and pulse_repetition_interval alongside the
+    two fields already used, and all three were being read and thrown away.
+    They are NOT simply added to the agent's observation, because the
+    simulated radar does not respond to them: it transmits its own LFM
+    regardless of signal_type, at its own 8 kHz PRF regardless of the
+    dataset's PRI (this module's header gives the reason), and with its own
+    32 pulses per frame. Feeding an agent a field nothing downstream reacts
+    to is a dial wired to nothing -- exactly what web/src/Console.jsx's own
+    header refuses to do with amplitude and phase profiles. number_of_pulses
+    is the one that earns its place, because it changes something real: how
+    well the interceptor can KNOW the pulse width, which already drives the
+    episode through the blind range.
+
     Ref: standard CRLB for time-of-arrival estimation (e.g. Skolnik;
     Richards, Fundamentals of Radar Signal Processing).
     """
     snr_lin = 10.0 ** (snr_db / 10.0)
-    return 1.0 / (bandwidth_hz * np.sqrt(snr_lin))
+    n = max(1, int(num_pulses))
+    return 1.0 / (bandwidth_hz * np.sqrt(snr_lin) * np.sqrt(n))
 
 
 class RadCharSensor:
@@ -141,7 +164,8 @@ class RadCharSensor:
         rec = self._labels[record_index]
         pw_true = float(rec["pulse_width"])
         snr_db = float(rec["signal_to_noise_ratio"])
-        sigma = pulse_width_sigma(snr_db)
+        n_pulses = int(rec["number_of_pulses"])
+        sigma = pulse_width_sigma(snr_db, num_pulses=n_pulses)
         # The estimate is the truth plus estimator noise, clipped to remain
         # a physically possible pulse width -- an estimator that reports a
         # negative or absurd width would be a broken estimator, not a noisy
@@ -155,5 +179,5 @@ class RadCharSensor:
             pulse_width_est_s=pw_est,
             pulse_width_sigma_s=sigma,
             pri_true_s=float(rec["pulse_repetition_interval"]),
-            number_of_pulses=int(rec["number_of_pulses"]),
+            number_of_pulses=n_pulses,
         )

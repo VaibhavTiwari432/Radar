@@ -153,6 +153,42 @@ classdef test_amplitude_residual_screen < matlab.unittest.TestCase
         end
 
         function test_dwell_stability_on_real_pipeline_tracks(tc)
+            % ATTEMPTED REWIRE, 12 Aug 2026 -- AND REVERTED, because the
+            % rewire silently changed the physics under test. Recorded here
+            % rather than left as a passing-looking green tick.
+            %
+            % The rewire to generator.render works mechanically: the scene
+            % builds, tracks confirm, three of this file's four tests pass.
+            % The fourth FAILED -- spreadResid 0.133 vs spreadSlope 0.117 --
+            % and the reason is not a threshold worth moving.
+            %
+            % THIS ARM'S GENUINE TRACKS REQUIRE SCINTILLATION, AND THE
+            % REBUILT GENERATOR HAS NONE. engine.entity.render drew RCS
+            % process noise (calibrateQ's MEASURED 0.233 dB floor);
+            % generator.render's amplitude is a deterministic 1/R^2 from
+            % physics_projection.amplitude_trajectory, with no fluctuation
+            % term anywhere. So a "genuine" track rendered through the new
+            % path is amplitude-PERFECT -- which is this file's OWN `perfect`
+            % arm, the servo-driven repeater it flags 100% by design. The
+            % residual screen scores SCATTER about the -2 law; with the only
+            % scatter coming from receiver noise rather than target
+            % scintillation, it is no longer measuring the quantity this
+            % test was written to measure.
+            %
+            % Tuning the threshold to make it pass would fit a constant to a
+            % desired flag rate, which track.amplitudeResidualScreen's own
+            % docstring forbids and which this very test's failure message
+            % warns against ("documented as such, not tuned").
+            %
+            % So this method is CLASS C, not Class A -- same debt as
+            % test_swerling_scale, and paid the same way: build fluctuation
+            % into the generator. The other three tests in this file are
+            % synthetic, need no generator, and run.
+            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
+                ['This arm needs TARGET SCINTILLATION, which the rebuilt ' ...
+                 'generator cannot render (engine.entity.render, archived ' ...
+                 '7 Aug 2026, could). NOT rewirable -- see ' ...
+                 'trash/BROKEN_DOWNSTREAM.md Class C.']);
         % ===== Phase 3.2b steps 4-5: the question actually worth answering =====
         %
         % The synthetic arms above show the two screens are complementary. This
@@ -263,41 +299,35 @@ classdef test_amplitude_residual_screen < matlab.unittest.TestCase
         %RENDERREALTRACKS  Full pipeline: entity render -> CFAR -> tracker, and
         %   return each confirmed track's own (range, amplitude) series -- the
         %   exact series +track/discriminator.m screens. Nothing synthetic.
-            rs = RandStream('twister', 'Seed', 5000 + seed);
-            q = struct('sigma_accel_mps2', 0.05*9.80665, 'rcs_process_std_db', 0.233);
-            nObj = numel(ranges0); nFast = C.fast_time_samples; nP = 32;
-            states = cell(1, nObj); ampScale = zeros(1, nObj);
-            for i = 1:nObj
-                states{i} = engine.entity.EntityState('range_m', ranges0(i), ...
-                    'range_rate_mps', v, 'class', 'drone', 'rcs_dbsm', 0);
-                % Compensate ONCE from the initial range so every object starts
-                % comparably detectable while its amplitude still rises as
-                % 1/R^2 as it closes. Re-compensating per frame would pin
-                % amplitude flat -- the naive-DRFM signature -- and this test
-                % would then be measuring its own scene bug.
-                ampScale(i) = 3.0 * (ranges0(i)/1800)^2;
-            end
-            cube = complex(zeros(nFast, nP, F));
-            for k = 1:F
-                acc = complex(zeros(nFast, nP));
-                for i = 1:nObj
-                    acc = acc + engine.entity.render(states{i}, 'AmpScale', ampScale(i), ...
-                        'NumPulses', nP, 'FastTimeSamples', nFast, ...
-                        'CarrierHz', C.carrier, 'PrfHz', C.PRF, ...
-                        'PulseWidth', C.pulse_width, 'Bandwidth', C.bandwidth, ...
-                        'RandStream', rs);
-                end
-                cube(:,:,k) = acc + 0.05*(randn(rs,nFast,nP)+1i*randn(rs,nFast,nP))/sqrt(2);
-                for i = 1:nObj
-                    states{i} = engine.entity.propagate(states{i}, 1.0, q, rs);
-                end
-            end
-            f = [tempname '.mat'];
-            S = struct('rx_frames', cube, 'fs', C.fs, 'pulse_width_s', C.pulse_width, ...
-                'bandwidth_hz', C.bandwidth, 'prf_hz', C.PRF, 'carrier_hz', C.carrier, ...
-                'frame_interval_s', 1.0);
-            save(f, '-struct', 'S');
-            cleanup = onCleanup(@() delete(f)); %#ok<NASGU>
+            % REWIRED 12 Aug 2026 from engine.entity.render (archived 7 Aug)
+            % to generator.render via tests/renderPhantomScene.m. The
+            % GEOMETRY is unchanged -- 5000-9000 m at -30 m/s was already
+            % chosen to clear the blind range at every dwell length, which is
+            % why this file needed no R0 move (unlike the 1800 m tests).
+            %
+            % The per-object compensation is expressed as RCS now, not
+            % AmpScale, because that is the knob the rebuilt path has. It is
+            % the SAME compensation: received amplitude ~ sqrt(rcs)/R^2, so
+            % rcs ~ R^4 holds it flat across the spread exactly as
+            % ampScale ~ R^2 did. Referenced to the nearest object, so it is
+            % rcs = 1.0 there rather than the archived 3.0-at-1800 m anchor
+            % -- a common scale factor on every object, which no assertion
+            % here depends on.
+            %
+            % The archived comment still governs and is worth keeping:
+            %   "Compensate ONCE from the initial range so every object
+            %    starts comparably detectable while its amplitude still rises
+            %    as 1/R^2 as it closes. Re-compensating per frame would pin
+            %    amplitude flat -- the naive-DRFM signature -- and this test
+            %    would then be measuring its own scene bug."
+            % renderPhantomScene compensates once by construction: RCS is a
+            % scalar per phantom for the whole trajectory, so the per-frame
+            % re-compensation bug is not expressible here.
+            rng(5000 + seed, 'twister');
+            rcs = (ranges0(:).' / ranges0(1)).^4;
+            f = renderPhantomScene(ranges0, v, 'Rcs', rcs, ...
+                'NumFrames', F, 'NumPulses', 32, ...
+                'Tag', sprintf('ampres_F%d_s%d', F, seed));
             fb = engine.runJudge(f);
             tracks = cell(1, fb.confirmed_tracks);
             for t = 1:fb.confirmed_tracks

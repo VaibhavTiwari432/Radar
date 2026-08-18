@@ -8,6 +8,7 @@ Wilson CI (Blueprint Rule 5), never a single run.
 Run: python -m generator.decision.train [--train-episodes N] [--eval-episodes N]
 """
 import argparse
+import itertools
 import time
 from typing import Optional
 
@@ -16,8 +17,9 @@ import numpy as np
 from generator.decision.baselines import Context, ScriptedHeuristic, TabularBandit
 from generator.decision.d3qn_agent import D3QNAgent, D3QNConfig
 from generator.decision.env import (
-    ACTION_GRID, MOTHER_RANGE_HELDOUT, MOTHER_RANGE_HELDOUT_BINDING, MOTHER_RANGE_TRAIN,
-    MOTHER_RANGE_TRAIN_BINDING, N_ACTIONS, PhantomPlacementEnv,
+    ACTION_GRID, MOTHER_CROSS_HELDOUT, MOTHER_CROSS_TRAIN, MOTHER_RANGE_HELDOUT,
+    MOTHER_RANGE_HELDOUT_BINDING, MOTHER_RANGE_TRAIN, MOTHER_RANGE_TRAIN_BINDING,
+    N_ACTIONS, PhantomPlacementEnv,
 )
 from generator.decision.matlab_bridge import MatlabBridge
 from generator.decision.replay_buffer import ReplayBuffer
@@ -39,19 +41,30 @@ PW_BUCKETS_S = (10e-6, 12e-6, 14e-6, 16e-6)   # spans the real RadChar range
 
 def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed: int = 0,
           train_contexts: tuple = MOTHER_RANGE_TRAIN,
-          sensor: Optional[RadCharSensor] = None):
+          sensor: Optional[RadCharSensor] = None,
+          train_cross: tuple = MOTHER_CROSS_TRAIN):
     env = PhantomPlacementEnv(bridge, mother_ranges=train_contexts,
-                               rng=np.random.default_rng(seed), sensor=sensor, split="train")
+                               rng=np.random.default_rng(seed), sensor=sensor, split="train",
+                               mother_cross_speeds=train_cross)
     # Size the epsilon decay to the ACTUAL episode budget. The first run of
     # this file used D3QNConfig's default 300 decay steps against 150
     # episodes and finished still exploring 62% of the time -- i.e. the
     # reported greedy policy came from an agent that had barely stopped
     # acting randomly. Decay over 60% of the run so the tail is exploitation.
-    agent = D3QNAgent(D3QNConfig(n_actions=N_ACTIONS,
+    # obs_dim taken from the env's OWN first observation rather than trusted
+    # to match a default: the two are separate modules on purpose, so a shape
+    # drift between them is silent until the replay buffer first fills --
+    # which is exactly how the S6 rewire failed, 32 episodes into a run.
+    obs_dim = int(env.reset().shape[0])
+    agent = D3QNAgent(D3QNConfig(obs_dim=obs_dim, n_actions=N_ACTIONS,
                                   epsilon_decay_steps=max(1, int(0.6 * train_episodes))),
                        seed=seed)
+    # The bandit buckets on mother range AND cross speed: with cross speed
+    # deciding whether screen 2c binds, a bandit blind to it would be
+    # structurally unable to represent the task, and its loss would say
+    # nothing about bandits.
     bandit = TabularBandit(mother_buckets=train_contexts, pw_buckets_s=PW_BUCKETS_S,
-                            epsilon=0.1, seed=seed)
+                            epsilon=0.1, seed=seed, cross_buckets=train_cross)
     buf = ReplayBuffer()
 
     t0 = time.time()
@@ -95,11 +108,18 @@ def train(bridge: MatlabBridge, train_episodes: int, batch_size: int = 32, seed:
 
 def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
              heuristic: ScriptedHeuristic, eval_episodes_per_context: int, seed: int = 1000,
-             heldout_contexts: tuple = MOTHER_RANGE_HELDOUT,
+             heldout_contexts: tuple = None,
              train_contexts: tuple = MOTHER_RANGE_TRAIN,
-             sensor: Optional[RadCharSensor] = None):
-    env = PhantomPlacementEnv(bridge, mother_ranges=heldout_contexts,
-                               rng=np.random.default_rng(seed), sensor=sensor, split="eval")
+             sensor: Optional[RadCharSensor] = None,
+             heldout_cross: tuple = MOTHER_CROSS_HELDOUT):
+    # Context is a (mother_range, cross_speed) PAIR since S6 -- see the loop.
+    if heldout_contexts is None:
+        heldout_contexts = MOTHER_RANGE_HELDOUT
+    if heldout_contexts and not isinstance(heldout_contexts[0], tuple):
+        heldout_contexts = tuple(itertools.product(heldout_contexts, heldout_cross))
+    env = PhantomPlacementEnv(bridge, mother_ranges=[c[0] for c in heldout_contexts],
+                               rng=np.random.default_rng(seed), sensor=sensor, split="eval",
+                               mother_cross_speeds=[c[1] for c in heldout_contexts])
     # 'heuristic_hedged' is the honest control on any D3QN win: if the
     # agent's only real advantage is hedging against its own sensing error,
     # a one-line rule (treat the blind range as c*(PW_est + 2*sigma)/2)
@@ -122,7 +142,16 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
             # One draw of the episode's RADAR per repeat, shared by all
             # three policies, so they are compared on identical episodes
             # rather than on independently-drawn ones.
-            env.mother_range_m = context
+            #
+            # A context is a (mother_range, cross_speed) PAIR since S6. Both
+            # have to be pinned: cross speed decides whether screen 2c binds
+            # at all, so leaving it to the RNG would mix "the constraint was
+            # active" and "the constraint was absent" episodes inside one
+            # cell and make the per-cell rate uninterpretable. It also
+            # directly widens PHASE_C_RESULTS.md section 3's complaint that
+            # a greedy policy emits ONE action per context: a 3x3 grid of
+            # pairs is nine distinct decisions, not three.
+            env.mother_range_m, env.mother_cross_mps = context
             if env.sensor is not None:
                 env.sensed = env.sensor.sample(env.rng, split="eval")
             obs = env._obs()
@@ -143,7 +172,8 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
             s = results[name][context]
             n = eval_episodes_per_context
             p, lo, hi = wilson_ci(s, n)
-            print(f"  mother_range={context:>6.0f}m  P_confirm={p:.2f}  N={n}  95% CI=[{lo:.2f},{hi:.2f}]")
+            print(f"  Rm={context[0]:>6.0f}m cross={context[1]:>4.2f}  "
+                  f"P_confirm={p:.2f}  N={n}  95% CI=[{lo:.2f},{hi:.2f}]")
             total_s += s
             total_n += n
         p, lo, hi = wilson_ci(total_s, total_n)
@@ -158,7 +188,11 @@ def evaluate(bridge: MatlabBridge, agent: D3QNAgent, bandit: TabularBandit,
         for context in heldout_contexts:
             acts = sorted(chosen[name].get(context, set()))
             decoded = [ACTION_GRID[a] for a in acts]
-            print(f"  {name:>10} ctx={context:>6.0f}m -> action(s) {acts} = {decoded}")
+            # context is a (mother_range, cross_speed) PAIR since S6; the old
+            # {:>6.0f} raised TypeError AFTER the whole 40-minute run had
+            # already produced its results, losing only this log.
+            print(f"  {name:>10} ctx=Rm{context[0]:.0f}m/cross{context[1]:.2f} "
+                  f"-> action(s) {acts} = {decoded}")
 
     return results
 

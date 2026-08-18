@@ -543,6 +543,16 @@ negligible** and their absence is the more consequential omission: a real low-al
 drone engagement is clutter-dominated, and multipath produces exactly the kind of
 amplitude scintillation that §4.7's amplitude screens attempt to measure.
 
+**Updated 16 August 2026 — a clutter model now exists, and this section stays true
+anyway.** `+physics/surfaceClutter.m` (constant-gamma surface return) and
+`+engine/runJudge.m`'s `MtiNotchMps` clutter filter both **default OFF**, so every
+number in this report remains a free-space, thermal-noise-only number and none of them
+moves. What the model measured confirms this section's own warning rather than
+softening it: a 1 m² target sits **4.2 dB below the clutter** in its own resolution
+cell at *every* range, and a realistic drone goes 5/5 → **0/5** detected once ground
+return is present, while a −50 m/s phantom is untouched. `CLUTTER_AND_MTI_RESULTS.md`.
+Multipath remains unmodelled.
+
 ## 3.11 Spectrum, coexistence and 5G / ISAC relevance
 
 | Quantity | Value | Tag |
@@ -2655,7 +2665,7 @@ Every `[ASSUMED]` tag in this report, with its consequence.
 | **A4** | Antenna gain 30 dBi, **no `G(θ)` pattern, no sidelobes, no scan loss** | Detection performance is uniformly optimistic across the beam; a real target at beam edge can be 3–10 dB down |
 | **A5** | **Ideal DRFM quantisation**, no bit depth | Removes spur-comb detection (spurs at ≈ `−6b` dB) as an ECCM avenue. Unlikely to change results here; removes an option |
 | **A6** | **TX–RX isolation assumed perfect**, not hardware-measured | A physical repeater would desensitise its own receiver. This simulation grants the adversary free full-duplex |
-| **A7** | **Free-space propagation** — no clutter, multipath or atmospheric loss | Atmospheric loss is genuinely negligible (0.19 dB at max range). **Clutter and multipath are not** — a real low-altitude drone engagement is clutter-dominated, and multipath produces exactly the amplitude scintillation §4.7's screens try to measure |
+| **A7** | **Free-space propagation** — no clutter, multipath or atmospheric loss. **Still true of every number in this report**, but no longer unquantified: a clutter model exists as of 16 Aug 2026 and is default-OFF (§3.10, `CLUTTER_AND_MTI_RESULTS.md`) | Atmospheric loss is genuinely negligible (0.19 dB at max range). **Clutter and multipath are not** — a real low-altitude drone engagement is clutter-dominated, and multipath produces exactly the amplitude scintillation §4.7's screens try to measure. **Now measured, not just warned about:** a 1 m² target is 4.2 dB below the clutter at every range, and a realistic drone is detected 0/5 with ground return present vs 5/5 without. Multipath remains unmodelled |
 | **A8** | Out-of-band emission bound not modelled | No spectral-mask compliance claim can be made |
 | **A9** | Doppler applied as a slow-time phasor, not an intra-pulse shift | LFM range-Doppler coupling omitted; computed at **0.077 of one range bin**, so negligible *at this resolution*. Stops being negligible with a longer pulse or finer bin |
 | **A10** | No slow-time window (rectangular) | −13.2 dB Doppler leakage; a strong return contaminates adjacent Doppler bins |

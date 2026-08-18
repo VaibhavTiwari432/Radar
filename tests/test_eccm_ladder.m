@@ -17,6 +17,20 @@ classdef test_eccm_ladder < matlab.unittest.TestCase
 %   tracks and the ladder is single-target -- but the shared-stream hazard
 %   remains if it is ever re-added.)
 
+    methods (TestClassSetup)
+        function assumeArchivedDependencyPresent(tc)
+            % 7 Aug 2026 archive: every scene in this file is built by
+            % engine.entity.render, which no longer exists. Report Incomplete --
+            % this project's own honest "not built yet" outcome, the same
+            % one DataIntegration_Test uses for an absent dataset -- rather
+            % than erroring. 63 errored methods made a real regression
+            % invisible; a skip keeps the suite usable as an instrument.
+            % NOT a fix: rewire to generator.render to genuinely re-enable.
+            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
+                'engine.entity.render was archived 7 Aug 2026 (GOVERNANCE.md). This test is PENDING REWIRE to generator.render, not passing -- see trash/BROKEN_DOWNSTREAM.md.');
+        end
+    end
+
     methods (Test)
 
         function test_agility_does_not_penalise_a_genuine_target(tc)

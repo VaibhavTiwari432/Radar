@@ -38,6 +38,9 @@ classdef test_multi_target_judge < matlab.unittest.TestCase
         end
 
         function test_runJudge_confirms_and_discriminates_two_simultaneous_phantoms(tc)
+            % Pending rewire to generator.render -- see the class header.
+            tc.assumeTrue(archivedDepsPresent({'synth.synthesizeSwarm'}), ...
+                'synth.synthesizeSwarm was archived 7 Aug 2026 (GOVERNANCE.md). This test is PENDING REWIRE to generator.render, not passing -- see trash/BROKEN_DOWNSTREAM.md.');
             % A physically-closing "real-like" phantom (range decreasing,
             % amplitude following the 1/R^2 law -- Stage5_Test's own
             % test_passes_real_target recipe) SUMMED with a static,

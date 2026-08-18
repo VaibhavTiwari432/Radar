@@ -44,7 +44,8 @@ def test_agent_epsilon_decays_from_start_to_end():
     agent = D3QNAgent(cfg, seed=0)
     assert agent.epsilon() == cfg.epsilon_start
     for _ in range(100):
-        agent.update(np.random.randn(4, 4).astype(np.float32),
+        # batch of 4 observations, each cfg.obs_dim wide; 4 rewards.
+        agent.update(np.random.randn(4, cfg.obs_dim).astype(np.float32),
                       np.random.randint(0, N_ACTIONS, size=4),
                       np.random.rand(4).astype(np.float32))
     assert agent.epsilon() == pytest.approx(cfg.epsilon_end)
@@ -53,7 +54,7 @@ def test_agent_epsilon_decays_from_start_to_end():
 def test_agent_greedy_is_deterministic_and_ignores_epsilon():
     cfg = D3QNConfig(n_actions=N_ACTIONS)
     agent = D3QNAgent(cfg, seed=0)
-    obs = np.array([0.5, 0.75, 0.0, 1.0], dtype=np.float32)
+    obs = np.full(D3QNConfig().obs_dim, 0.5, dtype=np.float32)
     a1 = agent.act(obs, greedy=True)
     a2 = agent.act(obs, greedy=True)
     assert a1 == a2
@@ -66,7 +67,7 @@ def test_agent_update_reduces_loss_on_a_fixed_target():
     without error."""
     cfg = D3QNConfig(n_actions=N_ACTIONS, lr=1e-2)
     agent = D3QNAgent(cfg, seed=0)
-    obs = np.tile(np.array([0.5, 0.75, 0.0, 1.0], dtype=np.float32), (16, 1))
+    obs = np.tile(np.full(D3QNConfig().obs_dim, 0.5, dtype=np.float32), (16, 1))
     actions = np.zeros(16, dtype=int)
     rewards = np.ones(16, dtype=np.float32)
     losses = [agent.update(obs, actions, rewards) for _ in range(30)]
@@ -112,8 +113,9 @@ def test_tabular_bandit_converges_to_the_better_action_context():
 def test_tabular_bandit_buckets_both_context_axes():
     bandit = TabularBandit(mother_buckets=(500.0, 1000.0),
                             pw_buckets_s=(10e-6, 16e-6), seed=0)
-    assert bandit._key(Context(520.0, 10.4e-6)) == (500.0, 10e-6)
-    assert bandit._key(Context(980.0, 15.5e-6)) == (1000.0, 16e-6)
+    # Third axis is cross speed (S6); default bucket is (0.0,).
+    assert bandit._key(Context(520.0, 10.4e-6)) == (500.0, 10e-6, 0.0)
+    assert bandit._key(Context(980.0, 15.5e-6)) == (1000.0, 16e-6, 0.0)
 
 
 def test_tabular_bandit_separates_cells_that_differ_only_in_pulse_width():
@@ -138,7 +140,7 @@ def test_scripted_heuristic_avoids_static_rate_and_low_rcs():
     -- verify its choice honours that when a qualifying action exists."""
     heuristic = ScriptedHeuristic()
     idx = heuristic.act(Context(mother_range_m=300.0, pulse_width_est_s=10e-6))
-    _, rate, rcs = ACTION_GRID[idx]
+    _, rate, rcs, _mrdot = ACTION_GRID[idx]
     assert rate != 0.0
     assert rcs == 1.0
 
@@ -150,7 +152,7 @@ def test_scripted_heuristic_respects_the_sensed_blind_range():
     closer is what it otherwise prefers)."""
     heuristic = ScriptedHeuristic()
     idx = heuristic.act(Context(mother_range_m=300.0, pulse_width_est_s=16e-6))
-    range0, _, _ = ACTION_GRID[idx]
+    range0, _, _, _ = ACTION_GRID[idx]
     assert range0 >= blind_range_m(16e-6)
 
 
@@ -171,3 +173,38 @@ def test_scripted_heuristic_falls_back_without_crashing_when_everything_is_vetoe
     heuristic = ScriptedHeuristic()
     idx = heuristic.act(Context(mother_range_m=9000.0, pulse_width_est_s=12e-6))
     assert 0 <= idx < len(ACTION_GRID)
+
+
+def test_the_agent_input_width_matches_the_environment_observation():
+    """Shape drift between env and agent must fail in a second, not 4 minutes.
+
+    The S6 rewire added a fifth observation element (the platform's own
+    cross-range speed) and left D3QNConfig.obs_dim at 4. Nothing noticed:
+    act() runs a single observation through the net only after the replay
+    buffer fills, so the mismatch first raised 32 episodes -- about four
+    minutes of REAL MATLAB judge calls -- into a training run, and threw away
+    everything before it.
+
+    train.py now derives obs_dim from the env's own first observation, so this
+    cannot recur there; this test covers the default, which is what any other
+    caller constructing a D3QNAgent by hand will get.
+    """
+    import inspect
+
+    import numpy as np
+
+    from generator.decision.d3qn_agent import D3QNConfig
+    from generator.decision.env import PhantomPlacementEnv
+
+    # Count the elements _obs actually builds, without needing a live MATLAB
+    # bridge: the env is constructed but never stepped.
+    env = PhantomPlacementEnv.__new__(PhantomPlacementEnv)
+    env.mother_range_m = 1900.0
+    env.mother_cross_mps = 1.5
+    env.sensed = None
+    obs = PhantomPlacementEnv._obs(env)
+
+    assert obs.shape == (D3QNConfig().obs_dim,), (
+        f"env emits {obs.shape[0]} observation elements but D3QNConfig "
+        f"defaults to {D3QNConfig().obs_dim}")
+    assert np.all(np.isfinite(obs))

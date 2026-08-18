@@ -128,6 +128,52 @@ def build_flat_amplitude(out_path: str) -> None:
     )
 
 
+def build_maneuvering(out_path: str) -> None:
+    """Per-frame ALTERNATING velocity: the range walk is continuous and the
+    amplitude and phase are both derived correctly from it (so screens 1 and
+    2 are SATISFIED), but the target reverses its acceleration every frame --
+    an F-matrix-consistent 'flutter' no real aircraft holds, because inertia
+    and not signal processing is what keeps a genuine track's dominant IMM
+    mode from flipping every update.
+
+    This is the ONLY arm screen 2b can fire on, and it exists so the veto
+    conversion can be shown to still catch what the screen was built for --
+    not merely to have stopped diluting the others. (The test that used to
+    cover this, tD1_imm_discriminates.m, is in the archived half.)
+
+    MEASURED: IT DOES NOT CATCH IT, and this arm is what proves that. The
+    flutter is flagged 0.00 and the measured IMM switch rate is exactly 0,
+    identical to the genuine arm. The cause is not this scene being too
+    gentle -- it is that the tracker measures RANGE ONLY at 46.84 m
+    quantisation, and the 40 m alternation below is under one bin. Keep the
+    arm: a screen that never fires is broken, and this is the evidence that
+    it is. Full account in +track/discriminator.m at the veto.
+
+    Both velocities stay well inside v_ua = 59.96 m/s, so nothing here folds
+    in Doppler and the flutter cannot be mistaken for an ambiguity artefact.
+    """
+    times = _times()
+    v0, dv = -35.0, 20.0                     # -> -15 and -55 m/s, both < v_ua
+    frame_of = np.floor(times / FRAME_INTERVAL_S + 1e-9).astype(int)
+    v = v0 + np.where(frame_of % 2 == 0, +dv, -dv)
+    # Integrate the piecewise-constant velocity so range stays CONTINUOUS --
+    # a jump would be caught by the tracker as a range jump, which is a
+    # different (and much cruder) signature than the one under test.
+    dt = np.diff(times, prepend=times[0])
+    range_m = 2200.0 + np.cumsum(v * dt)
+    amp = amplitude_trajectory(range_m, rcs_m2=1.0)
+    phase = phase_progression_rad(range_m, lambda_m=C.lambda_m)
+    plan = PhantomPlan(
+        feasible=True, range_m=range_m,
+        amplitude=tag(amp, Provenance.DERIVED, "sim_amplitude_for_range"),
+        phase_rad=tag(phase, Provenance.DERIVED, "phase tracks range (2.3)"),
+    )
+    export_plan_for_render(
+        [PhantomExport(plan=plan, rcs_m2=1.0)], WAVEFORM, out_path,
+        num_pulses_per_frame=NUM_PULSES_PER_FRAME,
+    )
+
+
 def build_cobearing_pair(out_path: str) -> None:
     times = _times()
     plan1 = project_action(
@@ -151,7 +197,9 @@ if __name__ == "__main__":
     build_naive_zero_doppler(f"{out_dir}/gateA_naive_zero_doppler.mat")
     build_cobearing_pair(f"{out_dir}/gateA_cobearing_pair.mat")
     build_flat_amplitude(f"{out_dir}/gateA_flat_amplitude.mat")
+    build_maneuvering(f"{out_dir}/gateA_maneuvering.mat")
     print(f"{out_dir}/gateA_genuine.mat")
     print(f"{out_dir}/gateA_naive_zero_doppler.mat")
     print(f"{out_dir}/gateA_cobearing_pair.mat")
     print(f"{out_dir}/gateA_flat_amplitude.mat")
+    print(f"{out_dir}/gateA_maneuvering.mat")

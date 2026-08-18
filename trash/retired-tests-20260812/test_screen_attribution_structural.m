@@ -28,6 +28,25 @@ classdef test_screen_attribution_structural < matlab.unittest.TestCase
 
     methods (TestClassSetup)
         function runOnce(tc)
+            % 7 Aug 2026 archive: experiments.screenAttribution builds its
+            % episodes from agent.buildEnvEntity, which no longer exists.
+            % Report Incomplete -- the project's own honest "not built yet"
+            % outcome -- instead of erroring.
+            %
+            % The guard is INSIDE this setup method deliberately: MATLAB
+            % does not guarantee execution order of TestClassSetup methods
+            % across separate blocks, so a guard in its own block ran
+            % second and guarded nothing (verified -- this file still
+            % errored that way).
+            %
+            % Partly superseded already: +generator/screenAblation.m asks
+            % the same per-screen attribution question through the rebuilt
+            % generator. That is where to look, not here -- though note
+            % screenAblation itself still has no test of its own.
+            tc.assumeTrue(archivedDepsPresent({'agent.buildEnvEntity'}), ...
+                ['agent.buildEnvEntity was archived 7 Aug 2026 ' ...
+                 '(GOVERNANCE.md). Superseded by ' ...
+                 'generator.screenAblation -- see trash/BROKEN_DOWNSTREAM.md.']);
             tc.out = experiments.screenAttribution(tc.NEP, tc.SEED, 1);  % Swerling I
         end
     end

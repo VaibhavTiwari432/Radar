@@ -11,3 +11,5 @@ results/*
 __pycache__/
 *.pyc
 data/TSMS-Drone/**/*.7z
+hardware/.venv312/
+hardware/logs/

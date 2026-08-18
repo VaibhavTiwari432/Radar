@@ -80,6 +80,30 @@ class MatlabBridge:
 
     # ---------------- calls ----------------
 
+    def render(self, pre_render_mat: str, judge_mat: str, **name_value) -> str:
+        """generator.render(preRenderMat, judgeMat, Name, value, ...) -- turn a
+        Physics-Projection-approved plan into the judge-ready .mat.
+
+        Replaces cogengine.matlab_judge.export_scene_for_judge, archived
+        7 Aug 2026. That was a pure-Python renderer; this one is MATLAB
+        because +generator/render.m must use radar.agileWaveform's OWN
+        samples (agileWaveform.m's header: its 'Down' chirp does not match
+        exp(-1i*pi*k*t^2), correlation 0.0201, so nothing may synthesize the
+        IQ analytically). Hence a second engine call, not a second exporter.
+        """
+        import matlab
+
+        eng = self._require()
+        nv = []
+        for k, v in name_value.items():
+            nv += [k, matlab.double(v) if isinstance(v, list) else v]
+        with self._lock:
+            try:
+                eng.feval("generator.render", pre_render_mat, judge_mat, *nv, nargout=0)
+            except Exception as e:          # noqa: BLE001
+                raise JudgeUnavailable(f"render call failed: {e}") from e
+        return judge_mat
+
     def score_scene(self, mat_path: str, include_frame_log: bool = False) -> Dict[str, Any]:
         """Run the real judge on an exported .mat and return its feedback.
 

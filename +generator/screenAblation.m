@@ -59,6 +59,11 @@ function results = screenAblation(fixtureDir, varargin)
     arms(end+1) = struct('name', 'flat_amplitude', 'mat', fullfile(fixtureDir, 'gateA_flat_amplitude.mat'),     'nPhantoms', 1);
     arms(end+1) = struct('name', 'zero_doppler',   'mat', fullfile(fixtureDir, 'gateA_naive_zero_doppler.mat'), 'nPhantoms', 1);
     arms(end+1) = struct('name', 'cobearing',      'mat', fullfile(fixtureDir, 'gateA_cobearing_pair.mat'),     'nPhantoms', 2);
+    % The ONLY arm screen 2b can fire on. Without it the '+maneuver' rows
+    % would show the screen doing no harm and prove nothing about whether it
+    % still does its job -- and "a screen that never fires is broken" is this
+    % file's own opening rule.
+    arms(end+1) = struct('name', 'maneuvering',    'mat', fullfile(fixtureDir, 'gateA_maneuvering.mat'),        'nPhantoms', 1);
 
     % Masks.
     %

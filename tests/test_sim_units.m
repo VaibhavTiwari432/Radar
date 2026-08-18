@@ -71,10 +71,22 @@ classdef test_sim_units < matlab.unittest.TestCase
 
         function test_b1_python_and_matlab_agree_on_the_anchor(tc)
             % Same rule as the constants tables (A2): two languages, one fact.
-            tc.assumeTrue(localPythonReady(), 'cogengine not importable from pyenv');
+            %
+            % REWIRED 12 Aug 2026. This guarded on localPythonReady(), which
+            % probes py.cogengine.radar_params -- archived 7 Aug, so the
+            % guard could never succeed again and the test was permanently
+            % skipped. The rebuild has the same two facts:
+            %   thermal_noise_power_w  directly, in physics_projection
+            %   watts_per_sim_power    as N_watts / noise_amplitude^2, the
+            %                          calibration sim_amplitude_for_range's
+            %                          own docstring states and uses
+            % So this is a guard swap plus one derivation, not a new claim --
+            % and it is worth keeping, because a silently-skipped
+            % cross-language check is exactly how the two anchors would drift.
             U = physics.simUnits();
-            pyN = double(py.cogengine.radar_params.thermal_noise_power_w());
-            pyW = double(py.cogengine.radar_params.watts_per_sim_power());
+            pp = py.importlib.import_module('generator.physics_projection');
+            pyN = double(pp.thermal_noise_power_w());
+            pyW = pyN / U.noise_amplitude^2;
             tc.verifyEqual(pyN, U.noise_power_w, 'RelTol', 1e-12);
             tc.verifyEqual(pyW, U.watts_per_sim_power, 'RelTol', 1e-12);
         end

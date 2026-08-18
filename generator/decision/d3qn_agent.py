@@ -49,8 +49,14 @@ class DuelingQNetwork(nn.Module):
 
 @dataclass
 class D3QNConfig:
-    obs_dim: int = 4   # [geometry, sensed pulse width, its sigma, intercept SNR]
-                       # -- see PhantomPlacementEnv._obs (Blueprint 5.2)
+    # [geometry, sensed pulse width, its sigma, intercept SNR, platform cross
+    # speed] -- see PhantomPlacementEnv._obs (Blueprint 5.2). The fifth
+    # element arrived with S6; this default was 4 and the mismatch did not
+    # surface until the replay buffer first filled, 32 episodes and ~4 minutes
+    # of real judge calls into a run. Kept as a DEFAULT rather than derived
+    # from the env, because the agent must not import the environment (they
+    # are separate modules by design), but train.py now passes it explicitly.
+    obs_dim: int = 5
     n_actions: int = 80
     hidden: int = 64
     lr: float = 1e-3

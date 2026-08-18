@@ -6,6 +6,20 @@ classdef test_missionsim_lifecycle_rendering < matlab.unittest.TestCase
 %   monotonically with consecutive misses; the miss counter matches the
 %   tracker's internal count exactly."
 
+    methods (TestClassSetup)
+        function assumeArchivedDependencyPresent(tc)
+            % 7 Aug 2026 archive: every scene in this file is built by
+            % engine.sceneContract, which no longer exists. Report Incomplete --
+            % this project's own honest "not built yet" outcome, the same
+            % one DataIntegration_Test uses for an absent dataset -- rather
+            % than erroring. 63 errored methods made a real regression
+            % invisible; a skip keeps the suite usable as an instrument.
+            % NOT a fix: rewire to generator.render to genuinely re-enable.
+            tc.assumeTrue(archivedDepsPresent({'engine.sceneContract'}), ...
+                'engine.sceneContract was archived 7 Aug 2026 (GOVERNANCE.md). This test is PENDING REWIRE to generator.render, not passing -- see trash/BROKEN_DOWNSTREAM.md.');
+        end
+    end
+
     methods (Test)
 
         function test_coasting_opacity_decreases_monotonically(tc)

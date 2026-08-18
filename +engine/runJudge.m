@@ -167,6 +167,36 @@ function feedback = runJudge(matFile, varargin)
             mat2str(size(rxDelta)), mat2str(size(rxFrames)));
         if isfield(S, 'subaperture_sep_m'); subSep = double(S.subaperture_sep_m); else; subSep = 0.30; end
     end
+    % ELEVATION channel (S3). Its own orthogonal subaperture pair, written by
+    % +generator/render.m's IncludeElevationChannel. Gated on hasAngle too: an
+    % elevation difference channel without an azimuth one is not a
+    % configuration this receiver has.
+    % S3: track in real (x, y, z) instead of [R; 0; 0]. Opt-in -- see the
+    % 'MeasurementSpace' parameter for why the default must stay 'range'.
+    useCartesian = strcmpi(char(opts.MeasurementSpace), 'cartesian');
+    assert(useCartesian || strcmpi(char(opts.MeasurementSpace), 'range'), ...
+        'engine:runJudge:badMeasurementSpace', ...
+        'MeasurementSpace must be ''range'' or ''cartesian'', got ''%s''', ...
+        char(opts.MeasurementSpace));
+    assert(~useCartesian || hasAngle, 'engine:runJudge:cartesianNeedsAngle', ...
+        ['MeasurementSpace=''cartesian'' needs the monopulse difference ' ...
+         'channel: with no measured bearing every detection would sit on ' ...
+         'boresight and the Cartesian space would carry no more information ' ...
+         'than [R;0;0] while costing two extra state dimensions.']);
+    subSepEl2 = 0.30;   % used by the Cartesian branch even with no el channel
+    hasElev = hasAngle && isfield(S, 'rx_frames_delta_el');
+    if hasElev
+        rxDeltaEl = S.rx_frames_delta_el;
+        assert(isequal(size(rxDeltaEl), size(rxFrames)), 'engine:runJudge:deltaElShape', ...
+            'rx_frames_delta_el %s does not match rx_frames %s', ...
+            mat2str(size(rxDeltaEl)), mat2str(size(rxFrames)));
+        if isfield(S, 'subaperture_sep_el_m')
+            subSepEl = double(S.subaperture_sep_el_m);
+        else
+            subSepEl = 0.30;
+        end
+        subSepEl2 = subSepEl;
+    end
     wavForFrame = @(k) radar.agileWaveform(sweepSched(k), S.fs, S.pulse_width_s, ...
                                             S.prf_hz, S.bandwidth_hz);
     wav = wavForFrame(1);   % representative, for the Doppler axis scaling
@@ -177,6 +207,7 @@ function feedback = runJudge(matFile, varargin)
     peakAmp   = cell(1, numFrames);
     peakRate  = cell(1, numFrames);   % MEASURED range-rate [m/s], cube path only
     peakAz    = cell(1, numFrames);   % MEASURED azimuth [rad], angle path only
+    peakEl    = cell(1, numFrames);   % MEASURED elevation [rad], el channel only
     peakComb  = cell(1, numFrames);   % MEASURED micro-Doppler comb fraction
 
     % Judge-side detector config, from THIS function's caller only (never
@@ -226,6 +257,17 @@ function feedback = runJudge(matFile, varargin)
                 [~, compressed(:, pIdx)] = radar.pulseCompress(frameCube(:, pIdx), wavK);
             end
             [rdMap, ~, dopAxis] = radar.rangeDoppler(compressed, wavK, C);
+            % ---- MTI: discard the zero-Doppler filters -------------------
+            % Ground return is stationary, so it lands in the bins around
+            % zero radial velocity. Zeroing them before the max over Doppler
+            % is what a pulse-Doppler radar does with its clutter filter --
+            % the output is discarded, not thresholded alongside the rest.
+            % Zeroed rather than set to -Inf so that a scene where EVERY bin
+            % is notched degrades to "no detection" instead of erroring.
+            if opts.MtiNotchMps > 0
+                binVel = -lambda * dopAxis / 2;      % same convention as peakRate
+                rdMap(:, abs(binVel) < opts.MtiNotchMps) = 0;
+            end
             [power, dopBin] = max(rdMap, [], 2);
             % Keep the COMPLEX slow-time spectrum of both channels: the
             % monopulse ratio needs phase, and |.|^2 has thrown it away.
@@ -237,6 +279,14 @@ function feedback = runJudge(matFile, varargin)
                 end
                 sumSpec   = fftshift(fft(compressed,  numPulses, 2), 2);
                 deltaSpec = fftshift(fft(compressedD, numPulses, 2), 2);
+            end
+            if hasElev
+                deltaElCube = rxDeltaEl(:, :, k);
+                compressedE = complex(zeros(size(deltaElCube)));
+                for pIdx = 1:numPulses
+                    [~, compressedE(:, pIdx)] = radar.pulseCompress(deltaElCube(:, pIdx), wavK);
+                end
+                deltaElSpec = fftshift(fft(compressedE, numPulses, 2), 2);
             end
         else
             power = radar.pulseCompress(rxFrames(:, k), wavK);
@@ -307,6 +357,30 @@ function feedback = runJudge(matFile, varargin)
             peakAz{k} = nan(numel(peakBins), 1);
         end
 
+        % ---- monopulse ELEVATION, same estimator, orthogonal baseline ----
+        % Written by +generator/render.m only when its IncludeElevationChannel
+        % is on (it defaults off, because the extra receive chain's own noise
+        % draw perturbs the shared RNG stream). Absent -> no elevation, and
+        % the Cartesian measurement below correctly treats the target as being
+        % in the horizontal plane rather than inventing a height.
+        if hasElev
+            el = zeros(numel(peakBins), 1);
+            for j = 1:numel(peakBins)
+                b = peakBins(j); dB = dopBin(b);
+                sig = sumSpec(b, dB); dif = deltaElSpec(b, dB);
+                if abs(sig) < eps
+                    el(j) = NaN; continue;
+                end
+                ratio  = dif / sig;
+                phiEst = 2 * atan(imag(ratio));
+                sinPh  = phiEst * lambda / (2*pi*subSepEl);
+                el(j)  = asin(max(-1, min(1, sinPh)));
+            end
+            peakEl{k} = el;
+        else
+            peakEl{k} = nan(numel(peakBins), 1);
+        end
+
         % MeasurementNoise reflects the REAL range-bin quantization error
         % (~C.range_per_sample, ~46.8 m std), not eye(3)'s claimed 1 m std.
         % That mismatch was a real bug (Task 2, PHASE2_COMPLETION_POA.md):
@@ -326,8 +400,38 @@ function feedback = runJudge(matFile, varargin)
         measNoise = diag([C.range_per_sample^2, 1, 1]);
         detArr = objectDetection.empty;
         for j = 1:numel(peakBins)
-            detArr(j) = objectDetection(times(k), [peakRange{k}(j); 0; 0], ...
-                            'MeasurementNoise', measNoise); %#ok<AGROW>
+            if useCartesian
+                % ---- the real (x, y, z) the measurement implies (S3) ----
+                % [R;0;0] told the tracker the last two components were
+                % measured, at 0, to a 1 m standard deviation. That was never
+                % true (RADAR_REALISM_AUDIT.md Tier 1) and it silently made
+                % every target collinear with boresight, which is exactly the
+                % geometry a co-bearing swarm has -- so the tracker could not
+                % have separated a genuine formation from a fan even in
+                % principle.
+                %
+                % Covariance by the standard spherical->Cartesian JACOBIAN of
+                % (R, az, el), NOT by rotating a diagonal guess: the
+                % cross-range error is R*sigma_az, so it GROWS with range and
+                % the off-diagonal terms are real. sigma_R stays the range-bin
+                % quantiser. sigma_az/sigma_el are the estimator's own scatter
+                % (localAngleSigma), and an unmeasured angle is given the full
+                % half-sector rather than zero -- an unknown bearing must
+                % widen the gate, never tighten it.
+                Rj  = peakRange{k}(j);
+                azj = peakAz{k}(j); elj = peakEl{k}(j);
+                sAz = localAngleSigma(azj, subSep, lambda);
+                sEl = localAngleSigma(elj, subSepEl2, lambda);
+                if ~isfinite(azj); azj = 0; end
+                if ~isfinite(elj); elj = 0; end
+                [pos, Rcov] = localSphericalToCartesian(Rj, azj, elj, ...
+                                  C.range_per_sample, sAz, sEl);
+                detArr(j) = objectDetection(times(k), pos, ...
+                                'MeasurementNoise', Rcov);
+            else
+                detArr(j) = objectDetection(times(k), [peakRange{k}(j); 0; 0], ...
+                                'MeasurementNoise', measNoise);
+            end
         end
         dets{k} = detArr;
     end
@@ -371,7 +475,7 @@ function feedback = runJudge(matFile, varargin)
             'hitRange', {}, 'hitAmp', {});
         for t = 1:numel(tk)
             id = tk(t).TrackID;
-            estRange = tk(t).State(1);
+            estRange = localTrackRange(tk(t).State, useCartesian);
             isHit = false; hitRange = NaN; hitAmp = NaN;
             if ~isempty(peakRange{k})
                 [dmin, im] = min(abs(peakRange{k} - estRange));
@@ -382,7 +486,7 @@ function feedback = runJudge(matFile, varargin)
                 end
             end
             if ~isKey(hitCountByID, id)
-                hitCountByID(id) = 0; missStreakByID(id) = 0; %#ok<NASGU>
+                hitCountByID(id) = 0; missStreakByID(id) = 0;
             end
             if isHit
                 hitCountByID(id) = hitCountByID(id) + 1;
@@ -407,6 +511,7 @@ function feedback = runJudge(matFile, varargin)
     timeByID  = containers.Map('KeyType', 'double', 'ValueType', 'any');
     rateByID  = containers.Map('KeyType', 'double', 'ValueType', 'any');
     azByID    = containers.Map('KeyType', 'double', 'ValueType', 'any');
+    elByID    = containers.Map('KeyType', 'double', 'ValueType', 'any');
     combByID  = containers.Map('KeyType', 'double', 'ValueType', 'any');
     modeProbByID = containers.Map('KeyType', 'double', 'ValueType', 'any');
     for id = confirmedIDs
@@ -415,6 +520,7 @@ function feedback = runJudge(matFile, varargin)
         timeByID(id)  = zeros(0,1);
         rateByID(id)  = zeros(0,1);
         azByID(id)    = zeros(0,1);
+        elByID(id)    = zeros(0,1);
         combByID(id)  = zeros(0,1);
         modeProbByID(id) = zeros(0,3);   % nModels fixed by initekfimm's CV/CA/CT bank
     end
@@ -424,13 +530,14 @@ function feedback = runJudge(matFile, varargin)
         for t = 1:numel(tk)
             id = tk(t).TrackID;
             if ~isKey(rangeByID, id); continue; end
-            estRange = tk(t).State(1);
+            estRange = localTrackRange(tk(t).State, useCartesian);
             [~, im] = min(abs(peakRange{k} - estRange));
             rangeByID(id) = [rangeByID(id); peakRange{k}(im)];
             ampByID(id)   = [ampByID(id);   peakAmp{k}(im)];
             timeByID(id)  = [timeByID(id);  times(k)];
             rateByID(id)  = [rateByID(id);  peakRate{k}(im)];
             azByID(id)    = [azByID(id);    peakAz{k}(im)];
+            elByID(id)    = [elByID(id);    peakEl{k}(im)];
             combByID(id)  = [combByID(id);  peakComb{k}(im)];
             % IMM mode probabilities, THIS track, THIS frame -- direct
             % TrackID lookup (track.runTracker's own map), no nearest-match
@@ -448,10 +555,14 @@ function feedback = runJudge(matFile, varargin)
 
     trackLabel = strings(1, confirmedCount);
     trackConfidence = nan(1, confirmedCount);
+    trackModeSwitchRate = nan(1, confirmedCount);   % screen 2b's own input, reported not folded
     trackRange = cell(1, confirmedCount);
     trackAmp   = cell(1, confirmedCount);
     trackTime  = cell(1, confirmedCount);
     trackRate  = cell(1, confirmedCount);
+    trackEl    = cell(1, confirmedCount);
+    trackXYZ   = cell(1, confirmedCount);
+    trackVel   = cell(1, confirmedCount);
     lifetimes  = zeros(1, confirmedCount);
     for i = 1:confirmedCount
         id = confirmedTracks(i).TrackID;
@@ -461,7 +572,20 @@ function feedback = runJudge(matFile, varargin)
         trackAmp{i}   = aSeq;
         trackTime{i}  = tSeq;   % exposes the actual per-hit times (gaps visible), not just frame_interval_s multiples
         trackRate{i}  = dSeq;
+        trackEl{i}    = elByID(id);
         lifetimes(i)  = numel(rSeq);
+        % ---- THE TRAJECTORY, IN COORDINATES (position + velocity) ----
+        % Assembled from the three MEASUREMENTS already made above -- delay,
+        % monopulse angle, and (for the cross-check the caller can run) the
+        % slow-time Doppler. This is an ASSEMBLY, not a fourth estimate: the
+        % exported position reproduces track_range_m exactly by construction.
+        %
+        % It exists because a coordinate that is only ever re-derived by the
+        % caller is not something the radar recorded. Before this,
+        % tests/test_cartesian_measurement.m had to compute R*sin(az) in test
+        % code to see the cross-range the difference channel had measured.
+        [trackXYZ{i}, trackVel{i}] = localTrackKinematics(rSeq, azByID(id), ...
+                                                          elByID(id), tSeq);
         if numel(rSeq) >= 2
             % dSeq is the MEASURED range-rate from the slow-time Doppler
             % processing above (cube path), or an all-zero vector (legacy
@@ -487,6 +611,20 @@ function feedback = runJudge(matFile, varargin)
             % ABSENT" block.
             ts = struct('range', rSeq, 'amplitude', aSeq, 'doppler', dSeq, ...
                         'dopplerMeasured', isCube);
+            % MEASURED per-hit azimuth and the times it was measured at, for
+            % screen 2c (bearing/range kinematic consistency). Set only when
+            % the angle channel actually produced finite azimuths: on a
+            % sum-channel-only export azByID is all-NaN, and passing that
+            % would make the screen look available when no bearing was ever
+            % measured. Paired with .time so the screen sees the real hit
+            % spacing -- a coasted frame leaves a genuine gap, and closing it
+            % would fabricate a bearing rate across a dwell the radar never
+            % held the track.
+            azSeq = azByID(id);
+            if any(isfinite(azSeq))
+                ts.azimuth = azSeq;
+                ts.time    = tSeq;
+            end
             % MICRO-DOPPLER evidence. Two gates, both of which must be open
             % before discriminator.m is allowed to score it:
             %   microResolvable  -- this dwell could physically see a comb
@@ -515,6 +653,21 @@ function feedback = runJudge(matFile, varargin)
             mpSeq = modeProbByID(id);
             if ~isempty(mpSeq)
                 ts.modeProbSeq = mpSeq;
+                % Report the quantity screen 2b actually decides on, as its
+                % own column. Without it, a silent 2b is indistinguishable
+                % from a 2b whose IMM never moved -- exactly the ambiguity
+                % that made the 7 Aug veto conversion hard to interpret.
+                % Same posture as track_nis_* and track_confidence:
+                % observable, NOT folded into the label.
+                if size(mpSeq, 1) >= 2
+                    [~, dom] = max(mpSeq, [], 2);
+                    % (i), not (t): this loop is over CONFIRMED TRACKS. `t`
+                    % is a leftover from the frame-assembly loop above, so
+                    % every track's switch rate was being written to one
+                    % arbitrary slot. Found while adding the per-track
+                    % coordinate export below, which indexes the same way.
+                    trackModeSwitchRate(i) = nnz(diff(dom) ~= 0) / (numel(dom) - 1);
+                end
             end
             if ~isempty(opts.EccmScreens)     % ablation mask, absent -> all screens on
                 ts.screensEnabled = cellstr(opts.EccmScreens);
@@ -551,10 +704,18 @@ function feedback = runJudge(matFile, varargin)
     azMeans = nan(1, confirmedCount); azStds = nan(1, confirmedCount);
     for i = 1:confirmedCount
         a = azByID(confirmedTracks(i).TrackID);
-        a = a(~isnan(a));
+        % EXPORTED ALIGNED, stripped only for the statistics below. It used to
+        % be exported NaN-stripped while track_time_s and track_range_m were
+        % not, so any caller pairing the three -- and every one of them does,
+        % including +track/bearingRateScreen.m's own inputs in
+        % +experiments/bearingHeadroom.m -- silently compared azimuth k
+        % against the time and range of hit k+1 the moment one peak yielded a
+        % non-finite angle. Alignment is the series' contract; the co-bearing
+        % statistics can drop their own NaNs locally.
         trackAz{i} = a;
-        if ~isempty(a); azMeans(i) = mean(a); end
-        if numel(a) >= 2; azStds(i) = std(a); end
+        aFin = a(~isnan(a));
+        if ~isempty(aFin); azMeans(i) = mean(aFin); end
+        if numel(aFin) >= 2; azStds(i) = std(aFin); end
     end
     % ============ THE SCREEN HAS AN UPPER VALIDITY LIMIT TOO ============
     % The documented bound on this screen has always been a LOWER one (a
@@ -670,6 +831,7 @@ function feedback = runJudge(matFile, varargin)
     % (e.g. FilterModel cv vs imm) can report an actual score delta instead
     % of only a label flip.
     feedback.track_confidence = trackConfidence;
+    feedback.track_mode_switch_rate = trackModeSwitchRate;   % NaN unless FilterModel='imm'
     feedback.track_range_m = trackRange;
     feedback.track_amp     = trackAmp;
     feedback.track_time_s  = trackTime;
@@ -677,6 +839,56 @@ function feedback = runJudge(matFile, varargin)
     feedback.track_azimuth_rad    = trackAz;     % MEASURED (angle path) or empty
     feedback.track_azimuth_mean   = azMeans;
     feedback.cobearing_flagged    = coBearing;
+    % ---- the mapped trajectory, in coordinates ----------------------------
+    % Radar at the origin, +x boresight, +y cross-range right, +z up -- the
+    % same convention as generator/platform.py, stated in both places so the
+    % two cannot drift.
+    feedback.track_elevation_rad    = trackEl;    % MEASURED, NaN where absent
+    feedback.track_position_xyz_m   = trackXYZ;   % [3 x K] per confirmed track
+    feedback.track_velocity_xyz_mps = trackVel;   % [3 x 1], CV fit over the above
+    % ---- the two quantities that tie a track back to its emitter ----------
+    % ANGULAR RATE is the invariant a single transmitter cannot vary between
+    % the phantoms it radiates. Every phantom leaves the same aperture, so
+    % every one of them sweeps at the PLATFORM's dtheta/dt regardless of the
+    % range it claims. A genuine formation cannot do this: independent
+    % aircraft at different ranges have independent angular rates, because
+    % omega = v_cross / R and neither term is shared.
+    %
+    % IMPLIED CROSS SPEED is that same fact in metres per second -- what
+    % tangential speed this track's own claimed range demands to explain the
+    % bearing sweep actually measured. It is the number that makes the
+    % deception legible: a phantom at 4 km fed by a platform at 900 m implies
+    % 4.4x the platform's real cross-range speed, and N phantoms at N ranges
+    % imply N speeds in exact proportion to their ranges.
+    %
+    % REPORTED, NOT FOLDED INTO THE LABEL -- same posture as track_nis_* and
+    % track_confidence. The screen that scores this is 2c
+    % (+track/bearingRateScreen.m) and it is opt-in; these columns are always
+    % available so a caller can do the comparison itself, visibly.
+    trackOmega = nan(1, confirmedCount);
+    trackCross = nan(1, confirmedCount);
+    for i = 1:confirmedCount
+        % azByID, NOT trackAz: the latter is NaN-stripped for the co-bearing
+        % statistics and so no longer aligns with the time and range series.
+        aSeq = azByID(confirmedTracks(i).TrackID); aSeq = aSeq(:);
+        tSeq = trackTime{i}(:); rSeq = trackRange{i}(:);
+        ok = isfinite(aSeq) & isfinite(tSeq);
+        if nnz(ok) >= 2 && (max(tSeq(ok)) - min(tSeq(ok))) > 0
+            pf = polyfit(tSeq(ok), aSeq(ok), 1);
+            trackOmega(i) = pf(1);
+            trackCross(i) = pf(1) * mean(rSeq(ok));
+        end
+    end
+    feedback.track_angular_rate_rad_s      = trackOmega;
+    feedback.track_implied_cross_speed_mps = trackCross;
+    if hasElev
+        feedback.elevation_source = 'monopulse';
+    else
+        % z is ASSUMED zero, not measured to be zero. Same posture as
+        % angle_source and dopplerMeasured: the caller must be able to tell
+        % "we looked and it was flat" from "we never had the channel".
+        feedback.elevation_source = 'none';
+    end
     % Tier 1.1 -- the NIS column. Separate from track_label BY DESIGN; a
     % caller wanting a combined verdict must combine them itself, visibly.
     feedback.track_nis_mean     = nisMean;
@@ -706,6 +918,53 @@ function feedback = runJudge(matFile, varargin)
         feedback.unambiguous_az_rad = NaN;
         feedback.cross_range_ceiling_m = [];
     end
+    % ================= BACKTRACK: WHERE IS THE EMITTER? ======================
+    % Run the deception backwards. Every phantom is radiated from one physical
+    % platform, so each confirmed track carries that platform's OWN bearing
+    % (Blueprint 2.4, enforced architecturally in +generator/render.m -- there
+    % is no per-phantom angle argument to forge with). Pooling the tracks'
+    % measured azimuths therefore estimates the EMITTER's bearing, and does so
+    % better the more phantoms it transmits: the adversary pays for each extra
+    % false target with another independent look at itself.
+    %
+    % WHAT ONE APERTURE CAN AND CANNOT RECOVER, stated plainly because the
+    % difference is geometry and no amount of processing changes it:
+    %   BEARING  recovered, and it is a real measurement.
+    %   RANGE    NOT recoverable from the phantoms alone. The apparent range
+    %            of a phantom is R_mother + c*tau/2 for a repeater delay tau
+    %            the radar never observes, and bearings-only motion analysis
+    %            from a STATIONARY receiver leaves range unobservable for a
+    %            constant-velocity emitter (it needs an observer manoeuvre or
+    %            a second receiver). What IS available is a hard upper bound
+    %            from causality -- a repeater cannot plant a phantom in front
+    %            of itself, so R_emitter <= min over tracks of that track's
+    %            own nearest range.
+    % So the fix reported here is a bearing plus a bounded range, and the
+    % nearest co-bearing track is the tightest bound the scene offers. If the
+    % platform is itself detectable -- a drone has an RCS and reflects the
+    % radar's own pulse -- that nearest return IS the platform, and the bound
+    % collapses onto a genuine position. The export does not claim to know
+    % which case it is in; it reports the bound and lets the caller say.
+    emitterAz = NaN; emitterEl = NaN; emitterRangeMax = Inf;
+    emitterPos = nan(3,1); emitterFix = 'none';
+    if hasAngle && confirmedCount > 0
+        azAll = cell2mat(cellfun(@(a) a(:), trackAz(:)', 'UniformOutput', false)');
+        emitterAz = mean(azAll(isfinite(azAll)));
+        elAll = cell2mat(cellfun(@(e) e(:), trackEl(:)', 'UniformOutput', false)');
+        if any(isfinite(elAll)); emitterEl = mean(elAll(isfinite(elAll))); end
+        nearestPerTrack = cellfun(@(r) min(r), trackRange);
+        [emitterRangeMax, iNear] = min(nearestPerTrack);
+        elForPos = emitterEl; if ~isfinite(elForPos); elForPos = 0; end
+        emitterPos = localSphericalToCartesian(emitterRangeMax, emitterAz, ...
+                                                elForPos, 0, 0, 0);
+        emitterFix = 'nearest-cobearing';
+        feedback.emitter_track_index = iNear;
+    end
+    feedback.emitter_az_rad        = emitterAz;
+    feedback.emitter_el_rad        = emitterEl;
+    feedback.emitter_range_max_m   = emitterRangeMax;   % causality UPPER BOUND
+    feedback.emitter_position_xyz_m = emitterPos;       % that bound, in coordinates
+    feedback.emitter_fix           = emitterFix;
     % ---- range ambiguity, reported with every result (Phase C1) ----------
     feedback.unambiguous_range_m = ambigInfo.unambiguous_range_m;
     feedback.range_window_m      = ambigInfo.window_span_m;
@@ -794,9 +1053,163 @@ function opts = localParseJudgeConfig(args)
     % tolerance itself is DERIVED from the two quantisers (see
     % track.rangeRateConsistency); this is only how many sigmas of it to allow.
     p.addParameter('RangeRateSigmas',       3);
+    % S3 -- what the tracker is handed as a measurement.
+    %   'range'      [R; 0; 0] with diag([dR^2, 1, 1]) -- the historical
+    %                shape, and a lie the tracker was never told about: the
+    %                last two components are hardcoded zeros with a claimed
+    %                1 m standard deviation (RADAR_REALISM_AUDIT.md Tier 1,
+    %                "no angle channel at all").
+    %   'cartesian'  the real (x, y, z) the measured range/azimuth/elevation
+    %                imply, with the covariance the spherical->Cartesian
+    %                Jacobian gives.
+    % DEFAULTS TO 'range', and that is deliberate rather than timid: changing
+    % the measurement SPACE changes gating and association for every scene in
+    % the repo, so every published confirmed-track count would move at once
+    % and no single result would be attributable. Opt in per caller, the same
+    % posture FilterModel='imm' and the elevation channel already take.
+    p.addParameter('MeasurementSpace',      'range');
+    % ---- MTI / clutter notch (16 Aug 2026) ---------------------------------
+    % Half-width in METRES PER SECOND of the zero-Doppler filter this radar
+    % discards. 0 = OFF, which is the default and preserves every published
+    % detection number: until +physics/surfaceClutter.m existed there was no
+    % clutter to reject, so no result in this repo was measured with a notch.
+    %
+    % WHY IT IS EXPRESSED AS A SPEED. A notch is a statement about what the
+    % radar refuses to believe is moving, and that is physical. Converting to
+    % bins is arithmetic the judge can do: the velocity bin here is
+    % lambda*PRF/(2*numPulses) = 3.75 m/s, so 3.75 notches +-1 bin.
+    %
+    % WHY IT IS NOT DERIVED AND SET AUTOMATICALLY. The right width is the
+    % clutter's own spectral extent -- internal motion of wind-blown terrain,
+    % plus whatever the FFT window's sidelobes smear -- and this project
+    % models neither. Picking a number and calling it derived would be a magic
+    % constant with a justification attached. It is a parameter, and any
+    % result that uses it must say which value.
+    %
+    % AND IT IS NOT FREE. The same filter that removes ground return removes
+    % genuinely slow and tangential targets: a hovering drone has no radial
+    % rate and is indistinguishable from clutter to any MTI radar. That is a
+    % real limitation of real radars, not an artefact here, and
+    % +experiments/clutterImpact.m measures both sides of it.
+    p.addParameter('MtiNotchMps',           0, @(x) isscalar(x) && x >= 0);
     p.parse(args{:});
     opts = p.Results;
 end
+
+function r = localTrackRange(state, useCartesian)
+%LOCALTRACKRANGE  A track's estimated SLANT RANGE, whichever space it lives in.
+%
+%   THIS FUNCTION IS THE CONTAINMENT RULE FOR S3, and it is the reason a
+%   Cartesian tracker does not cascade through the repo. +track/discriminator.m
+%   reads trackStruct.range -- a scalar series -- and so do every screen, every
+%   fixture and every published label. Moving the tracker into (x,y,z) changes
+%   what State() means; converting back to a slant range HERE keeps every
+%   downstream contract byte-identical, so the blast radius stays inside
+%   runJudge and runTracker.
+%
+%   'range' space  : initcvekf's state is [R; Rdot; 0; 0; 0; 0], so State(1)
+%                    IS the range, exactly as before.
+%   'cartesian'    : the state is [x; vx; y; vy; z; vz] and the range is the
+%                    norm of the position components (1, 3, 5).
+    if useCartesian
+        r = norm([state(1), state(3), state(5)]);
+    else
+        r = state(1);
+    end
+end
+
+
+function s = localAngleSigma(angleRad, subSepM, lambda)
+%LOCALANGLESIGMA  Standard deviation to attach to one angle measurement.
+%   A MEASURED angle gets the estimator's own scatter, taken as one tenth of
+%   the unambiguous half-sector asin(lambda/(2*d)) -- a deliberately
+%   conservative stand-in for the 0.0726 deg worst-case within-track scatter
+%   tests/test_monopulse_snr_boundary.m measured, chosen so it degrades with
+%   the geometry (a shorter baseline widens the sector AND the error) rather
+%   than being one number typed in.
+%
+%   An UNMEASURED angle (no difference channel, or a bin where the sum was
+%   zero) gets the FULL half-sector. That direction is the safe one: an
+%   unknown bearing must widen the gate. Giving it a small sigma would tell
+%   the tracker the target is confidently on boresight, which is the failure
+%   the [R;0;0] measurement had.
+    half = asin(min(1, lambda / (2 * subSepM)));
+    if isfinite(angleRad)
+        s = half / 10;
+    else
+        s = half;
+    end
+end
+
+
+function [pos, Rcov] = localSphericalToCartesian(R, az, el, sR, sAz, sEl)
+%LOCALSPHERICALTOCARTESIAN  Position and its covariance, by the Jacobian.
+%   x = R*cos(el)*cos(az), y = R*cos(el)*sin(az), z = R*sin(el)
+%   Rcov = J * diag([sR^2, sAz^2, sEl^2]) * J'
+%   Same convention as generator/platform.py: +x boresight, +y cross-range
+%   right, +z up.
+    ce = cos(el); se = sin(el); ca = cos(az); sa = sin(az);
+    pos = [R*ce*ca; R*ce*sa; R*se];
+    J = [ce*ca, -R*ce*sa, -R*se*ca; ...
+         ce*sa,  R*ce*ca, -R*se*sa; ...
+         se,     0,        R*ce];
+    Rcov = J * diag([sR^2, sAz^2, sEl^2]) * J';
+    Rcov = (Rcov + Rcov') / 2;      % symmetrise against round-off; trackerGNN
+end                                  % rejects a non-symmetric covariance
+
+
+function [P, V] = localTrackKinematics(rSeq, azSeq, elSeq, tSeq)
+%LOCALTRACKKINEMATICS  One track's measured trajectory, as coordinates.
+%   P  [3 x K] position at each hit, radar at the origin
+%   V  [3 x 1] constant-velocity fit over P, or NaN if under-determined
+%
+%   POSITION IS AN ASSEMBLY, NOT AN ESTIMATE. x = R*cos(el)*cos(az) etc, from
+%   the measurements already made -- so norm(P(:,k)) reproduces the range
+%   series the ECCM screens read, exactly. Nothing here re-measures anything.
+%
+%   AN UNMEASURED ANGLE IS TAKEN AS ZERO, which is an ASSUMPTION and is
+%   reported as one (feedback.angle_source / elevation_source). Zero is the
+%   right assumption to make visible rather than the right answer: with no
+%   difference channel the target is assumed on boresight, and that
+%   assumption is precisely the [R;0;0] lie this export exists to expose.
+%
+%   VELOCITY IS A CV FIT, matching this project's declared threat model
+%   (CLAUDE.md's standing callout), one least-squares slope per axis. It is
+%   NOT the tracker's filter state: that state is only three-dimensional in
+%   MeasurementSpace='cartesian', and this export must mean the same thing in
+%   both spaces. Deliberately INDEPENDENT of the slow-time Doppler, so a
+%   caller can project V onto the line of sight and compare it against
+%   track_range_rate_mps -- two extractions from different parts of the
+%   signal, which is only a check if neither is derived from the other.
+%
+%   ITS RADIAL COMPONENT IS THE WORSE OF THE TWO, BY A LOT. The range series
+%   is quantised, not noisy: a target crossing range cells at a non-integer
+%   rate produces a staircase, and a straight line through a staircase can
+%   only realise slopes that are whole cells over the fit span. The error is
+%   therefore bounded by range_per_sample / span -- about 9 m/s over a 5 s
+%   track here, against the 1.3 m/s the slow-time Doppler achieves on the
+%   same target. READ track_range_rate_mps FOR RADIAL SPEED. What this vector
+%   uniquely provides is the CROSS-RANGE component, which comes from the
+%   bearing rate and which no Doppler measurement can supply at all.
+    K = numel(rSeq);
+    P = zeros(3, K); V = nan(3, 1);
+    if K == 0; return; end
+    az = azSeq(:); el = elSeq(:);
+    az(~isfinite(az)) = 0;
+    el(~isfinite(el)) = 0;
+    r = rSeq(:);
+    P = [r .* cos(el) .* cos(az), r .* cos(el) .* sin(az), r .* sin(el)]';
+    % 2 points minimum for a slope, and the times must actually differ --
+    % a single-frame track has no velocity, and saying NaN is the honest
+    % answer rather than 0, which would read as "measured, stationary".
+    t = tSeq(:);
+    if K < 2 || (max(t) - min(t)) <= 0; return; end
+    for ax = 1:3
+        c = polyfit(t, P(ax, :)', 1);
+        V(ax) = c(1);
+    end
+end
+
 
 function nv = localNameValue(opts, names)
 %LOCALNAMEVALUE  Flatten the specified-only options into a name-value list.

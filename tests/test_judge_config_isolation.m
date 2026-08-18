@@ -134,21 +134,23 @@ classdef test_judge_config_isolation < matlab.unittest.TestCase
         end
 
         function cube = buildCube(tc, seed)
-            % One genuine closing target, this project's canonical geometry.
-            rs = RandStream('mt19937ar', 'Seed', seed);
-            nFast = 400;
-            cube = complex(zeros(nFast, tc.NPULSES, tc.NFRAMES));
-            R0 = 1800; v = -40;
-            for k = 1:tc.NFRAMES
-                st = engine.entity.EntityState('range_m', R0 + v*(k-1)*tc.DT_S, ...
-                        'range_rate_mps', v, 'class', "drone");
-                sig = engine.entity.render(st, 'NumPulses', tc.NPULSES, ...
-                    'FastTimeSamples', nFast, 'PulseWidth', tc.PW_S, ...
-                    'Bandwidth', tc.BW_HZ, 'CarrierHz', tc.CARRIER, ...
-                    'PrfHz', tc.PRF_HZ, 'AmpScale', 3.0, 'RandStream', rs);
-                cube(:,:,k) = sig + 0.05 * (randn(rs, nFast, tc.NPULSES) + ...
-                                     1i*randn(rs, nFast, tc.NPULSES)) / sqrt(2);
-            end
+            % One genuine closing target.
+            %
+            % REWIRED 12 Aug 2026 from engine.entity.render (archived 7 Aug)
+            % to generator.render via tests/renderPhantomScene.m. R0 moved
+            % 1800 -> 2400 m: at -40 m/s over 8 frames the old start ends at
+            % 1520 m, 279 m inside the 1798.75 m blind range, and the
+            % rebuilt path actually evaluates the eclipse veto that
+            % engine.entity.render never did. Nothing in this file depends
+            % on R0 -- what it asserts is that a planted CFAR/tracker/ECCM
+            % field in the .mat cannot move the judge, on ANY scene that
+            % confirms a track.
+            rng(seed, 'twister');   % seeds render.m's own noise draw
+            [judgeMat, ~] = renderPhantomScene(2400, -40, ...
+                'NumFrames', tc.NFRAMES, 'NumPulses', tc.NPULSES, ...
+                'Tag', sprintf('cfgiso_s%d', seed));
+            S = load(judgeMat, 'rx_frames');
+            cube = S.rx_frames;
         end
 
         function f = writeMat(tc, cube, extra)

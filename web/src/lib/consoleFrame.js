@@ -51,15 +51,25 @@ export function toFrame(resp) {
   // rangeSeries is the trajectory the exporter actually rendered (DERIVED,
   // server-side); pos stays as the t=0 range so anything reading a single
   // scalar still gets the value it always got.
+  // ampSeries is the amplitude the projection derived for those same ranges
+  // from the two-way radar equation (server-side, DERIVED). The scene dict has
+  // no amp_scale to read: the rebuilt generator derives amplitude instead of
+  // letting a planner pick it.
   const truthRanges = asList(tt?.range_m);
-  const phantoms = asList(scene.phantoms).map((p, i) => ({
-    id: `T${i + 1}`,
-    pos: [Number(p.range_m) || 0, 0, 0],
-    rangeSeries: nums(truthRanges[i]),
-    status: status[i] ?? 'undetected',
-    class: p.class,
-    radialVelMps: Number(p.radial_vel_mps) || 0,
-  }));
+  const truthAmps = asList(tt?.amplitude_sim);
+  const phantoms = asList(scene.phantoms).map((p, i) => {
+    const amp = nums(truthAmps[i]);
+    return {
+      id: `T${i + 1}`,
+      pos: [Number(p.range_m) || 0, 0, 0],
+      rangeSeries: nums(truthRanges[i]),
+      ampSeries: amp,
+      ampSim: amp.length ? amp[0] : NaN,
+      status: status[i] ?? 'undetected',
+      class: p.class,
+      radialVelMps: Number(p.radial_vel_mps) || 0,
+    };
+  });
 
   // Radar side: what the JUDGE actually confirmed.
   //

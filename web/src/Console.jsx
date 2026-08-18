@@ -10,7 +10,13 @@
 // debounce on slider drags. It is the planner that costs. A 400 ms debounce
 // cannot rescue a 66 s search, so controls stage changes and RUN commits them.
 //
-// WHICH CONTROLS ARE REAL. Every knob in the left column maps to a field
+// LAYOUT — the two sides never mix. LEFT is the mother drone: its inputs,
+// the phantoms the planner produced, and their planned kinematics. RIGHT is
+// the radar console: the PPI, the radar's own knobs and DERIVED constants
+// under it, then the judge's measurements. A number's column tells you which
+// side of the Rule-2 firewall produced it.
+//
+// WHICH CONTROLS ARE REAL. Every knob on screen maps to a field
 // server/app.py actually accepts (OptsIn / RadarStateIn). Amplitude profile,
 // phase profile and trajectory pattern are deliberately NOT controls: the
 // planner decides amp_scale and radial_vel_mps itself, and there is no
@@ -96,10 +102,15 @@ export default function Console() {
     n_phantoms: 3, seed: 1, interceptNoiseAmplitude: 2.0,
     maneuver: 'static', eirp_budget_dbw: 17.8, duration_s: 8.0, engine_mode: 'MANUAL',
   });
+  // Only the fields this console actually STEERS. prf_hz / pri_s / carrier_hz
+  // used to be here as literals (50 kHz, 20 us, 10 GHz) -- a fourth copy of
+  // numbers +physics/Constants.m owns, and stale: this radar is 8 kHz / 125 us,
+  // so the copy implied R_ua = 2998 m where the real one is 18737 m, a 6.25x
+  // error in the ring the PPI draws. RadarStateIn defaults every one of them
+  // from common.constants, so omitting them here makes the backend the single
+  // source and the panel below reads them back from GET /constants.
   const [radar, setRadar] = useState({
-    mode: 'search', prf_hz: 50000, pri_s: 20e-6, carrier_hz: 10e9,
-    range_gate_m: [0, 20000], vel_gate_mps: [-1000, 1000],
-    scan_phase: 0, doubt_cue: 0,
+    mode: 'search', range_gate_m: [0, 20000], scan_phase: 0, doubt_cue: 0,
   });
 
   useEffect(() => { bridge.health().then(setJudge); }, []);
@@ -255,8 +266,10 @@ export default function Console() {
       {/* ---------------- body ---------------- */}
       <div style={{ display: 'flex', gap: 6, padding: 6, flex: 1, minHeight: 0 }}>
 
-        {/* LEFT — controls that really reach the backend */}
-        <div style={{ width: 232, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* LEFT — DRONE SIDE. Everything the mother drone puts IN, and the
+            phantoms it got OUT. Nothing the radar measured lives here. */}
+        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
+          overflowY: 'auto' }}>
           <Panel title="MOTHER DRONE — CONTROL" right={<Cpu size={11} color={C.dim} />}>
             <Segmented label="Hallucination engine" value={opts.engine_mode} options={MODES}
               onChange={(v) => set('engine_mode', v)} />
@@ -284,22 +297,61 @@ export default function Console() {
               onChange={(v) => set('seed', v)} note="Seeded RNG only — runs reproduce." />
           </Panel>
 
-          <Panel title="RADAR" right={<Radar size={11} color={C.dim} />}>
-            <Slider label="Doubt cue" value={radar.doubt_cue.toFixed(2)} min={0} max={1} step={0.01}
-              onChange={(v) => setRadar((r) => ({ ...r, doubt_cue: v }))} />
-            <Slider label="Range gate max" value={(radar.range_gate_m[1] / 1000).toFixed(1)} unit=" km"
-              min={2} max={24} step={0.5}
-              onChange={(v) => setRadar((r) => ({ ...r, range_gate_m: [0, v * 1000] }))} />
-            <div style={{ marginTop: 8, fontSize: 9, lineHeight: 1.7 }}>
-              <Row k="Range cell" v={consts ? `${RANGE_CELL_M.toFixed(1)} m` : '--'} />
-              <Row k="Unambiguous" v={consts ? `${(UNAMBIG_M / 1000).toFixed(2)} km` : '--'} />
-              <Row k="Record ceiling" v={consts ? `${(CEIL_M / 1000).toFixed(1)} km` : '--'} />
-              <Row k="Carrier" v="10 GHz" vc={C.amber} />
+          <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 4 }}>
+            <PanelHead>PHANTOMS — ENGINE OUTPUT vs JUDGE</PanelHead>
+            <div style={{ padding: '4px 8px 8px', fontSize: 8.5 }}>
+              <div style={{ display: 'flex', color: C.faint, padding: '3px 0',
+                borderBottom: `1px solid ${C.line}`, letterSpacing: 0.3 }}>
+                <span style={{ width: 26 }}>ID</span>
+                <span style={{ flex: 1 }}>RANGE</span>
+                <span style={{ width: 48, textAlign: 'right' }}>v m/s</span>
+                <span style={{ width: 42, textAlign: 'right' }}>amp₀</span>
+                <span style={{ width: 58, textAlign: 'right' }}>STATUS</span>
+              </div>
+              {(resp ? ppiTargets : []).map((t, i) => {
+                const sp = scenePhantoms[i] ?? {};
+                const amp0 = frame?.truth.phantoms[i]?.ampSim;
+                return (
+                  <div key={t.id} data-testid="phantom-row" data-status={t.status}
+                    style={{ display: 'flex', padding: '3px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
+                    <span style={{ width: 26, color: STATUS_COLOR[t.status] ?? C.silver, fontWeight: 600 }}>{t.id}</span>
+                    <span style={{ flex: 1, color: C.txt }}>{(t.rangeM / 1000).toFixed(2)} km</span>
+                    <span style={{ width: 48, textAlign: 'right', color: C.dim }}>
+                      {Number.isFinite(sp.radial_vel_mps) ? sp.radial_vel_mps.toFixed(0) : '—'}
+                    </span>
+                    <span style={{ width: 42, textAlign: 'right', color: C.dim }}>
+                      {Number.isFinite(amp0) ? amp0.toFixed(2) : '—'}
+                    </span>
+                    <span style={{ width: 58, textAlign: 'right', color: STATUS_COLOR[t.status] ?? C.dim }}>
+                      {t.status}
+                    </span>
+                  </div>
+                );
+              })}
+              {resp && ppiTargets.length === 0 && (
+                <div style={{ padding: '8px 0', color: C.faint, textAlign: 'center', lineHeight: 1.5 }}>
+                  zero phantoms — negative control. The judge confirming nothing here is a result.
+                </div>
+              )}
+              {!resp && <div style={{ padding: '8px 0', color: C.faint, textAlign: 'center' }}>engine cold</div>}
+              <div style={{ fontSize: 7.5, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>
+                Range and v are the ENGINE’s requested action. amp₀ is DERIVED, not chosen —
+                Physics Projection sets it from the two-way radar equation at t=0, so it falls
+                as 1/R². Status is DERIVED too: scene truth matched against judge measurement,
+                not something the judge reported.
+              </div>
             </div>
-            <div style={{ fontSize: 7.5, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>
-              First three DERIVED from c and fs. Carrier is ASSUMED — RadChar is baseband.
+          </div>
+
+          <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 4 }}>
+            <PanelHead right={<Waves size={11} color={C.dim} />}>PLANNED KINEMATICS</PanelHead>
+            <div style={{ padding: '8px 10px' }}>
+              {resp
+                ? <KinematicsPlot phantoms={scenePhantoms} statuses={ppiTargets.map((t) => t.status)}
+                    amps={(frame?.truth.phantoms ?? []).map((p) => p.ampSim)} />
+                : <div style={{ fontSize: 10, color: C.faint }}>no run yet</div>}
             </div>
-          </Panel>
+          </div>
         </div>
 
         {/* CENTRE — 3D + signal chain */}
@@ -340,8 +392,11 @@ export default function Console() {
           </div>
         </div>
 
-        {/* RIGHT — what the radar holds */}
-        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* RIGHT — RADAR CONSOLE. The PPI, then everything the radar itself
+            owns: its own controls, its DERIVED constants, and the judge's
+            measurements. Nothing the planner decided lives here. */}
+        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6,
+          overflowY: 'auto' }}>
           <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 4 }}>
             <PanelHead right={<span style={{ color: C.faint, letterSpacing: 0 }}>read-only</span>}>
               PPI SCOPE — WHAT THE RADAR HOLDS
@@ -367,10 +422,11 @@ export default function Console() {
             </div>
           </div>
 
-          <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 4, flex: 1, minHeight: 0,
+          {/* directly under the PPI: what the judge MEASURED on the last run */}
+          <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 4,
             display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', borderBottom: `1px solid ${C.line}` }}>
-              {[['profile', 'RANGE', Activity], ['kin', 'KINEMATICS', Waves], ['verdict', 'VERDICT', Gauge]].map(([id, lbl, Ic]) => (
+              {[['profile', 'RANGE', Activity], ['verdict', 'VERDICT', Gauge]].map(([id, lbl, Ic]) => (
                 <button key={id} onClick={() => setTab(id)}
                   style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                     padding: '6px 2px', fontSize: 8, fontFamily: MONO, letterSpacing: 0.3, cursor: 'pointer',
@@ -388,10 +444,6 @@ export default function Console() {
                 <RangeStrip phantoms={ppiTargets} tracks={frame.radar.tracks} ceilM={CEIL_M} unambigM={UNAMBIG_M} />
               )}
 
-              {resp && tab === 'kin' && (
-                <KinematicsPlot phantoms={scenePhantoms} statuses={ppiTargets.map((t) => t.status)} />
-              )}
-
               {resp && tab === 'verdict' && board.map((m) => (
                 <Row key={m.key} k={m.label}
                   v={<span>{m.value === null ? '—' : `${m.value}${m.unit ? ' ' + m.unit : ''}`}<Prov p={m.provenance} /></span>}
@@ -400,48 +452,32 @@ export default function Console() {
             </div>
           </div>
 
-          <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 4 }}>
-            <PanelHead>PHANTOMS — ENGINE OUTPUT vs JUDGE</PanelHead>
-            <div style={{ padding: '4px 8px 8px', fontSize: 8.5 }}>
-              <div style={{ display: 'flex', color: C.faint, padding: '3px 0',
-                borderBottom: `1px solid ${C.line}`, letterSpacing: 0.3 }}>
-                <span style={{ width: 26 }}>ID</span>
-                <span style={{ flex: 1 }}>RANGE</span>
-                <span style={{ width: 48, textAlign: 'right' }}>v m/s</span>
-                <span style={{ width: 34, textAlign: 'right' }}>amp</span>
-                <span style={{ width: 58, textAlign: 'right' }}>STATUS</span>
-              </div>
-              {(resp ? ppiTargets : []).map((t, i) => {
-                const sp = scenePhantoms[i] ?? {};
-                return (
-                  <div key={t.id} data-testid="phantom-row" data-status={t.status}
-                    style={{ display: 'flex', padding: '3px 0', borderBottom: `1px solid ${C.lineSoft}` }}>
-                    <span style={{ width: 26, color: STATUS_COLOR[t.status] ?? C.silver, fontWeight: 600 }}>{t.id}</span>
-                    <span style={{ flex: 1, color: C.txt }}>{(t.rangeM / 1000).toFixed(2)} km</span>
-                    <span style={{ width: 48, textAlign: 'right', color: C.dim }}>
-                      {Number.isFinite(sp.radial_vel_mps) ? sp.radial_vel_mps.toFixed(0) : '—'}
-                    </span>
-                    <span style={{ width: 34, textAlign: 'right', color: C.dim }}>
-                      {Number.isFinite(sp.amp_scale) ? sp.amp_scale.toFixed(2) : '—'}
-                    </span>
-                    <span style={{ width: 58, textAlign: 'right', color: STATUS_COLOR[t.status] ?? C.dim }}>
-                      {t.status}
-                    </span>
-                  </div>
-                );
-              })}
-              {resp && ppiTargets.length === 0 && (
-                <div style={{ padding: '8px 0', color: C.faint, textAlign: 'center', lineHeight: 1.5 }}>
-                  zero phantoms — negative control. The judge confirming nothing here is a result.
-                </div>
-              )}
-              {!resp && <div style={{ padding: '8px 0', color: C.faint, textAlign: 'center' }}>engine cold</div>}
-              <div style={{ fontSize: 7.5, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>
-                Range / v / amp are the PLANNER’s output. Status is DERIVED — scene truth matched
-                against judge measurement, not something the judge reported.
-              </div>
+          <Panel title="RADAR — CONTROL & DERIVED" right={<Radar size={11} color={C.dim} />}>
+            <Slider label="Doubt cue" value={radar.doubt_cue.toFixed(2)} min={0} max={1} step={0.01}
+              onChange={(v) => setRadar((r) => ({ ...r, doubt_cue: v }))} />
+            <Slider label="Range gate max" value={(radar.range_gate_m[1] / 1000).toFixed(1)} unit=" km"
+              min={2} max={24} step={0.5}
+              onChange={(v) => setRadar((r) => ({ ...r, range_gate_m: [0, v * 1000] }))} />
+            <div style={{ marginTop: 8, fontSize: 9, lineHeight: 1.7 }}>
+              <Row k="PRF" v={consts ? `${(consts.prf_hz / 1000).toFixed(1)} kHz` : '--'} />
+              <Row k="PRI" v={consts ? `${(consts.pri_s * 1e6).toFixed(0)} µs` : '--'} />
+              <Row k="Range cell" v={consts ? `${RANGE_CELL_M.toFixed(1)} m` : '--'} />
+              <Row k="Unambiguous R" v={consts ? `${(UNAMBIG_M / 1000).toFixed(2)} km` : '--'} />
+              <Row k="Unambiguous v" v={consts ? `±${consts.unambiguous_velocity_mps.toFixed(1)} m/s` : '--'} />
+              <Row k="Blind range" v={consts ? `${consts.blind_range_m.toFixed(0)} m` : '--'} vc={C.amber} />
+              <Row k="Record ceiling" v={consts ? `${(CEIL_M / 1000).toFixed(1)} km` : '--'} />
+              <Row k="Carrier" v={consts ? `${(consts.carrier_hz / 1e9).toFixed(1)} GHz` : '--'} vc={C.amber} />
+              <Row k="Doppler" v={resp?.feedback?.doppler_source ?? '—'} />
+              <Row k="Angle" v={resp?.feedback?.angle_source ?? '—'} />
             </div>
-          </div>
+            <div style={{ fontSize: 7.5, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>
+              Every row DERIVED server-side from c, fs, PRF and the pulse width —
+              c/(2·fs), c/(2·PRF), λ·PRF/4, c·PW/2 — never re-typed here. Carrier is
+              ASSUMED (RadChar is baseband); the blind range is why the engine cannot
+              start a phantom closer in. Doppler / angle source are the judge's own
+              report for the last run.
+            </div>
+          </Panel>
         </div>
       </div>
 
@@ -513,13 +549,18 @@ function RangeStrip({ phantoms, tracks, ceilM, unambigM }) {
    matched-filter output and is not on this payload, so drawing a heatmap
    here would be inventing one. These are the planned kinematics that WOULD
    place each phantom on such a surface. ───────────────────────────────── */
-function KinematicsPlot({ phantoms, statuses }) {
+function KinematicsPlot({ phantoms, statuses, amps = [] }) {
   const W = 280, H = 130, PL = 30, PR = 10, PT = 10, PB = 24;
   const iw = W - PL - PR, ih = H - PT - PB;
   const rs = phantoms.map((p) => p.range_m ?? 0);
   const vs = phantoms.map((p) => p.radial_vel_mps ?? 0);
   const rMax = Math.max(1, ...rs) * 1.2;
   const vAbs = Math.max(40, ...vs.map(Math.abs)) * 1.2;
+  // Marker size used to read `p.amp_scale`, a field the rebuilt generator
+  // never sets -- so every marker was the same size while the caption claimed
+  // otherwise. Scaled against the scene's own brightest phantom, because the
+  // absolute sim amplitude spans orders of magnitude with range.
+  const aMax = Math.max(...amps.filter(Number.isFinite), 0);
   const px = (r) => PL + (r / rMax) * iw;
   const py = (v) => PT + ih / 2 - (v / vAbs) * (ih / 2);
   return (
@@ -536,7 +577,7 @@ function KinematicsPlot({ phantoms, statuses }) {
         {phantoms.map((p, i) => {
           const col = STATUS_COLOR[statuses[i]] ?? C.silver;
           const x = px(p.range_m ?? 0), y = py(p.radial_vel_mps ?? 0);
-          const r = 3 + 3 * Math.min(1, (p.amp_scale ?? 1) / 4);
+          const r = aMax > 0 && Number.isFinite(amps[i]) ? 3 + 3 * (amps[i] / aMax) : 4;
           return (
             <g key={i}>
               <line x1={x} y1={py(0)} x2={x} y2={y} stroke={col} strokeWidth={0.8} opacity={0.4} />
@@ -550,9 +591,9 @@ function KinematicsPlot({ phantoms, statuses }) {
         <text x={PL} y={H - 4} fontSize={7} fill={C.faint} fontFamily={MONO}>radial velocity ↑</text>
       </svg>
       <div style={{ fontSize: 7.5, color: C.faint, marginTop: 4, lineHeight: 1.45 }}>
-        Planner output: range vs radial velocity, marker size ∝ amp_scale. This is NOT a
-        range-Doppler map — that surface lives inside the judge and is not on this payload,
-        so it is not drawn.
+        Engine action: range vs radial velocity. Marker size ∝ the DERIVED t=0 amplitude,
+        relative to this scene's brightest phantom. This is NOT a range-Doppler map — that
+        surface lives inside the judge and is not on this payload, so it is not drawn.
       </div>
     </div>
   );

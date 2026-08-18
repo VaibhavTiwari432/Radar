@@ -19,6 +19,25 @@ classdef Stage7_Test < matlab.unittest.TestCase
 
     methods (TestClassSetup)
         function runBenchmarkOnce(tc)
+            % 7 Aug 2026 archive: experiments.runBenchmark no longer exists
+            % (it built its environment from +agent/+synth). Report
+            % Incomplete -- the project's own honest "not built yet"
+            % outcome -- instead of erroring, so a genuine regression stays
+            % visible instead of drowning in archive collateral.
+            %
+            % The guard lives INSIDE this setup method rather than in a
+            % second TestClassSetup block: MATLAB does not guarantee the
+            % execution order of setup methods across separate blocks, and
+            % a guard that runs second guards nothing. Verified the hard
+            % way -- as its own block, this file still errored.
+            %
+            % NOT a fix. Stage 7 is the largest open gap in the rebuild:
+            % Phase C replaced Stage 6's agent, nothing replaced the
+            % benchmark harness (CLAIMABLE_RESULTS.md G3).
+            tc.assumeTrue(archivedDepsPresent({'experiments.runBenchmark'}), ...
+                ['experiments.runBenchmark was archived 7 Aug 2026 ' ...
+                 '(GOVERNANCE.md). Stage 7 has NO replacement -- see ' ...
+                 'CLAIMABLE_RESULTS.md G3 and trash/BROKEN_DOWNSTREAM.md.']);
             tc.T = experiments.runBenchmark(struct('quick', true));
         end
     end

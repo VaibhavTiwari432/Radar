@@ -50,7 +50,7 @@ overstates it.
 |---|---|---|---|
 | A1 | STANDS | **FROZEN** | `test_vee_deception_check.m` archived. The 10/10-vs-0/10 deception result cannot be re-run. |
 | A6 | STANDS | **FROZEN** | both swarm tests archived |
-| C2 | STANDS | **FROZEN** | `test_waveform_agility.m` broken. The 14.2 dB / 24× figure was an isolated matched-filter measurement and is the most likely of these to survive a re-derivation — but it has not had one. |
+| C2 | STANDS | ~~**FROZEN**~~ → **STANDS again, 10 Aug 2026, on new evidence** | `test_waveform_agility.m` is still broken, but `tests/test_generator_agility.m` (3/3) re-derives the measurement on the REBUILT generator: **14.16 dB** vs 14.2 published. It did survive the re-derivation, as predicted here. **The 24× smearing half did NOT** — see section H. |
 | C3, C3a | STANDS / QUALIFIED | **FROZEN** | same file |
 | B3 | WITHDRAWN | **WITHDRAWN, and now unrunnable** | already withdrawn on the merits; its test is archived too, so it cannot be re-baselined even if someone wanted to |
 | **A3** | STANDS | **STANDS — on NEW evidence** | see below |
@@ -309,6 +309,183 @@ retained judge.**
 
 **21 of 34 `+experiments/` scripts are broken**, not the 7 the archive doc originally
 listed — including the benchmark harness and the headline-reproduction script.
+
+---
+
+# H — the 10 August 2026 audit
+
+A second post-archive sweep, asked the other way round: not "which claims still have
+evidence" but **"which things this project said it built are still working."** Four
+findings the G rows above do not cover. Each was measured, not read off a doc.
+
+| # | Claim | Status | Source |
+|---|---|---|---|
+| H1 | The AC-0 MATLAB firewall holds | **WAS FALSE, NOW TRUE AND STRICTER.** The rule was *"exactly one place may import `matlab.engine`"*; the 7 Aug rebuild added a second holder (`generator/decision/matlab_bridge.py`, Phase C's persistent engine) and **the test had been failing ever since**, while `PROJECT_INVENTORY.md` and `ANNEXURE_TECHNICAL_INVENTORY.md` both still asserted it held. Fixed by naming both bridges in `SANCTIONED_BRIDGES` rather than deleting the invariant. Tightening it then exposed a **second** latent hole: the old test skipped all of `server/`, so it could never have seen a violation there | `server/tests/test_ac0_firewall_ac2_serializer.py`, 25 passed |
+| H2 | Screen 2b (manoeuvre-plausibility) catches manoeuvring phantoms | **NO — it is INERT**, on this instrument, and no threshold change fixes it. Measured switch rate is exactly 0 (not NaN: the plumbing works) on the flutter arm AND the genuine arm alike. Three compounding causes: the tracker measures **range only** at 46.84 m quantisation and the scene's 40 m velocity alternation is under one bin; the channel that *can* see it (range-rate `[-15 -56.2 -15 -56.2 …]`) never enters the filter; and a 6-frame track gives 5 transitions, so one switch scores 0.20 against a 0.25 line. Keep it as a veto — it removes a real regression and costs nothing — but do **not** claim it discriminates | `generator.screenAblation` (`maneuvering` arm), `+track/discriminator.m` |
+| H3 | The rebuilt generator's headline claims are regression-protected | **WAS NO, NOW YES — all 7 of 7 `+generator/` entry points are covered.** Five had **no test at all**, including `phaseBSweep`, which carries F2/F3, the project's central result. Each new test drives the REAL script rather than reimplementing its loop, so it guards the code that produced the published numbers instead of a copy free to drift | see the five rows below |
+
+| entry point | test | what it locks |
+|---|---|---|
+| `phaseBSweep` | `test_generator_phase_b.m` 2/2 | **F2, F3** at the published N=5 — reproduces both tables exactly (Table 1 all 1.00; Table 2 **1.00 → 0.00**) |
+| `checkAgilityMechanism` | `test_generator_agility.m` 3/3 | **C2**, un-frozen — 14.16 dB vs 14.2 published |
+| `phantomCountSweep` | `test_generator_phantom_count.m` 4/4 | **F7** (0 survivors at every N ≥ 2, both arms; N=1 survives, since co-bearing cannot fire on one track) and **F8**'s structural half (losses are labelling, not detection) |
+| `screenAblation` | `test_generator_screen_ablation.m` 4/4 | **F4** orthogonality all four corners; the no-screens floor; and **H2** asserted in both directions, so screen 2b cannot silently start *or* stop doing something |
+| `judgeSummary`, `render`, `runGateA` | `test_generator_judge_summary.m` 5/5, `test_generator_gate_a.m` 4/4 | **F1**, and the Python bridge contract — deliberately on a MULTI-TRACK scene, the only shape that reproduces the crash that killed a training run at ~episode 75 |
+
+**Two sub-N caveats, stated so these are not over-quoted.** `phantomCountSweep` and `screenAblation` are gated at **N=2 seeds**, not the published 5: every claim asserted sits at 0.00 or 1.00, so a second seed catches a break at a fraction of the runtime. The N=5 tables remain those scripts' own results. In particular **F5's 0.80 cell is deliberately not asserted** — it cannot even be expressed at N=2.
+
+**A test that failed for the right reason, kept as a finding.** The first `judgeSummary` option-forwarding test used `EccmScreens` as its lever and failed: on a co-bearing scene the mask *cannot* change the label, because the co-bearing test lives in `engine.runJudge`, **not** in `track.discriminator`, and is therefore not a member of `EccmScreens` at all. That is now its own assertion — and it is the structural reason the monopulse wall is not a tuning result: **every screen a phantom can satisfy is in the mask; the one it cannot is not, because "do these tracks share a bearing?" is not answerable per track.**
+| H4 | The FastAPI bridge (`server/`) is a working deliverable | **WAS NO, NOW YES — and the original diagnosis was wrong twice over.** ~~"the app cannot start"~~: the `cogengine` imports were **function-local**, so the app started fine and `/health` answered 200. What failed was the four endpoints that reach for the engine, at request time, with a 500. Rewired 12 Aug onto the rebuilt generator; `/plan` `/score` `/run` `/constants` all answer, and `/run` reaches the real judge | `server/tests/test_generator_rewire.py` — 11 passed, plus 2 `slow` against a live MATLAB |
+| H5 | The MATLAB suite can detect a regression | **WAS NO, NOW YES.** It carried **63 errored methods**, against which a 64th would have been invisible — a broken instrument, not a red suite. All are now dependency-guarded (`tests/archivedDepsPresent.m`) and report the project's own **Incomplete** outcome. **PASSED 124 / FAILED 0 / INCOMPLETE 93 of 217**, from 119/64/92. **No capability was restored and none of the debt is paid** — 93 Incomplete *is* the debt. Guards are conditional (a restored dependency un-skips its tests with no edit), contain no shim, and cost zero coverage: set-diffing the passing tests before and after shows **0 lost**, +5 gained. **UPDATED 12 Aug: PASSED 159 / FAILED 0 / INCOMPLETE 52 of 211** — and this time debt *was* paid, 93 → 52: seven files genuinely rewired, nine retired, 7 new math round-trip tests, and **Swerling fluctuation BUILT** into the generator (the one Class C debt actually cleared rather than re-labelled). 28 of the 52 remaining are `+missionsim` | `results/full_suite_20260810.csv`, `results/full_suite_20260812b.csv`, `trash/BROKEN_DOWNSTREAM.md` |
+
+**C2 moves FROZEN → STANDS, on new evidence.** The ledger's own note said C2 was
+"the most likely of these to survive a re-derivation — but it has not had one."
+It has now. `tests/test_generator_agility.m` (3/3) re-derives it on the **rebuilt**
+generator: **14.16 dB** against the published 14.2 dB, with the underlying peak
+powers (1444.0 matched, 55.35 mismatched) matching the published figures too.
+The isolated matched-filter nature of the measurement is why it travelled —
+nothing about it depended on the archived generator.
+
+**One half of C2 does NOT survive, and must stop being quoted.** The **24×
+smearing** figure is not reproduced, because the original never recorded which
+bin-width criterion produced it. Measured under a stated −3 dB main-lobe
+definition the value is **49×** (1 bin matched vs 49 mismatched). Quote 49×
+*with* the definition attached, or quote the dB loss alone. **Do not quote 24×:
+nothing in the active tree re-derives it.**
+
+**Also corrected, 10 Aug:** F5 below describes screen 2b as a **vote** ("adding screen 2b
+drops both single-phantom decoys to 0.00"). That was the measured behaviour of the vote
+and it is why the screen was converted to a veto; post-conversion the same ablation shows
+`flat_amplitude` 0.80 and `zero_doppler` 1.00, i.e. **the harm is gone**. Read F5 as the
+finding that motivated the fix, not as current behaviour — and read H2 for what the fixed
+screen actually does, which is nothing.
+
+**What is NOT broken, stated because the rest of this section is bleak:** no STANDS claim
+anywhere in this ledger cites one of the 21 broken scripts. The three carrying the largest
+families — `leverArm.m` (E1–E7), `conformalValidate.m` (D1/D6), `exchangeability.m`
+(D2/D3) — are all clean of archived dependencies. No test files silently vanished either:
+58 on disk, 58 collected.
+
+---
+
+# H4 closed, 12 August 2026 — and one new finding it turned up
+
+**The rewire.** `/plan` no longer searches. `cogengine.planner_cem` was a CEM
+scene search scored on an internal twin; it was archived, and **nothing in the
+rebuild replaces it** — the rebuild scores against the REAL judge and never
+built a twin at all. So `/plan` is now a deterministic geometric layout on the
+same spacing the published N-sweep used, and it says so in its own docstring
+rather than implying a search still happens. `seed` no longer perturbs the
+scene; it selects `render.m`'s thermal-noise draw in `/score`, which is where
+the randomness actually lives. That is asserted, so seed-invariance cannot be
+misread as a broken RNG.
+
+**`/score` costs two engine calls where it used to cost one**, and that is not
+an inefficiency to tidy away. `export_scene_for_judge` built `rx_frames` in
+Python; `+generator/render.m` deliberately has no Python equivalent, because
+every phantom pulse must be a delayed, scaled copy of the samples
+`radar.agileWaveform` itself returns (its own header: MATLAB's `Down` sweep does
+not match `exp(-1i*pi*k*t^2)`, correlation 0.0201).
+
+**It carries the central result, not merely valid JSON.** Measured end to end
+through the HTTP API against the real judge, N=2, seed 1:
+
+| monopulse | confirmed | flagged | surviving |
+|---|---|---|---|
+| off | 2 | 1 | 1 |
+| **on** | 2 | **2** | **0** |
+
+That is F2/F3 — the §2.4 wall — reproduced through the bridge. N=1 survives
+(the co-bearing screen compares tracks to each other and cannot fire on one).
+
+| # | Claim | Status | Source |
+|---|---|---|---|
+| **H6** | The published N-phantom sweep's scenes respect the radar's blind range | **NO — they end 143.9 m inside it.** `generator/tests/build_n_phantom_scenes.py` calls `project_action` **without `pulse_width_s` or `prf_hz`**, so the eclipse and ambiguity vetoes never evaluate. Its phantoms start at 1900 m and close at 35 m/s for ~7.0 s, ending at **1654.9 m** against a **1798.75 m** blind range — where the receiver is deaf while transmitting. Its own docstring names 1799 m as the window floor, so this is an oversight, not a choice. **F7/F8 are not withdrawn on this**: the effect is confined to the tail frames and the finding is about scene construction, not about the co-bearing screen those claims rest on. But the sweep should be re-run with the vetoes armed before the numbers are quoted as veto-clean | `generator/tests/build_n_phantom_scenes.py` vs `project_action(..., pulse_width_s=C.pulse_width)`; `server/tests/test_generator_rewire.py::test_whole_engagement_clears_the_blind_range_not_just_frame_zero` |
+
+**The server derives its start range instead of inheriting the bug**: blind
+range + closing distance over the whole engagement + one range cell of margin
+(`c/(2·fs)` — anything finer is below this radar's own resolution). At the
+default −35 m/s over 8 s that puts the nearest phantom at **2125.6 m**, and an
+N=8 spread at 2125.6–10525.6 m, comfortably inside R_ua = 18737 m.
+
+**A veto now returns 422 with the reason verbatim, never a clamp.** Pulling an
+infeasible phantom out to a legal range would convert "the adversary physically
+cannot do that" into something that reads on screen as success — the same
+failure class `JudgeUnavailable`→503 exists to prevent on the judge side.
+
+---
+
+# H7 — the core mathematics, cross-validated against the independent judge (12 Aug 2026)
+
+Asked because the project's USP is a claim about **numerics**, not about
+signals: *the engine computes closed-form quantities that make a radar read the
+result as a real target*. Until now every check was either the generator
+verifying itself (`generator/tests/test_physics_projection.py`, 12/12, exact
+but self-referential about the CONTRACT) or an end-to-end label
+(`confirmed`/`flagged`, which conflates a dozen things). Neither asks the
+direct question: **does each derived quantity come back out of an independent
+measurement as the quantity it intended?**
+
+`tests/test_generator_math_roundtrip.m`, **7/7**. Writer
+(`physics_projection.py`) and reader (`+engine/runJudge.m`) share no code; the
+reader is never told the range-rate, the RCS or the amplitude law and
+re-derives all three from complex samples. Tolerances are the instrument's own
+resolution, not fitted numbers.
+
+| law | derivation | intended | measured | resolution |
+|---|---|---|---|---|
+| delay → range | τ = 2R/c | trajectory | max err **22.58 m** | one cell **46.84 m** |
+| phase → Doppler → rate | f_d = −2Ṙ/λ | −50.000 m/s | **−48.716 m/s** | one bin **3.747 m/s** |
+| amplitude | A ∝ √σ/R² | slope −2 | **−2.0718** | fit noise |
+| RCS scaling | A ∝ √σ | ×2 | **×2.000000** | RelTol 1e-12 |
+| eclipse / R_ua | c·PW/2, c/(2·PRF) | — | **1798.75 / 18737.03 m** | RelTol 1e-12 |
+
+All eight shared constants agree exactly across the Python/MATLAB seam. Each of
+the three vetoes is exercised from the illegal side and **refuses** rather than
+clamping.
+
+**The negative control is the load-bearing part.** Negating the phase — the
+wrong convention that shipped once and made a genuine phantom score `decoy` —
+flips the measured rate **−48.716 → +48.716**. So the judge genuinely reads
+phase and law 2 is a measurement, not an artefact. Getting that control right
+exposed a real property worth recording: the obvious implementation
+(conjugating `rx_frames`) flips the **chirp** too, costs the matched filter
+14.2 dB and drops `confirmed_tracks` to **0**, leaving nothing to measure. The
+flip has to be applied to the pre-render plan.
+
+**What this is NOT.** A consistency proof, not a realism proof. Kinematics stay
+synthetic (RadChar carries no target motion). And the rebuilt generator has
+**no Swerling and no micro-Doppler**, which is a mathematical gap and not only
+a feature gap: amplitude is deterministic 1/R², so any claim about amplitude
+**variance** — as opposed to level or trend — is out of reach on this
+generator. Full account: `USP_MATH_VERIFICATION.md`.
+
+---
+
+# I — surface clutter and the MTI notch (16 August 2026)
+
+The first ground-return model this project has had, and the clutter filter that
+goes with it. Full working: `CLUTTER_AND_MTI_RESULTS.md`. Suite after both:
+**228 passed, 0 failed, 52 incomplete, of 280** (`results/full_suite_20260816_mti.txt`).
+
+| # | Claim | Status | Source |
+|---|---|---|---|
+| I1 | Under constant-gamma the clutter RCS a target competes with is **constant with range** (σ⁰ ∝ 1/R cancels patch area ∝ R), so clutter power falls as **1/R⁴** — not the 1/R³ usually quoted — and the signal-to-clutter ratio is flat. A **1 m² target sits 4.2 dB BELOW the clutter** in its own resolution cell at *every* range | **STANDS** | `test_surface_clutter.m` 6/6 (slope −4.00 ± 0.05 over 1400–10000 m) |
+| I2 | Ground return **removes a realistic drone and does not touch a moving phantom**: drone found 5/5 → **0/5** at 0.10, 0.03 and 0.01 m², while the −50 m/s phantom at 3600 m keeps its count and its label. **The 1.00 m² row (5/5 → 4/5) is NOT part of this claim** — a 3-seed re-run gave 3/3, so the one lost seed is noise | **STANDS** | `experiments.clutterImpact`, `results/clutter_impact_20260816.txt`, 5 seeds |
+| I3 | *"The drone must hide inside the blind range"* | **WITHDRAWN** — an artefact of the thermal-noise-only model. At a realistic RCS clutter hides it **anywhere**, so the blind range was never the binding constraint | same |
+| I4 | The MTI notch **cuts both ways**: it restores a 0.1 m² phantom that clutter had masked (0 → ≥1 track, still `real`), and it removes a tangentially-flying drone **at any RCS, with or without clutter** — 1.0 m² included — while the −50 m/s phantom, thirteen bins clear of a one-bin notch, pays nothing | **STANDS** | `test_mti_notch.m` 6/6, `results/mti_notch_20260816.csv` |
+| I5 | The drone's counter-tactic is therefore **fly tangentially**, not hide in the blind range: it defeats clutter-limited detection and the MTI filter alike, at any range and any RCS | **STANDS** | I2 + I4 |
+| I6 | **Every detection number published in this repo before 16 August 2026 is a THERMAL-NOISE-ONLY number** | **QUALIFIED — and this qualifier is mandatory**, the same way A2's radar-configuration qualifier is | grep for clutter across `+radar/`, `+engine/`, `+track/`, `+generator/` returned one comment and no code |
+| I7 | Nothing above moves any earlier number: clutter (`ClutterGammaDB = []`) and the notch (`MtiNotchMps = 0`) both **default OFF**, and default-off is *tested* — byte-identical `rx_frames`, identical `confirmed_tracks` and `track_range_m` | **STANDS** | `test_clutter_is_off_by_default_and_changes_nothing`, `test_the_default_is_off_and_changes_nothing` |
+
+**What I1–I5 are NOT.** γ = −15 dB (rural land, X-band) is a cited assumption and
+every number inherits it. The clutter is **Rayleigh**, so it is *easier* than real
+heavy-tailed land clutter, which would give more CFAR false alarms — these rows are
+an optimistic bound on the radar's problem, not a pessimistic one. There is **no
+clutter in the angle channel**, so every co-bearing result (A3, F-section) is
+unaffected *and* untested against ground return. The notch width is a **parameter,
+not a derived quantity** — the clutter's own spectral extent is unmodelled — so any
+result using it must state the value (3.75 m/s = ±1 bin here).
 
 ---
 

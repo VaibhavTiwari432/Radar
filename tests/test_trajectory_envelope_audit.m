@@ -159,27 +159,30 @@ classdef test_trajectory_envelope_audit < matlab.unittest.TestCase
                 'The canonical closing rate no longer sign-flips; re-derive 4.1.3.');
 
             % --- and now MEASURE it through the real renderer and judge ---
-            ws = warning('off', 'engine:entity:EntityState:dopplerFolds');
-            restoreW = onCleanup(@() warning(ws)); %#ok<NASGU>
-            F = 8; nP = 32; nFast = C.fast_time_samples;
-            rs = RandStream('mt19937ar', 'Seed', 31337);
-            cube = complex(zeros(nFast, nP, F));
+            %
+            % REWIRED 12 Aug 2026 from engine.entity.render (archived 7 Aug)
+            % to generator.render via tests/renderPhantomScene.m. R0 = 3000 m
+            % at -60 m/s ends at 2580 m, clear of the 1798.75 m blind range,
+            % so no geometry change was needed here.
+            %
+            % CheckVelocityAmbiguity IS TURNED OFF HERE, AND THAT IS THE
+            % POINT OF THE FLAG. As of 12 Aug 2026 project_action has a
+            % fourth veto that REFUSES |v| >= v_ua = 59.958 m/s -- added
+            % because this very test showed what happens without it (the
+            % generator planning a phantom whose folded Doppler condemns it
+            % on screen 2, i.e. defeating itself with its own action space).
+            %
+            % But this test's SUBJECT is that fold, so it has to be able to
+            % build one. The opt-out is deliberately a separate flag from
+            % ApplyVetoes: "check my ranges, but let me construct a
+            % Doppler-folded target on purpose" is exactly this case, and it
+            % must not be reachable by accident from a caller who merely
+            % wanted looser range checks.
+            F = 8; nP = 32;
             R0 = 3000;
-            for k = 1:F
-                st = engine.entity.EntityState('range_m', R0 + v*(k-1), ...
-                        'range_rate_mps', v, 'class', "drone");
-                cube(:,:,k) = engine.entity.render(st, 'NumPulses', nP, ...
-                    'FastTimeSamples', nFast, 'PulseWidth', C.pulse_width, ...
-                    'Bandwidth', C.bandwidth, 'CarrierHz', C.carrier, ...
-                    'PrfHz', C.PRF, 'AmpScale', 3.0, 'RandStream', rs) ...
-                    + 0.05*(randn(rs,nFast,nP)+1i*randn(rs,nFast,nP))/sqrt(2);
-            end
-            f = [tempname '.mat'];
-            S = struct('rx_frames', cube, 'fs', C.fs, 'pulse_width_s', C.pulse_width, ...
-                'bandwidth_hz', C.bandwidth, 'prf_hz', C.PRF, 'carrier_hz', C.carrier, ...
-                'frame_interval_s', 1.0);
-            save(f, '-struct', 'S');
-            cleanup = onCleanup(@() delete(f)); %#ok<NASGU>
+            rng(31337, 'twister');
+            f = renderPhantomScene(R0, v, 'NumFrames', F, 'NumPulses', nP, ...
+                'CheckVelocityAmbiguity', false, 'Tag', 'envelope_fold');
             fb = engine.runJudge(f);
 
             tc.assertGreaterThanOrEqual(fb.confirmed_tracks, 1, ...
@@ -201,7 +204,61 @@ classdef test_trajectory_envelope_audit < matlab.unittest.TestCase
                  'its range walk. If this passes as real, re-derive 4.1.3.']);
         end
 
-        function test_entity_state_warns_past_v_ua_and_is_quiet_inside_it(tc)
+        function test_generator_refuses_past_v_ua_and_is_quiet_inside_it(tc)
+            % RE-ENABLED 12 Aug 2026, after the counterpart was BUILT.
+            %
+            % This was Class C for one session: it asserted that a commanded
+            % rate past v_ua = 59.958 m/s is caught, the archived
+            % engine.entity.EntityState warned
+            % (engine:entity:EntityState:dopplerFolds), and the rebuilt
+            % generator had nothing to point at -- project_action's three
+            % vetoes were EVERY ONE a constraint on RANGE. Writing the
+            % feature inside its own test would have been the wrong fix, so
+            % it was recorded as a capability gap instead.
+            %
+            % physics_projection.project_action now carries a FOURTH veto.
+            % Two deliberate differences from the behaviour this test
+            % originally checked, both strengthening it:
+            %   REFUSES rather than warns -- past v_ua the Doppler does not
+            %       lose precision, it flips SIGN, and the sibling test above
+            %       measures the consequence (a GENUINE -60 m/s target
+            %       labelled `decoy`). An action that self-flags is not a
+            %       usable action.
+            %   the BOUND ITSELF is refused -- exactly v_ua sits on the
+            %       Nyquist edge, where the measured sign is decided by
+            %       floating-point noise rather than physics.
+            C = physics.Constants();
+            pp = py.importlib.import_module('generator.physics_projection');
+            vUa = double(pp.unambiguous_velocity_mps(C.PRF));
+            tc.verifyEqual(vUa, C.v_unambiguous, 'RelTol', 1e-12, ...
+                'MATLAB and Python disagree about v_ua.');
+
+            % velocity_ambiguity_veto returns a (ok, margin) tuple. cell() is
+            % the way to unpack it -- MATLAB cannot index a call result
+            % directly (f(a)(b) is a PARSE error, not a runtime one).
+            a = cell(pp.velocity_ambiguity_veto(-0.9*vUa, C.PRF));
+            b = cell(pp.velocity_ambiguity_veto(-150.0, C.PRF));
+            e = cell(pp.velocity_ambiguity_veto(-vUa, C.PRF));
+            inside = logical(a{1});  beyond = logical(b{1});  atEdge = logical(e{1});
+
+            fprintf('[4.1.3] v_ua = %.4f m/s | -0.9*v_ua ok=%d | -150 ok=%d | at edge ok=%d\n', ...
+                vUa, inside, beyond, atEdge);
+            tc.verifyTrue(logical(inside), ...
+                'A rate comfortably inside v_ua was refused -- the veto over-fires.');
+            tc.verifyFalse(logical(beyond), ...
+                'A rate past v_ua was allowed; its Doppler would fold and flip sign.');
+            tc.verifyFalse(logical(atEdge), ...
+                'v exactly at v_ua was allowed -- the sign there is noise, not physics.');
+        end
+
+        function test_archived_entity_state_warning_is_superseded(tc)
+            % Kept as a marker, not a check: the archived warning path is
+            % gone and its replacement is asserted above. Retire this method
+            % if engine.entity is ever genuinely restored.
+            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
+                ['engine.entity.EntityState''s dopplerFolds WARNING is ' ...
+                 'superseded by project_action''s velocity veto -- see ' ...
+                 'test_generator_refuses_past_v_ua_and_is_quiet_inside_it.']);
             C = physics.Constants();
             tc.verifyWarningFree(@() engine.entity.EntityState( ...
                 'range_m', 1800, 'range_rate_mps', -0.9*C.v_unambiguous));

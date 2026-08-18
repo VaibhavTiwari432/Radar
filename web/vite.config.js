@@ -4,13 +4,11 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   plugins: [react()],
+  // console.html is the only page. The replay/HiFi clients were retired to
+  // trash/retired-web-clients-20260815/ (15 Aug 2026).
   build: {
     rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        hifi: resolve(__dirname, 'hifi.html'),
-        console: resolve(__dirname, 'console.html'),
-      },
+      input: { console: resolve(__dirname, 'console.html') },
     },
   },
 });

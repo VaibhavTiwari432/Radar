@@ -58,6 +58,9 @@ classdef test_missionsim_eccm_screens < matlab.unittest.TestCase
         end
 
         function test_ui_table_shows_gauge_columns(tc)
+            % Pending rewire to generator.render -- see the class header.
+            tc.assumeTrue(archivedDepsPresent({'engine.sceneContract'}), ...
+                'engine.sceneContract was archived 7 Aug 2026 (GOVERNANCE.md). This test is PENDING REWIRE to generator.render, not passing -- see trash/BROKEN_DOWNSTREAM.md.');
             app = missionsim.MissionSimulatorApp();
             cleanupObj = onCleanup(@() delete(app)); %#ok<NASGU>
 

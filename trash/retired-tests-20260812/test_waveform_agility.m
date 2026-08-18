@@ -48,6 +48,9 @@ classdef test_waveform_agility < matlab.unittest.TestCase
     methods (Test)
 
         function test_agility_only_breaks_the_stale_repeater(tc)
+            % Pending rewire to generator.render -- see the class header.
+            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
+                'engine.entity.render was archived 7 Aug 2026 (GOVERNANCE.md). This test is PENDING REWIRE to generator.render, not passing -- see trash/BROKEN_DOWNSTREAM.md.');
             cells = {'fixed/fresh','fixed/stale','agile/fresh','agile/stale'};
             agile = [false false true true];
             stale = [false true  false true];
@@ -170,6 +173,9 @@ classdef test_waveform_agility < matlab.unittest.TestCase
         end
 
         function test_causality_refuses_predictive_against_an_agile_radar(tc)
+            % Pending rewire to generator.render -- see the class header.
+            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
+                'engine.entity.render was archived 7 Aug 2026 (GOVERNANCE.md). This test is PENDING REWIRE to generator.render, not passing -- see trash/BROKEN_DOWNSTREAM.md.');
             % engine.entity.checkCausality is the other half of the same idea.
             [ok, why] = engine.entity.checkCausality(1200, 2000, 'repeat', false);
             tc.verifyFalse(ok, 'A repeater was allowed to place a phantom inside itself.');

@@ -42,6 +42,20 @@ classdef test_radchar_three_arm < matlab.unittest.TestCase
 %   "ground-truth ranges come from the native phased.* scenes" note says.
 
     methods (TestClassSetup)
+        function assumeArchivedDependencyPresent(tc)
+            % 7 Aug 2026 archive: every scene in this file is built by
+            % synth.synthesizeSwarm, which no longer exists. Report Incomplete --
+            % this project's own honest "not built yet" outcome, the same
+            % one DataIntegration_Test uses for an absent dataset -- rather
+            % than erroring. 63 errored methods made a real regression
+            % invisible; a skip keeps the suite usable as an instrument.
+            % NOT a fix: rewire to generator.render to genuinely re-enable.
+            tc.assumeTrue(archivedDepsPresent({'synth.synthesizeSwarm'}), ...
+                'synth.synthesizeSwarm was archived 7 Aug 2026 (GOVERNANCE.md). This test is PENDING REWIRE to generator.render, not passing -- see trash/BROKEN_DOWNSTREAM.md.');
+        end
+    end
+
+    methods (TestClassSetup)
         function requireData(tc)
             here = fileparts(mfilename('fullpath'));
             projectRoot = fileparts(here);

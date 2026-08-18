@@ -61,28 +61,20 @@ classdef test_nis_consistency < matlab.unittest.TestCase
 
         function test_runJudge_reports_nis_as_its_own_column(tc)
             % The plumbing check: the column exists, is per-track, and does
-            % NOT change the ECCM label. Rendered through the VEE so this is a
-            % real signal, not a hand-built series.
-            C = physics.Constants();
-            s = engine.entity.EntityState('range_m', 1800, 'range_rate_mps', -50, ...
-                    'rcs_dbsm', 0, 'swerling', 0, 'class', 'drone');
-            nF = 8; nP = 32; nFast = 400;
-            cube = complex(zeros(nFast, nP, nF));
-            rng(11);
-            for k = 1:nF
-                sk = s; sk.range_m = 1800 - 50*(k-1);
-                sk.range_rate_mps = -50;
-                c = engine.entity.render(sk, 'NumPulses', nP, ...
-                        'FastTimeSamples', nFast, 'CarrierHz', 10e9, ...
-                        'PrfHz', C.PRF, 'PulseWidth', 12e-6, 'Bandwidth', 2e6, ...
-                        'AmpScale', 3.0);
-                cube(:,:,k) = c + 0.05*(randn(nFast,nP) + 1i*randn(nFast,nP))/sqrt(2);
-            end
-            S = struct('rx_frames', cube, 'fs', C.fs, 'pulse_width_s', 12e-6, ...
-                'bandwidth_hz', 2e6, 'prf_hz', C.PRF, 'frame_interval_s', 1.0, ...
-                'carrier_hz', 10e9);
-            f = [tempname '.mat']; save(f, '-struct', 'S');
-            cleanup = onCleanup(@() delete(f)); %#ok<NASGU>
+            % NOT change the ECCM label. Rendered through the real generator
+            % so this is a real signal, not a hand-built series.
+            %
+            % REWIRED 12 Aug 2026 from engine.entity.render (archived 7 Aug)
+            % to generator.render via tests/renderPhantomScene.m. R0 moved
+            % 1800 -> 2400 m: at -50 m/s over 8 frames the old start ends at
+            % 1450 m, 349 m inside the 1798.75 m blind range, which the
+            % rebuilt path's eclipse veto refuses (the archived renderer
+            % never evaluated it). Nothing here depends on R0 -- the subject
+            % is that track_nis_* is REPORTED as its own column and does not
+            % feed the label.
+            rng(11, 'twister');
+            [f, ~] = renderPhantomScene(2400, -50, ...
+                'NumFrames', 8, 'NumPulses', 32, 'Tag', 'nis_column');
 
             fb = engine.runJudge(f);
             tc.assertGreaterThanOrEqual(fb.confirmed_tracks, 1, 'need a track to test');

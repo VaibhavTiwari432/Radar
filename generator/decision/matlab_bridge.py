@@ -87,7 +87,14 @@ def _flatten_name_value(kwargs: dict) -> list:
     out = []
     for k, v in kwargs.items():
         out.append(k)
-        if isinstance(v, list):
+        if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
+            # A list of STRINGS is a cell array, not a numeric array.
+            # matlab.double() on ['amplitude','bearing'] raises, and this bit
+            # the EccmScreens wiring the moment it was added -- the numeric
+            # branch below had been the only one because every list until now
+            # was a bearing or sweep schedule.
+            out.append(list(v))
+        elif isinstance(v, list):
             out.append(_matlab.double(v))
         else:
             out.append(v)

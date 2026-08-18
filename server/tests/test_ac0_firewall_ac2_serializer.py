@@ -25,6 +25,39 @@ ENGINE_MODULES = ["planner_cem.py", "radar_twin.py", "renderer.py",
 # The seam. Allowed to know the .mat contract, still NOT allowed to import MATLAB.
 SEAM_MODULES = ["matlab_judge.py"]
 
+# THE SANCTIONED BRIDGES -- the only files that may `import matlab`.
+#
+# There were TWO of these as of the 7 August 2026 generator rebuild and this
+# test only knew about one, so it failed while three docs still asserted the
+# firewall held (PROJECT_INVENTORY.md:1039, ANNEXURE_TECHNICAL_INVENTORY.md).
+# Naming both is the fix, NOT relaxing the rule: the invariant AC-0 actually
+# protects is "the modules that PLAN or RENDER never reach the judge", and
+# both files below are bridges whose entire job is the crossing.
+#
+#   server/matlab_bridge.py            FastAPI's warm engine session.
+#   generator/decision/matlab_bridge.py  Phase C training. Exists precisely
+#       BECAUSE no twin was built -- every reward in generator/decision/env.py
+#       is a real judge verdict, which is Rule 2 satisfied the strict way, not
+#       a violation of it.
+#
+# Adding a third entry here is a design decision, not a test fix. Ask why the
+# new module cannot use one of these two before appending to this list.
+SANCTIONED_BRIDGES = {
+    "server/matlab_bridge.py",
+    "generator/decision/matlab_bridge.py",
+}
+
+# Modules that PLAN, PROJECT or RENDER in the rebuilt generator. These carry
+# the same prohibition the cogengine ENGINE_MODULES above carry, and they are
+# listed explicitly so the firewall keeps a positive assertion after the
+# archive left ENGINE_MODULES skipping on absent files.
+GENERATOR_ENGINE_MODULES = [
+    "generator/physics_projection.py",
+    "generator/interface.py",
+    "generator/sensing.py",
+    "generator/decision/env.py",
+]
+
 
 def _imports_of(path):
     with open(path, "r", encoding="utf-8") as f:
@@ -36,6 +69,36 @@ def _imports_of(path):
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.append(node.module)
     return names
+
+
+def _imports_matlab_engine(path):
+    """True only if the file imports `matlab.engine` -- the SESSION -- not
+    merely the `matlab` types package.
+
+    The distinction is load-bearing and was found by tightening this file:
+    server/app.py does `import matlab` inside its JSON serializer purely to
+    test `isinstance(v, matlab.double)`. That holds no engine and reaches no
+    judge, so banning it would be the firewall crying wolf. Starting a
+    session genuinely requires naming `matlab.engine`, so this is the precise
+    line, not a loosened one.
+
+    Both spellings are covered -- `import matlab.engine` and
+    `from matlab import engine` -- because the plain name-list scan above
+    records the latter as just "matlab" and would miss it.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        tree = ast.parse(f.read(), filename=path)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(a.name == "matlab.engine" or a.name.startswith("matlab.engine.")
+                   for a in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "matlab.engine" or node.module.startswith("matlab.engine."):
+                return True
+            if node.module == "matlab" and any(a.name == "engine" for a in node.names):
+                return True
+    return False
 
 
 # ------------------------------- AC-0 -------------------------------------
@@ -63,27 +126,55 @@ def test_ac0_engine_never_imports_the_server(mod):
     assert not bad, f"cogengine/{mod} imports the bridge: {bad}"
 
 
-def test_ac0_matlab_is_confined_to_the_bridge():
-    """Exactly one place in the Python tree may import matlab.engine."""
+def test_ac0_matlab_is_confined_to_the_sanctioned_bridges():
+    """Only the files in SANCTIONED_BRIDGES may import matlab.engine.
+
+    `trash/` is excluded: it is the 7 Aug archive, explicitly not part of the
+    active tree (GOVERNANCE.md), and scanning it would make this test assert
+    things about code nothing imports.
+    """
     offenders = []
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = [d for d in dirnames
                        if d not in ("node_modules", "__pycache__", ".git",
-                                    "cognitive_engine", "web", "dist")]
+                                    "cognitive_engine", "web", "dist", "trash")]
         for fn in filenames:
             if not fn.endswith(".py"):
                 continue
             p = os.path.join(dirpath, fn)
             rel = os.path.relpath(p, ROOT).replace("\\", "/")
-            if rel.startswith("server/"):
-                continue                       # the bridge is the sanctioned place
+            if rel in SANCTIONED_BRIDGES:
+                continue
             try:
-                names = _imports_of(p)
+                if _imports_matlab_engine(p):
+                    offenders.append(rel)
             except SyntaxError:
                 continue
-            if any(n == "matlab" or n.startswith("matlab.") for n in names):
-                offenders.append(rel)
-    assert not offenders, f"MATLAB imported outside server/: {offenders}"
+    assert not offenders, (
+        f"matlab.engine imported outside the sanctioned bridges: {offenders}. "
+        f"Sanctioned: {sorted(SANCTIONED_BRIDGES)}")
+
+
+def test_ac0_the_sanctioned_bridges_all_exist():
+    """A firewall whose allowlist names a deleted file silently stops
+    guarding that path. This is what would have caught the rebuild moving
+    the bridge instead of the suite going red for the wrong reason."""
+    missing = [b for b in sorted(SANCTIONED_BRIDGES)
+               if not os.path.exists(os.path.join(ROOT, b))]
+    assert not missing, f"SANCTIONED_BRIDGES names files that do not exist: {missing}"
+
+
+@pytest.mark.parametrize("mod", GENERATOR_ENGINE_MODULES)
+def test_ac0_generator_engine_never_imports_matlab(mod):
+    """The rebuilt generator's planning/projection half, held to the same rule
+    as cogengine's was. env.py is included deliberately: it may CALL the judge
+    through the bridge (that is the reward path), but it must not hold a
+    matlab.engine handle itself."""
+    path = os.path.join(ROOT, mod)
+    if not os.path.exists(path):
+        pytest.skip(f"{mod} absent")
+    bad = [n for n in _imports_of(path) if n == "matlab" or n.startswith("matlab.")]
+    assert not bad, f"{mod} imports MATLAB directly: {bad}"
 
 
 def test_ac0_firewall_test_actually_catches_a_violation(tmp_path):
@@ -96,6 +187,20 @@ def test_ac0_firewall_test_actually_catches_a_violation(tmp_path):
     names = _imports_of(str(planted))
     assert any(n.startswith("matlab") for n in names), \
         "the import scanner failed to see a planted violation"
+
+    # Both spellings of the real violation must trip the engine-specific
+    # scanner, and the types-only import must NOT -- otherwise the precision
+    # added above is untested and could silently become a rubber stamp.
+    for src in ("import matlab.engine\n",
+                "from matlab import engine\n",
+                "from matlab.engine import start_matlab\n"):
+        planted.write_text(src, encoding="utf-8")
+        assert _imports_matlab_engine(str(planted)), \
+            f"scanner missed a planted engine import: {src!r}"
+
+    planted.write_text("import matlab\n", encoding="utf-8")
+    assert not _imports_matlab_engine(str(planted)), \
+        "types-only `import matlab` must not count as holding a session"
 
 
 # ------------------------------- AC-2 -------------------------------------

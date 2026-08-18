@@ -26,6 +26,17 @@ const BANNED = [
   [/mahalanobis/i, 'gating/assignment math'],
   [/cross-entropy|planner_cem|\bCEM\b/i, 'CEM planner re-implementation'],
   [/py\.cogengine/i, 'calling into the Python backend from the client'],
+  // A re-typed constant is the same failure as re-implemented physics: it was
+  // right the day it was typed and silently wrong the moment fs or the PRF
+  // moved. Console.jsx really did carry `prf_hz: 50000` and a "10 GHz" string
+  // long after +physics/Constants.m went to 8 kHz, implying R_ua = 2998 m
+  // against the real 18737 m. GET /constants derives all of these.
+  [/\b(prf_hz|pri_s|carrier_hz)\s*:\s*[\d.]/, 'backend constant re-typed as a client literal'],
+  // `\d\s*GHz` on purpose, not `[\d.]+\s*GHz`: "10 GHz" is a hardcoded
+  // carrier, `${(consts.carrier_hz / 1e9).toFixed(1)} GHz` is a unit suffix on
+  // a fetched value and must stay legal.
+  [/\d\s*GHz/, 'carrier frequency hardcoded in the UI'],
+  [/\b(46\.84|2997\.9|18737|1798\.7)/, 'a value GET /constants derives, pasted as a literal'],
 ];
 
 // Math.random() is deliberately NOT banned here: bundled vendor code (React
@@ -51,10 +62,22 @@ function walk(dir, exts, out = []) {
   return out;
 }
 
+// Whole-line comments are dropped before matching. This file's own headers
+// quote the stale numbers they exist to warn about ("Console.jsx carried
+// prf_hz = 50000 and a 10 GHz string"), and a checker that flags the warning
+// as the violation forces the history to be deleted to stay green -- the
+// opposite of CLAUDE.md Rule 5. Only FULL-line comments go: a trailing `//`
+// could be inside a string ('http://...') and stripping those would blind the
+// scan to real code after it.
+const stripComments = (text) => text
+  .split('\n')
+  .map((l) => (/^\s*(\/\/|\*|\/\*)/.test(l) ? '' : l))
+  .join('\n');
+
 function scan(dir, exts) {
   const violations = [];
   for (const file of walk(dir, exts)) {
-    const text = readFileSync(file, 'utf8');
+    const text = stripComments(readFileSync(file, 'utf8'));
     for (const [pattern, label] of BANNED) {
       const m = text.match(pattern);
       if (m) violations.push(`${file}: matched /${pattern.source}/ (${label}) near "${m[0]}"`);
@@ -68,13 +91,24 @@ function scan(dir, exts) {
 function selfTest() {
   const tmp = mkdtempSync(join(tmpdir(), 'verify-no-physics-selftest-'));
   writeFileSync(join(tmp, 'bad.js'), 'export function f() { return new KalmanFilter(); }\n');
+  // The two constant bans get their own planted violation, since a pattern
+  // that never fires reads exactly like a clean tree.
+  writeFileSync(join(tmp, 'stale.js'), 'export const radar = { prf_hz: 50000 };\nconst car = "10 GHz";\n');
+  // ...and one file where the SAME text is a comment, proving the ban does not
+  // cost this repo the ability to document what it fixed.
+  writeFileSync(join(tmp, 'doc.js'), '// was prf_hz: 50000 and "10 GHz" -- see /constants\nexport const x = 1;\n');
   const found = scan(tmp, ['.js']);
   rmSync(tmp, { recursive: true, force: true });
-  if (found.length === 0) {
-    console.error('FAIL: self-test did not catch a planted "new KalmanFilter()" violation. Checker is broken.');
+  const hit = (f) => found.some((v) => v.includes(f));
+  if (!hit('bad.js') || !hit('stale.js')) {
+    console.error('FAIL: self-test did not catch a planted violation. Checker is broken.');
     process.exit(1);
   }
-  console.log('PASS: self-test -- checker catches a planted violation.');
+  if (hit('doc.js')) {
+    console.error('FAIL: self-test flagged a COMMENT as a violation. Checker would force history to be deleted.');
+    process.exit(1);
+  }
+  console.log('PASS: self-test -- catches planted code violations, ignores the same text in comments.');
 }
 
 function main() {

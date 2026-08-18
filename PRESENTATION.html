@@ -1,0 +1,362 @@
+<title>Phantom Swarm Findings</title>
+<style>
+  :root{
+    --ground:#F2F4F6;
+    --surface:#FFFFFF;
+    --surface-2:#E9EDF1;
+    --ink:#0F1620;
+    --muted:#59657A;
+    --rule:#D3DAE2;
+    --accent:#0B6E8C;
+    --accent-soft:#DCEEF4;
+    --works:#1B6B4C;
+    --works-soft:#DDEFE6;
+    --fails:#9B2C2C;
+    --fails-soft:#F6E1E1;
+    --caution:#8A5A0B;
+    --caution-soft:#F6EBD6;
+    --shadow:0 1px 2px rgba(15,22,32,.05), 0 8px 24px rgba(15,22,32,.05);
+
+    --sans:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,"SF Mono","Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0D1218;
+      --surface:#141C24;
+      --surface-2:#1D2731;
+      --ink:#E7ECF2;
+      --muted:#98A6B8;
+      --rule:#2A3742;
+      --accent:#5CBBD8;
+      --accent-soft:#12313C;
+      --works:#5FC79B;
+      --works-soft:#123024;
+      --fails:#E58585;
+      --fails-soft:#331A1A;
+      --caution:#DCA94A;
+      --caution-soft:#332715;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0D1218;
+    --surface:#141C24;
+    --surface-2:#1D2731;
+    --ink:#E7ECF2;
+    --muted:#98A6B8;
+    --rule:#2A3742;
+    --accent:#5CBBD8;
+    --accent-soft:#12313C;
+    --works:#5FC79B;
+    --works-soft:#123024;
+    --fails:#E58585;
+    --fails-soft:#331A1A;
+    --caution:#DCA94A;
+    --caution-soft:#332715;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--ground);
+    color:var(--ink);
+    font-family:var(--serif);
+    font-size:17px;
+    line-height:1.62;
+    margin:0;
+    padding:0 20px 96px;
+  }
+  .wrap{max-width:780px;margin:0 auto;}
+  p{margin:0 0 1em;max-width:66ch;}
+  strong{font-weight:650;}
+  a{color:var(--accent);}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px;}
+
+  /* ---- masthead ---- */
+  header.top{padding:64px 0 40px;border-bottom:1px solid var(--rule);}
+  .eyebrow{
+    font-family:var(--sans);font-size:12px;font-weight:600;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+    margin:0 0 18px;
+  }
+  h1{
+    font-family:var(--sans);
+    font-size:clamp(34px,6vw,52px);
+    line-height:1.06;
+    letter-spacing:-.022em;
+    font-weight:700;
+    margin:0 0 22px;
+    text-wrap:balance;
+  }
+  .standfirst{font-size:20px;line-height:1.5;color:var(--muted);max-width:60ch;margin:0;}
+
+  /* ---- the answer ---- */
+  .answer{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-left:4px solid var(--accent);
+    border-radius:4px;
+    padding:26px 28px;
+    margin:40px 0 8px;
+    box-shadow:var(--shadow);
+  }
+  .answer h2{
+    font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 12px;
+  }
+  .answer p{font-size:19px;line-height:1.55;margin:0 0 .7em;}
+  .answer p:last-child{margin-bottom:0;}
+
+  /* ---- sections ---- */
+  section{padding:44px 0 0;}
+  h2.sec{
+    font-family:var(--sans);
+    font-size:27px;letter-spacing:-.015em;font-weight:700;
+    margin:0 0 6px;text-wrap:balance;
+  }
+  .sec-note{font-family:var(--sans);font-size:14px;color:var(--muted);margin:0 0 24px;}
+  h3{
+    font-family:var(--sans);font-size:19px;font-weight:650;letter-spacing:-.01em;
+    margin:32px 0 8px;text-wrap:balance;
+  }
+
+  /* ---- finding cards ---- */
+  .finding{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:4px;
+    padding:22px 24px;
+    margin:0 0 16px;
+    box-shadow:var(--shadow);
+  }
+  .finding-head{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;margin-bottom:10px;}
+  .finding-head h3{margin:0;flex:1 1 340px;font-size:20px;}
+  .finding p:last-child{margin-bottom:0;}
+  .chip{
+    font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;padding:4px 9px;border-radius:3px;white-space:nowrap;
+  }
+  .chip.works{background:var(--works-soft);color:var(--works);}
+  .chip.fails{background:var(--fails-soft);color:var(--fails);}
+  .chip.caution{background:var(--caution-soft);color:var(--caution);}
+  .chip.gone{background:var(--surface-2);color:var(--muted);text-decoration:line-through;}
+
+  /* ---- data ---- */
+  .scroll{overflow-x:auto;margin:18px 0 22px;border:1px solid var(--rule);border-radius:4px;background:var(--surface);}
+  table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:14.5px;}
+  th,td{padding:11px 16px;text-align:left;border-bottom:1px solid var(--rule);white-space:nowrap;}
+  th{
+    font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);background:var(--surface-2);
+  }
+  tr:last-child td{border-bottom:none;}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14px;}
+  td.big{font-weight:700;}
+  .yes{color:var(--works);font-weight:700;}
+  .no{color:var(--fails);font-weight:700;}
+
+  /* ---- pull number ---- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:22px 0 6px;}
+  .stat{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:16px 18px;}
+  .stat .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:27px;font-weight:700;letter-spacing:-.02em;display:block;line-height:1.1;}
+  .stat .k{font-family:var(--sans);font-size:12.5px;color:var(--muted);display:block;margin-top:6px;line-height:1.35;}
+
+  /* ---- aside ---- */
+  .aside{
+    background:var(--accent-soft);
+    border-radius:4px;
+    padding:18px 22px;
+    margin:22px 0;
+    font-size:16px;
+  }
+  .aside p{margin:0;max-width:64ch;}
+  .aside .lbl{
+    font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--accent);display:block;margin-bottom:6px;
+  }
+
+  ul{max-width:66ch;padding-left:22px;margin:0 0 1em;}
+  li{margin-bottom:.5em;}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:1px 5px;border-radius:3px;}
+
+  footer{margin-top:56px;padding-top:24px;border-top:1px solid var(--rule);font-family:var(--sans);font-size:13.5px;color:var(--muted);}
+  footer p{max-width:70ch;}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">Project status report · 17 August 2026</p>
+  <h1>Can fake aircraft fool a real radar?</h1>
+  <p class="standfirst">We built a system that invents aircraft that aren't there, and a separate radar that decides whether to believe them. This is what happened.</p>
+</header>
+
+<div class="answer">
+  <h2>The short answer</h2>
+  <p><strong>One fake aircraft works. Two or more do not.</strong></p>
+  <p>A single phantom is accepted as a genuine target by our radar every time. But the moment we let the radar measure <em>direction</em> as well as distance, every phantom in a group is caught — because they all come from one transmitter, so they all arrive from the same point in the sky. Real aircraft don't fly stacked on a single line.</p>
+  <p>That limit is geometry. No amount of better faking gets around it.</p>
+</div>
+
+<section>
+  <h2 class="sec">What we built</h2>
+  <p class="sec-note">Three parts, deliberately kept apart from each other.</p>
+
+  <p><strong>1. The generator</strong> — the thing that invents fake aircraft. It doesn't fake each measurement separately. It imagines one moving object and then works out what that object <em>would</em> look like: how far away, how fast, how bright, how the signal shifts. Everything comes from the one object, so the details can't contradict each other.</p>
+
+  <p><strong>2. The radar</strong> — a full detection chain, built the way a real one is: it filters the raw signal, decides what counts as a blip, joins blips into tracks over time, and then applies checks designed to spot fakes.</p>
+
+  <p><strong>3. The wall between them.</strong> This is the part that makes the results worth anything. The generator cannot see the radar's settings and the radar cannot see the generator's intentions. They share no code. The generator never marks its own homework.</p>
+
+  <div class="aside">
+    <span class="lbl">Why we're strict about this</span>
+    <p>We once found the generator's export quietly writing <strong>twelve of the radar's own settings</strong> into the file the radar read its configuration from. Nothing looked wrong, because the smuggled values happened to match the radar's defaults — which is exactly why it went unnoticed for months. It's now blocked by an automatic check that fails if it ever comes back.</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">What we found</h2>
+  <p class="sec-note">Five findings. Two are wins, two are limits, one is a result we had to withdraw.</p>
+
+  <div class="finding">
+    <div class="finding-head">
+      <h3>1. A single fake aircraft is completely convincing</h3>
+      <span class="chip works">Holds</span>
+    </div>
+    <p>We showed the radar one phantom and made it progressively smarter — first distance only, then adding speed measurement, then direction, then a smarter tracker, then a radar that changes its own signal every frame. The phantom was accepted as real by <strong>every single version</strong>.</p>
+    <p>Making the radar more capable does not break a clean, physically consistent single target. That is the point: it looks real because it <em>is</em> consistent, not because the radar is weak.</p>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <h3>2. A group of fakes is caught instantly — and group size doesn't matter</h3>
+      <span class="chip fails">The wall</span>
+    </div>
+    <p>Turn on the radar's direction-finding and the picture inverts. Every phantom is flagged as fake, and it makes no difference whether there are two of them or eight.</p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Scene</th><th>Direction-finding</th><th>Accepted as real</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>2 phantoms</td><td>off</td><td class="num">1.00</td><td class="yes">all believed</td></tr>
+          <tr><td>2 phantoms</td><td><strong>on</strong></td><td class="num">0.00</td><td class="no">all caught</td></tr>
+          <tr><td>8 phantoms</td><td>off</td><td class="num">1.00</td><td class="yes">all believed</td></tr>
+          <tr><td>8 phantoms</td><td><strong>on</strong></td><td class="num">0.00</td><td class="no">all caught</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The reason is physical, not technical. Distance, speed and brightness can each be faked independently for each phantom — we spent months proving that. <strong>Direction cannot</strong>, because it's decided by where the transmitter actually sits. One transmitter, one bearing.</p>
+    <p>And it gets worse for the faker in an unhelpful way: making the phantom's brightness <em>more</em> realistic makes it stronger, which is precisely when direction-finding works best. The two improvements pull against each other.</p>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <h3>3. The AI did not beat a one-line rule</h3>
+      <span class="chip caution">Negative result</span>
+    </div>
+    <p>We trained a reinforcement-learning agent to choose what to fake. Across four separate training runs it never significantly beat a simple hand-written rule of thumb.</p>
+    <div class="stats">
+      <div class="stat"><span class="v">0.97</span><span class="k">trained AI success rate</span></div>
+      <div class="stat"><span class="v">0.92</span><span class="k">simple scripted rule</span></div>
+      <div class="stat"><span class="v">p = 0.61</span><span class="k">difference is not statistically meaningful</span></div>
+    </div>
+    <p>More striking: an <strong>untrained</strong> generator that simply obeys the physics beat an agent trained for 1,200 episodes. The training was being spent learning not to produce impossible objects — a constraint that belongs in the generator's design, not in a training budget.</p>
+    <p>We report this because it's true, not because it flatters the work. It also tells us where the effort should go.</p>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <h3>4. Each of the radar's checks works — but stacking them makes it worse</h3>
+      <span class="chip caution">Qualified</span>
+    </div>
+    <p>We tested the radar's fake-detection checks one at a time against faults built to trip exactly one of them. Each check catches its own fault perfectly and is blind to the others — so they genuinely do separate jobs.</p>
+    <p>But the radar combines them by <em>averaging</em>. So one check that passes can outvote one that fails. Measured: the check for constant brightness catches a crude repeater every time on its own, and only 4 times in 5 once it's averaged with the others.</p>
+    <div class="aside">
+      <span class="lbl">The practical lesson</span>
+      <p>Adding more detectors to a radar can reduce what it catches. A suspicious finding should be able to veto, not just cast a vote.</p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="finding-head">
+      <h3>5. Ground echo hides the drone, not its phantoms</h3>
+      <span class="chip works">New, 16 Aug</span>
+    </div>
+    <p>Until last week every result assumed a perfectly clean sky. We added ground echo — the clutter a real radar sees bouncing off terrain — and the effect is one-sided.</p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Target</th><th>Clean sky</th><th>With ground echo</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>The drone doing the transmitting</td><td class="num">5/5 found</td><td class="num no">0/5 found</td></tr>
+          <tr><td>The phantom it invents</td><td class="num">found</td><td class="num yes">still found</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The phantom is moving fast toward the radar, which separates it from the stationary ground. The drone itself is crossing sideways, so as far as the radar is concerned it is standing still — indistinguishable from a hillside.</p>
+    <p>The standard fix, a filter that throws away everything stationary, doesn't rescue the radar: it removes the drone too, at any size, whether or not there's clutter. <strong>The drone's best move is simply to fly sideways.</strong></p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">Things we published and then withdrew</h2>
+  <p class="sec-note">This list is deliberate. A results file with nothing withdrawn hasn't been checked.</p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>We said</th><th>What was actually going on</th><th>Now</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>The radar's speed check passes</td><td>It was fed speed <em>calculated from</em> distance, so it could never fail. A free pass for every track we ever measured.</td><td class="no">Fixed, everything re-run</td></tr>
+        <tr><td>The drone must hide close in</td><td>True only in a clean sky. With ground echo it's hidden anywhere.</td><td class="no">Withdrawn</td></tr>
+        <tr><td>A new "irregularity" test spots fakes</td><td>Our two samples differed in speed, not in being fake. The test would have flagged fast <em>real</em> aircraft.</td><td class="no">Withdrawn</td></tr>
+        <tr><td>Our planner beats the simple baseline</td><td>A bug in the baseline we wrote ourselves.</td><td class="no">Fixed, we lose</td></tr>
+        <tr><td>Swapping the tracker changes nothing</td><td>True, but only because the fake-detector never asked the tracker anything.</td><td class="yes">Root-caused, fixed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Two of these were caught by our own tests failing, not by review. One was caught because a test that had been passing turned out to assert nothing meaningful — which is its own lesson: <strong>a green test is not evidence until you've read what it actually checks.</strong></p>
+</section>
+
+<section>
+  <h2 class="sec">Where the evidence sits</h2>
+  <p class="sec-note">Everything above is backed by a test that can fail.</p>
+
+  <div class="stats">
+    <div class="stat"><span class="v">228</span><span class="k">checks passing</span></div>
+    <div class="stat"><span class="v">0</span><span class="k">failing</span></div>
+    <div class="stat"><span class="v">52</span><span class="k">skipped — they test retired code</span></div>
+    <div class="stat"><span class="v">280</span><span class="k">total</span></div>
+  </div>
+  <p>Every number in this report comes from a test file that is run, not from notes. If the code stops behaving the way the report describes, the test goes red.</p>
+  <p>The 52 skipped checks are not broken and not machine-specific. They test the <em>first</em> generator, which we retired and replaced in August — they announce themselves as skipped rather than quietly passing on code that is no longer in use. The results in this report come from the replacement, measured after that rebuild.</p>
+</section>
+
+<section>
+  <h2 class="sec">What this is not</h2>
+  <p class="sec-note">Stated plainly, so nobody has to discover it later.</p>
+  <ul>
+    <li><strong>No radio is transmitted.</strong> This is simulation end to end. The radar is code, not hardware.</li>
+    <li><strong>The signal shapes are real; the flight paths are not.</strong> Our waveforms come from a real recorded dataset. The movement of the aircraft is our own model — the dataset contains no moving targets.</li>
+    <li><strong>The ground-echo model is generous to the radar.</strong> Real terrain produces messier echoes than we simulate, so the radar's job in reality is harder than shown here, not easier.</li>
+    <li><strong>One transmitter only.</strong> Two physically separated transmitters would defeat the direction-finding result — that is the obvious next question, and we have not tested it.</li>
+  </ul>
+</section>
+
+<section>
+  <h2 class="sec">Where this leaves us</h2>
+  <p>The useful output of this work is not "we fooled a radar". It's a measured map of <strong>exactly where the deception stops working, and why</strong> — with the failures kept in the record alongside the successes.</p>
+  <p>For anyone building the defending side, the finding is concrete and cheap: <strong>a radar that measures direction defeats a single-transmitter phantom swarm outright</strong>, regardless of how many phantoms there are or how well each one is faked. For anyone building the attacking side, the same result says the effort belongs in the geometry, not in better signal fakery.</p>
+</section>
+
+<footer>
+  <p>Simulation study. All figures produced by the project's own automated test suite; every claim traces to a named, re-runnable test file. Results carry the radar configuration they were measured under — a deception figure without that configuration attached is not meaningful.</p>
+</footer>
+
+</div>

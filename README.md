@@ -72,21 +72,99 @@ The suite reports three outcomes, deliberately:
 | **Failed** | Code exists but is wrong — debug before advancing. |
 | **Incomplete** | Stage not built yet, or dataset absent. Honest "not done", not broken. |
 
-**All ten stage files pass.** They are no longer "executable specifications"
-waiting to be implemented -- Stages 0-8 and DataIntegration all run green, and
-the suite has grown well beyond them (angle channel, waveform agility, link
-budget, range ambiguity, mission simulator). Run `runAllTests.m`, or
+**Eight of the ten stage files pass.** Stages 0-5, 8 and DataIntegration run
+green. **Stage 6 self-skips and Stage 7 errors** -- both built on `+synth`/
+`+agent`/`experiments.runBenchmark`, archived on 7 Aug (below). Run
+`runAllTests.m`, or
 `matlab -batch "cd('E:\Radar'); startup; runtests('tests')"`, for the current
 count -- and note that `startup` is required, since without it the
 Python-driven tests silently self-filter to Incomplete.
+
+**Measured suite state, 12 Aug 2026** (`results/full_suite_20260812c.csv`):
+
+```
+PASSED 160   FAILED 0   INCOMPLETE 52   of 212
+```
+
+Two days earlier it was **124 / 0 / 93**. The move is real work, not
+reclassified skips — **archive debt down 93 → 52**:
+
+| | |
+|---|---|
+| genuinely rewired | `test_judge_measured_doppler` 5/5, `test_judge_config_isolation` 4/4, `test_nis_consistency` 5/5, `test_range_ambiguity` 5/5, `test_trajectory_envelope_audit` 4/4, `test_sim_units` 11/11, `test_swerling_scale` 3/3 |
+| new | 7 core-mathematics round-trip tests (below) |
+| retired | 9 files whose question is answered elsewhere or whose subject (the CEM planner) no longer exists |
+| **capabilities BUILT** | **Swerling target fluctuation** — a mathematical gap, not just a missing feature: amplitude had been deterministic 1/R², so every phantom read as a servo-perfect repeater and amplitude-*variance* claims were unreachable. And a **fourth physics veto**: `project_action`'s first three all constrained RANGE, so nothing stopped the generator planning a phantom past v_ua = 59.958 m/s — whose Doppler folds, flips sign, and self-flags on the judge's own screen 2 |
+
+Still **zero red**. Of the 52 remaining, **28 are `+missionsim`** (a demo
+client, not a result) and 24 everything else — itemised in
+`trash/BROKEN_DOWNSTREAM.md`, which now separates *pending rewire* from
+*capability absent*, because those are different debts.
+
+**The suite's own instrument check** — `tests/test_generator_math_roundtrip.m`
+(7/7) — asks whether every quantity the generator DERIVES comes back out of the
+independent judge as the quantity it intended. Range lands inside half a range
+cell, range-rate inside a third of a velocity bin, the amplitude exponent
+within 3.6% of the radar equation's −2, and negating the phase flips the
+measured rate (the negative control that proves the test can fail). Full
+account: `USP_MATH_VERIFICATION.md`.
+
+**Zero red.** Before this pass the same suite reported 119 passed / 64 failed /
+92 incomplete: 63 methods *errored* on names archived on 7 Aug, and one
+(`test_drone_models`) failed outright as archive collateral. Sixty-three errors
+is not a red suite, it is a **broken instrument** -- a genuine new regression
+cannot be seen against that much standing noise.
+
+Those tests now report **Incomplete** with a message naming the missing package,
+via `tests/archivedDepsPresent.m`. That is this repo's own third outcome (see
+the table above), the same one `DataIntegration_Test` has always used for an
+absent dataset. **A skip is a debt, not a fix** -- every guarded test is still
+pending rewire to `generator.render` and is tracked in
+`trash/BROKEN_DOWNSTREAM.md`. Guards are dependency-conditional, so a test
+un-skips by itself the moment its dependency is genuinely restored.
+
+Verified no coverage was hidden in the process: the set of passing tests before
+and after is identical apart from **5 additions**, and no previously-passing
+test became skipped.
+
+Python: `pytest generator/` **40 passed**, `pytest server/tests` **25 passed,
+14 skipped**.
 
 **Caveat, 7 Aug 2026:** the generator was archived and rebuilt (see
 `GOVERNANCE.md`). Tests that built their scenes via the archived
 `engine.entity.*` are knowingly broken until they are rewired against the new
 generator -- the full list is in `trash/BROKEN_DOWNSTREAM.md`. Judge-side code
 (`+radar/`, `+track/`, `+engine/runJudge.m`) is untouched. The rebuilt
-generator's own gate is `tests/test_generator_gate_a.m` (4/4 passing) plus the
-Python suites (`python -m pytest generator/`, 23/23).
+generator is now gated end to end -- **all 7 of its entry points have a test**,
+each driving the real script rather than a reimplemented copy:
+
+| gate | covers |
+|---|---|
+| `test_generator_gate_a.m` 4/4 | F1 -- correct classification in both directions |
+| `test_generator_phase_b.m` 2/2 | F2, F3 -- the monopulse wall, at the published N=5 |
+| `test_generator_agility.m` 3/3 | C2 -- 14.16 dB, re-derived on the rebuild |
+| `test_generator_phantom_count.m` 4/4 | F7, F8 -- the wall is N-independent |
+| `test_generator_screen_ablation.m` 4/4 | F4 -- screen orthogonality; H2 -- screen 2b inert |
+| `test_generator_judge_summary.m` 5/5 | the Python bridge contract, on a multi-track scene |
+
+plus the Python suite (`python -m pytest generator/`, 40 passed).
+
+**Known gaps, stated here so they are not rediscovered by accident:** nothing
+replaces Stage 7 (the benchmark harness) -- `BENCHMARK_RESULTS.md`'s headline
+is frozen, not reproducible. **The Incomplete count is pending rewire, not
+passing** -- read it as the size of the remaining archive debt, itemised in
+`trash/BROKEN_DOWNSTREAM.md`.
+
+**`server/` was rewired onto the rebuilt generator, 12 Aug 2026.** `/plan`
+`/score` `/run` `/constants` had been returning 500 since the archive; they
+now run, and `/run` reaches the real judge and reproduces the monopulse wall
+through the HTTP API (N=2: 2 confirmed / 2 flagged / 0 surviving with the
+difference channel on, 1 surviving with it off). `pytest server/tests`
+**36 passed, 16 skipped**; the two live-MATLAB tests run with `-m slow`.
+`/plan` is a deterministic layout, **not a search** -- the archived CEM
+planner has no replacement, and the endpoint's docstring says so rather than
+implying one. Full account, including a blind-range bug this turned up in the
+published N-sweep builder: `CLAIMABLE_RESULTS.md` H4/H6.
 
 ## Stage → claim → test map
 

@@ -57,6 +57,26 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
         end
 
         function test_d2_sweep_snr_vs_monopulse_flag_rate(tc)
+            % 12 Aug 2026: NOT "pending rewire". This file needs
+            % PER-OBJECT AZIMUTH -- its genuine-formation arm places targets
+            % on different bearings and asks whether the co-bearing screen
+            % can tell them from a collinear fan. +generator/render.m takes
+            % ONE SourceAzimuthRad for the WHOLE scene, and that is
+            % ARCHITECTURAL rather than an omission (Blueprint 2.4: a single
+            % transmit aperture cannot be projected into looking angularly
+            % separated, so there is deliberately no code path that could
+            % give two phantoms different bearings -- it is the mechanism
+            % behind the co-bearing screen working at all).
+            %
+            % The rebuilt generator models the ADVERSARY, so it cannot render
+            % a genuine multi-bearing formation, which is what this test's
+            % control arm is. CAPABILITY ABSENT -- see
+            % trash/BROKEN_DOWNSTREAM.md Class C.
+            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
+                ['This test needs PER-OBJECT AZIMUTH for its genuine-formation ' ...
+                 'arm. generator.render takes one SourceAzimuthRad per scene ' ...
+                 'by design (Blueprint 2.4). NOT rewirable -- see ' ...
+                 'trash/BROKEN_DOWNSTREAM.md Class C.']);
         % THE DELIVERABLE. Two scenes swept over the same SNR axis:
         %   collinear  -- 4 phantoms from ONE jammer, all on one bearing
         %   formation  -- 4 GENUINE objects, ~100 m cross-range spread
@@ -137,6 +157,26 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
         end
 
         function test_d2_the_boundary_is_cross_range_not_snr(tc)
+            % 12 Aug 2026: NOT "pending rewire". This file needs
+            % PER-OBJECT AZIMUTH -- its genuine-formation arm places targets
+            % on different bearings and asks whether the co-bearing screen
+            % can tell them from a collinear fan. +generator/render.m takes
+            % ONE SourceAzimuthRad for the WHOLE scene, and that is
+            % ARCHITECTURAL rather than an omission (Blueprint 2.4: a single
+            % transmit aperture cannot be projected into looking angularly
+            % separated, so there is deliberately no code path that could
+            % give two phantoms different bearings -- it is the mechanism
+            % behind the co-bearing screen working at all).
+            %
+            % The rebuilt generator models the ADVERSARY, so it cannot render
+            % a genuine multi-bearing formation, which is what this test's
+            % control arm is. CAPABILITY ABSENT -- see
+            % trash/BROKEN_DOWNSTREAM.md Class C.
+            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
+                ['This test needs PER-OBJECT AZIMUTH for its genuine-formation ' ...
+                 'arm. generator.render takes one SourceAzimuthRad per scene ' ...
+                 'by design (Blueprint 2.4). NOT rewirable -- see ' ...
+                 'trash/BROKEN_DOWNSTREAM.md Class C.']);
         % THE SWEEP ABOVE FOUND NO SNR BOUNDARY, AND THE REASON IS STRUCTURAL.
         % +engine/runJudge.m's co-bearing screen is a SELF-CALIBRATING RATIO
         % test: it asks whether the spread of the tracks' mean azimuths is
@@ -259,6 +299,26 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
         end
 
         function test_d2_interaction_does_masquerade_buy_back_angle_survivability(tc)
+            % 12 Aug 2026: NOT "pending rewire". This file needs
+            % PER-OBJECT AZIMUTH -- its genuine-formation arm places targets
+            % on different bearings and asks whether the co-bearing screen
+            % can tell them from a collinear fan. +generator/render.m takes
+            % ONE SourceAzimuthRad for the WHOLE scene, and that is
+            % ARCHITECTURAL rather than an omission (Blueprint 2.4: a single
+            % transmit aperture cannot be projected into looking angularly
+            % separated, so there is deliberately no code path that could
+            % give two phantoms different bearings -- it is the mechanism
+            % behind the co-bearing screen working at all).
+            %
+            % The rebuilt generator models the ADVERSARY, so it cannot render
+            % a genuine multi-bearing formation, which is what this test's
+            % control arm is. CAPABILITY ABSENT -- see
+            % trash/BROKEN_DOWNSTREAM.md Class C.
+            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
+                ['This test needs PER-OBJECT AZIMUTH for its genuine-formation ' ...
+                 'arm. generator.render takes one SourceAzimuthRad per scene ' ...
+                 'by design (Blueprint 2.4). NOT rewirable -- see ' ...
+                 'trash/BROKEN_DOWNSTREAM.md Class C.']);
         % THE INTERACTION THE BRIEF CALLS THE MOST INTERESTING OPEN QUESTION.
         %
         % First, the premise needs correcting, because the arithmetic does not

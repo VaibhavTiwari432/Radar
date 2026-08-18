@@ -11,6 +11,20 @@ classdef test_missionsim_track_lifecycle < matlab.unittest.TestCase
 %   this exercises the full CFAR->tracker->buildFrameLog path, not just
 %   the tracker in isolation.
 
+    methods (TestClassSetup)
+        function assumeArchivedDependencyPresent(tc)
+            % 7 Aug 2026 archive: every scene in this file is built by
+            % synth.synthesizeSwarm, which no longer exists. Report Incomplete --
+            % this project's own honest "not built yet" outcome, the same
+            % one DataIntegration_Test uses for an absent dataset -- rather
+            % than erroring. 63 errored methods made a real regression
+            % invisible; a skip keeps the suite usable as an instrument.
+            % NOT a fix: rewire to generator.render to genuinely re-enable.
+            tc.assumeTrue(archivedDepsPresent({'synth.synthesizeSwarm'}), ...
+                'synth.synthesizeSwarm was archived 7 Aug 2026 (GOVERNANCE.md). This test is PENDING REWIRE to generator.render, not passing -- see trash/BROKEN_DOWNSTREAM.md.');
+        end
+    end
+
     methods (Test)
 
         function test_confirmed_then_forced_6_miss_deletes_track(tc)

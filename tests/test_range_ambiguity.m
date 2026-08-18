@@ -80,46 +80,84 @@ classdef test_range_ambiguity < matlab.unittest.TestCase
             tc.verifyEqual(rr, Rs - nn*Rua, 'RelTol', 1e-9);
         end
 
-        function test_matlab_and_python_fold_identically(tc)
-            tc.assumeTrue(localPythonReady(), 'cogengine not importable from pyenv');
-            for R = [600 1800 2997 3000 5000 9000 12000]
+        function test_matlab_and_python_agree_on_the_fold_modulus(tc)
+        % REWIRED 12 Aug 2026. This compared physics.apparentRange against
+        % cogengine.radar_params.apparent_range_m -- archived 7 Aug, so the
+        % guard (localPythonReady, which probes cogengine) could never pass
+        % again.
+        %
+        % THE REBUILT GENERATOR HAS NO FOLD FUNCTION, AND THAT IS A DESIGN
+        % CHANGE RATHER THAN AN OMISSION. physics_projection VETOES a phantom
+        % past R_ua (ambiguity_veto) instead of folding it, on the grounds
+        % that a phantom which folds arrives at a DIFFERENT apparent range
+        % than the one intended -- so the generator refuses to plan it at
+        % all. The JUDGE still folds, because a receiver has no choice.
+        %
+        % What survives as a two-language fact is the fold's MODULUS, R_ua,
+        % and that is what is asserted here.
+            [~, ~, Rua] = physics.apparentRange(0, tc.PRF_HZ);
+            pp = py.importlib.import_module('generator.physics_projection');
+            pyRua = double(pp.unambiguous_range_m(tc.PRF_HZ));
+            fprintf('[C1] R_ua  MATLAB %.4f m | Python %.4f m\n', Rua, pyRua);
+            tc.verifyEqual(pyRua, Rua, 'RelTol', 1e-12, ...
+                'MATLAB and Python disagree about the unambiguous range.');
+            % And the MATLAB fold itself is still exercised, standalone.
+            for R = [600 1800 2997 3000 5000 9000 12000 25000]
                 m = physics.apparentRange(R, tc.PRF_HZ);
-                p = double(py.cogengine.radar_params.apparent_range_m(R, tc.PRF_HZ));
-                tc.verifyEqual(p, m, 'RelTol', 1e-9, ...
-                    sprintf('MATLAB and Python disagree about R=%g', R));
+                tc.verifyEqual(m, mod(R, Rua), 'RelTol', 1e-9, ...
+                    sprintf('apparentRange is not mod(R, R_ua) at R=%g', R));
             end
         end
 
-        function test_planner_no_longer_searches_past_r_ua(tc)
-            % THE FIX. DEFAULT_BOUNDS_MULTI used to reach 6000 m.
-            tc.assumeTrue(localPythonReady(), 'cogengine not importable from pyenv');
-            bounds = py.cogengine.planner_cem.DEFAULT_BOUNDS_MULTI;
-            b = bounds{'range_m'};
-            hi = double(b{2});
+        function test_the_generator_cannot_emit_a_phantom_past_r_ua(tc)
+        % REWIRED 12 Aug 2026, and it asserts a STRONGER property than the
+        % two tests it replaces.
+        %
+        % Those were test_planner_no_longer_searches_past_r_ua (asserting
+        % cogengine.planner_cem.DEFAULT_BOUNDS_MULTI's upper bound) and
+        % test_correction_pipeline_cannot_walk_past_r_ua (asserting its
+        % _correct_params_multi separation cascade did not push one back
+        % out). Both tested a CEM planner that was archived on 7 Aug with no
+        % replacement -- the rebuild scores against the real judge and never
+        % built a twin to search on.
+        %
+        % The INVARIANT they protected is still live and now holds by
+        % construction rather than by bound-checking: physics_projection
+        % refuses any action past R_ua, so there is no bound to get wrong and
+        % no cascade to walk past it. Asserted from the illegal side, because
+        % a veto that never fires is indistinguishable from one not wired.
             [~, ~, Rua] = physics.apparentRange(0, tc.PRF_HZ);
-            fprintf('[C1] planner range upper bound = %.2f m (R_ua %.2f m)\n', hi, Rua);
-            tc.verifyLessThanOrEqual(hi, Rua, ...
-                'The planner is still searching outside the radar''s unambiguous range.');
+            pp = py.importlib.import_module('generator.physics_projection');
+            times = py.numpy.array([0.0, 1.0, 2.0]);
+
+            legal = pp.project_action(pyargs('range0_m', Rua - 2000, ...
+                'range_rate_mps', 0.0, 'times_s', times, ...
+                'mother_range_m', py.numpy.array([900.0, 900.0, 900.0]), ...
+                'min_latency_s', 1e-6, 'prf_hz', tc.PRF_HZ));
+            beyond = pp.project_action(pyargs('range0_m', Rua + 2000, ...
+                'range_rate_mps', 0.0, 'times_s', times, ...
+                'mother_range_m', py.numpy.array([900.0, 900.0, 900.0]), ...
+                'min_latency_s', 1e-6, 'prf_hz', tc.PRF_HZ));
+
+            fprintf('[C1] R_ua %.1f m: inside -> feasible %d | beyond -> feasible %d\n', ...
+                Rua, logical(legal.feasible), logical(beyond.feasible));
+            tc.verifyTrue(logical(legal.feasible), ...
+                'A phantom well inside R_ua was refused; the veto is over-firing.');
+            tc.verifyFalse(logical(beyond.feasible), ...
+                'The generator planned a phantom past R_ua -- it would fold to a different range.');
+            tc.verifySubstring(char(string(beyond.veto_reason)), 'ambiguous', ...
+                'Refused, but not for the ambiguity reason -- check which veto fired.');
         end
 
-        function test_correction_pipeline_cannot_walk_past_r_ua(tc)
-            % Bounds alone are not enough: _enforce_min_separation cascades
-            % ranges UPWARD, so it can push a phantom past R_ua even from
-            % bounds that respect it.
-            tc.assumeTrue(localPythonReady(), 'cogengine not importable from pyenv');
-            [~, ~, Rua] = physics.apparentRange(0, tc.PRF_HZ);
-            raw = py.numpy.array([2500.0, -60.0, 15.0, 2900.0, -60.0, 15.0, 2950.0, -60.0, 15.0]);
-            % py.<module>._name is a MATLAB parse error (a leading underscore
-            % is not a valid MATLAB identifier), so reach it via getattr.
-            mod = py.importlib.import_module('cogengine.planner_cem');
-            correctFn = py.getattr(mod, '_correct_params_multi');
-            out = double(correctFn(raw, int32(3), ...
-                py.cogengine.radar_twin.TwinConfig(), 60.0, 200.0, tc.PRF_HZ));
-            ranges = out(1:3:end);
-            fprintf('[C1] 3 phantoms forced to separate: %s\n', mat2str(round(ranges,1)));
-            tc.verifyLessThanOrEqual(max(ranges), Rua, ...
-                'Separation cascade walked a phantom past R_ua.');
-        end
+        % test_correction_pipeline_cannot_walk_past_r_ua was REMOVED 12 Aug
+        % 2026. It asserted that cogengine.planner_cem's
+        % _enforce_min_separation cascade could not push a phantom past R_ua
+        % while spreading it off its neighbours. That cascade -- and the
+        % whole CEM planner -- was archived on 7 Aug with no replacement, and
+        % the rebuilt generator has no multi-phantom correction step to get
+        % wrong: build_scene.py places phantoms at caller-given ranges and
+        % physics_projection vetoes each one independently. The surviving
+        % invariant is asserted directly above, from the illegal side.
 
         function test_planner_intent_and_judge_measurement_agree_beyond_r_ua(tc)
         % THE TEST PHASE 3's BRIEF ASKED FOR, re-pointed in Phase 4.1. Place a
@@ -233,25 +271,26 @@ classdef test_range_ambiguity < matlab.unittest.TestCase
         function fb = judgeAtRange(tc, R0, v, F, nPulses, seed)
         %JUDGEATRANGE  Render one entity whose TRUE range is R0 (folded at
         %   the receive path, as physics dictates) and score it.
-            C = physics.Constants();
-            rs = RandStream('mt19937ar', 'Seed', seed);
-            cube = complex(zeros(tc.NFAST, nPulses, F));
-            for k = 1:F
-                Rapp = physics.apparentRange(R0 + v*(k-1), tc.PRF_HZ);
-                st = engine.entity.EntityState('range_m', Rapp, ...
-                        'range_rate_mps', v, 'class', "drone");
-                cube(:,:,k) = engine.entity.render(st, 'NumPulses', nPulses, ...
-                    'FastTimeSamples', tc.NFAST, 'PulseWidth', 12e-6, ...
-                    'Bandwidth', 2e6, 'CarrierHz', 10e9, 'PrfHz', tc.PRF_HZ, ...
-                    'AmpScale', 3.0, 'RandStream', rs) ...
-                    + 0.05*(randn(rs,tc.NFAST,nPulses)+1i*randn(rs,tc.NFAST,nPulses))/sqrt(2);
-            end
-            f = [tempname '.mat'];
-            S = struct('rx_frames', cube, 'fs', C.fs, 'pulse_width_s', 12e-6, ...
-                'bandwidth_hz', 2e6, 'prf_hz', tc.PRF_HZ, 'carrier_hz', 10e9, ...
-                'frame_interval_s', 1.0);
-            save(f, '-struct', 'S');
-            cleanup = onCleanup(@() delete(f)); %#ok<NASGU>
+        %   REWIRED 12 Aug 2026 from engine.entity.render (archived 7 Aug) to
+        %   generator.render via tests/renderPhantomScene.m.
+        %
+        %   THE FOLD IS APPLIED ONCE, NOT PER FRAME, AND THAT IS EXACT HERE
+        %   rather than an approximation. The archived loop folded each
+        %   frame's true range separately. Over this run the target moves
+        %   |v|*F = 280 m while the folded start sits at 6263 m, so the
+        %   trajectory never crosses a wrap boundary -- and away from a
+        %   boundary mod(R0 + v*t, R_ua) == mod(R0, R_ua) + v*t exactly. So
+        %   the folded trajectory IS a CV trajectory at the folded range,
+        %   which is precisely what renderPhantomScene builds.
+        %
+        %   Vetoes stay ARMED. The folded range (6263 m) is legal -- between
+        %   the 1798.75 m blind range and R_ua -- which is the whole point:
+        %   the receiver sees a perfectly ordinary target, and only the
+        %   PLANNER knows it was asked for 25 km.
+            Rapp0 = physics.apparentRange(R0, tc.PRF_HZ);
+            rng(seed, 'twister');
+            f = renderPhantomScene(Rapp0, v, 'NumFrames', F, 'NumPulses', nPulses, ...
+                'Tag', sprintf('rangeamb_s%d', seed));
             fb = engine.runJudge(f);
         end
     end

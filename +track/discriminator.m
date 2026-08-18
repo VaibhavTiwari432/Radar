@@ -90,15 +90,17 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     if isfield(trackStruct, 'screensEnabled')
         enabled = cellstr(trackStruct.screensEnabled);
     else
-        % 'residual' and 'maneuver' are DELIBERATELY NOT in this default --
-        % see each screen's own block below for why. Opt in with
-        % screensEnabled = {'amplitude','doppler','micro','residual','maneuver'}.
+        % 'residual', 'maneuver' and 'bearing' are DELIBERATELY NOT in this
+        % default -- see each screen's own block below for why. Opt in with
+        % screensEnabled = {'amplitude','doppler','micro','residual',...
+        %                   'maneuver','bearing'}.
         enabled = {'amplitude', 'doppler', 'micro'};
     end
     useAmplitude = any(strcmpi(enabled, 'amplitude'));
     useDoppler   = any(strcmpi(enabled, 'doppler'));
     useResidual  = any(strcmpi(enabled, 'residual'));
     useManeuver  = any(strcmpi(enabled, 'maneuver'));
+    useBearing   = any(strcmpi(enabled, 'bearing'));
 
     scores = [];
 
@@ -132,6 +134,36 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
         scores(end+1) = 0; %#ok<AGROW>
     end
 
+    % ---- 2c. Bearing/range kinematic consistency (the N=1 screen) ----
+    % A target in straight-line constant-velocity motion conserves
+    % R^2*dtheta/dt, so its bearing is an exactly LINEAR function of 1/R. A
+    % phantom is radiated from the mother platform and therefore inherits the
+    % MOTHER's bearing trajectory while reporting its OWN range, which breaks
+    % that law. +track/bearingRateScreen.m carries the derivation, the score
+    % definition and the one documented evasion.
+    %
+    % WHY THIS ONE MATTERS: every other per-track screen here tests a quantity
+    % a DRFM can forge independently. Azimuth cannot be forged, because it is
+    % set by where the transmitter physically is -- and unlike the co-bearing
+    % screen in +engine/runJudge.m, which needs N >= 2 tracks to compare, this
+    % test is entirely within a single track. It is the first screen in this
+    % project that can condemn a LONE phantom.
+    %
+    % OPT-IN, and NaN-safe: absent azimuth (a sum-channel-only export, every
+    % caller predating the angle channel) contributes nothing rather than
+    % vetoing -- the same "the caller never had this evidence" posture as the
+    % Doppler screen's dopplerMeasured guard. bearingRateScreen returns NaN
+    % for a track whose bearing or range never moved, and a NaN is dropped
+    % here rather than scored, because an uninformative 0.5 must never be
+    % reported as a reading.
+    if useBearing && isfield(trackStruct, 'azimuth') && ...
+            isfield(trackStruct, 'time') && ~isempty(trackStruct.azimuth)
+        bScore = track.bearingRateScreen(trackStruct.azimuth, R, trackStruct.time);
+        if ~isnan(bScore)
+            scores(end+1) = bScore; %#ok<AGROW>
+        end
+    end
+
     % ---- 2b. Manoeuvre-plausibility (IMM mode-probability transition rate) ----
     % BENCHMARK_RESULTS.md's "Tracker model" generalization sweep found CV,
     % IMM and CA produced BYTE-IDENTICAL evasion/F1: this discriminator reads
@@ -163,12 +195,76 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     % stated assumption; tD1_imm_discriminates.m and the re-run tracker-model
     % sweep are what test whether it is doing useful work, not this comment.
     MAX_PLAUSIBLE_SWITCH_RATE = 0.25;   % [ASSUMED] switches/frame, see above
+    %
+    % ============ VETO-ONLY SINCE 7 AUGUST 2026, AND WHY ============
+    % This screen shipped as an averaged VOTE
+    % (scores(end+1) = max(0, 1 - switchRate/MAX_PLAUSIBLE_SWITCH_RATE)) and
+    % that was wrong for exactly the reason this file already documents twice
+    % -- once for the micro-Doppler comb ("a passing comb adds NOTHING to the
+    % average") and once for the amplitude residual ("a +1 added to the mean
+    % rescues a track that screen 1 or 2 had condemned"). Screen 2b was built
+    % as a vote anyway and duly reintroduced the failure mode the other two
+    % were designed around.
+    %
+    % MEASURED, not argued (generator.screenAblation, N=5 seeds, arms that
+    % each violate exactly one law):
+    %
+    %   mask                     flat_amplitude   zero_doppler
+    %   DEFAULT (a+d+micro)              0.80          1.00
+    %   +maneuver (as a VOTE)            0.00          0.00
+    %
+    % A non-manoeuvring phantom sits far under the 0.25 ceiling, so 2b scored
+    % ~1.0 and averaged the condemning screen straight back up:
+    % mean([0 1 1]) = 0.67 > 0.5 -> 'real'. A decoy the Doppler screen caught
+    % 5/5 escaped 5/5 BECAUSE a screen was added. The same run's
+    % 'DEFAULT, IMM tracker' control was identical to DEFAULT cell for cell,
+    % so this was the SCREEN, not the IMM tracker it requires.
+    %
+    % As a veto it can add capability but cannot subtract any, which makes it
+    % safe by construction -- the same argument the residual screen makes for
+    % itself. THE THRESHOLD IS UNCHANGED: the vote scored exactly 0 at
+    % switchRate == MAX_PLAUSIBLE_SWITCH_RATE, so vetoing at that same point
+    % preserves the line the constant already names and introduces no new
+    % number. Everything below it, which used to drag the mean down by a
+    % fraction, is now simply silent.
+    %
+    % ---- BUT THE VETO ADDS NOTHING EITHER, AND HERE IS WHY (MEASURED) ----
+    % The 'maneuvering' arm exists so this screen can be shown still doing
+    % its job. It does not. '+maneuver (IMM)' is identical to the
+    % 'DEFAULT, IMM tracker' control in ALL FIVE arms, and the flutter
+    % phantom is flagged 0.00. Measured switchRate is exactly 0 (not NaN --
+    % modeProbSeq DOES reach here, the plumbing is fine), on the flutter arm
+    % AND the genuine arm alike. Three compounding causes, none of them the
+    % threshold:
+    %
+    %  1. The tracker's measurement is RANGE-ONLY, quantised to 46.84 m. The
+    %     scene alternates v between -15 and -55 m/s at 1 s frames, a 40 m
+    %     alternation -- UNDER one bin. Measured diffs are
+    %     [-46.8 0 -46.8 -46.8 -46.8] for the flutter vs
+    %     [0 -46.8 -46.8 -46.8 0] for the genuine target: the same staircase.
+    %     The IMM has nothing to switch on.
+    %  2. The channel that CAN see it is not wired to the filter. Measured
+    %     range-rate is [-15 -56.2 -15 -56.2 -15 -56.2], a textbook
+    %     alternation -- but Doppler never enters the tracker, so screen 2b
+    %     reads mode probabilities driven by the one channel that is blind
+    %     to the signature.
+    %  3. Even given (1) and (2), the dwell is too short to resolve the
+    %     line. A confirmed track here spans 6 frames = 5 transitions, so
+    %     one switch scores 0.20 -- UNDER 0.25. The veto needs 2 of 5.
+    %
+    % So this screen is currently INERT, not merely harmless. Keep it as a
+    % veto (it removes the measured regression above and costs nothing), but
+    % do NOT claim it catches manoeuvring phantoms: on this instrument it
+    % cannot, and no threshold change fixes that. It becomes real only if
+    % range-rate reaches the tracker -- i.e. the 2-D/range-Doppler tracker
+    % CLAUDE.md lists under "Still not built".
+    maneuverVeto = false;
     if useManeuver && isfield(trackStruct, 'modeProbSeq') && ~isempty(trackStruct.modeProbSeq)
         mp = trackStruct.modeProbSeq;
         if size(mp, 1) >= 2
             [~, dominant] = max(mp, [], 2);
             switchRate = nnz(diff(dominant) ~= 0) / (numel(dominant) - 1);
-            scores(end+1) = max(0, 1 - switchRate / MAX_PLAUSIBLE_SWITCH_RATE); %#ok<AGROW>
+            maneuverVeto = switchRate >= MAX_PLAUSIBLE_SWITCH_RATE;
         end
         % else: too short to compute a transition rate -- uninformative, skip.
     end
@@ -354,7 +450,7 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     end
 
     % Vetoes apply AFTER the average, so they cannot be diluted by it.
-    if microVeto || residualVeto
+    if microVeto || residualVeto || maneuverVeto
         score = 0;
     end
 

@@ -85,6 +85,22 @@
 > not describe the single-entity engine as the finished mission.**
 
 **Reference Documents:**
+- `CLUTTER_AND_MTI_RESULTS.md` — **16 August 2026.** The first ground-return model
+  this project has had (`+physics/surfaceClutter.m`) and the clutter filter that
+  goes with it (`runJudge`'s `MtiNotchMps`). **Every detection number published
+  before this date is a THERMAL-NOISE-ONLY number** — a grep for clutter across
+  `+radar/`, `+engine/`, `+track/`, `+generator/` returned one comment and no
+  code. Both default OFF, so nothing already published moves. Measured:
+  constant-gamma makes the competing clutter RCS **constant with range**
+  (power ∝ 1/R⁴, not the usual 1/R³), putting a 1 m² target **4.2 dB below the
+  clutter at every range**; a realistic drone goes 5/5 → **0/5** detected at
+  0.1 m² and below while a −50 m/s phantom is untouched; and the MTI notch
+  restores the masked phantom but **removes a tangential drone at any RCS, with
+  or without clutter**. **This withdraws this project's own "the drone must hide
+  inside the blind range" conclusion** — that was an artefact of the missing
+  clutter model; the counter-tactic is to fly tangentially. γ = −15 dB is the
+  one cited assumption and the Rayleigh statistics make the clutter *easier*
+  than reality.
 - `RADAR_REALISM_AUDIT.md` — **25 July 2026.** How close this simulation is to an
   actual radar, every claim tied to a repo line. Chain is faithful; what is
   missing is whole measurement dimensions. **Tier 1: no angle channel at all

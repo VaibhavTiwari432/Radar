@@ -93,20 +93,24 @@ def plan_response(scene: Dict[str, Any]) -> Dict[str, Any]:
 
 def run_response(scene: Dict[str, Any], feedback: Dict[str, Any],
                  attribution: Dict[str, Any] = None,
-                 truth_track: Dict[str, Any] = None) -> Dict[str, Any]:
+                 truth_track: Dict[str, Any] = None,
+                 mother: Dict[str, Any] = None) -> Dict[str, Any]:
     """Also takes no score parameter.
 
-    `attribution` and `truth_track` are kept as their OWN top-level keys
-    rather than merged into `feedback`, because both are DERIVED (scene truth
-    x judge measurement; scene truth propagated by the twin's own law) while
-    everything under `feedback` is what the judge actually said. Collapsing
-    them would let a derived quantity inherit MEASURED provenance on screen.
+    `attribution`, `truth_track` and `mother` are kept as their OWN top-level
+    keys rather than merged into `feedback`, because all three are DERIVED
+    (scene truth x judge measurement; scene truth propagated by the twin's own
+    law; the mother platform's commanded path) while everything under
+    `feedback` is what the judge actually said. Collapsing them would let a
+    derived quantity inherit MEASURED provenance on screen.
     """
     out = {"scene": scene_payload(scene), "feedback": feedback_payload(feedback)}
     if attribution is not None:
         out["attribution"] = json_safe(attribution)
     if truth_track is not None:
         out["truth_track"] = json_safe(truth_track)
+    if mother is not None:
+        out["mother"] = json_safe(mother)
     # Track series the console needs to draw anything per-track. Explicitly
     # added here rather than in FEEDBACK_KEYS so the compact /score payload
     # stays small.
@@ -116,7 +120,13 @@ def run_response(scene: Dict[str, Any], feedback: Dict[str, Any],
     # frame, not per frame: a coasted frame leaves a GAP. Replaying the series
     # against uniform spacing would silently close those gaps and animate a
     # track through moments the radar never held it.
-    for k in ("track_label", "track_range_m", "track_time_s", "track_azimuth_mean"):
+    # track_azimuth_rad is the SERIES, not the mean. Forwarded since 16 Aug
+    # 2026: with a moving mother the platform's bearing changes across the
+    # dwell, so a single mean discards the one quantity that carries the
+    # signature -- dtheta/dt, and through v_cross = R*dtheta/dt the tangential
+    # speed a phantom implies.
+    for k in ("track_label", "track_range_m", "track_time_s",
+              "track_azimuth_mean", "track_azimuth_rad"):
         if k in feedback:
             out["feedback"][k] = json_safe(feedback[k])
     return out

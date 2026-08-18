@@ -31,6 +31,10 @@ class Context:
     mother_range_m: float
     pulse_width_est_s: float
     pulse_width_sigma_s: float = 0.0
+    # The platform's own cross-range speed (S6). Directly observable -- it is
+    # the agent's own kinematics -- and it decides whether screen 2c binds at
+    # all: at zero the bearing never moves and the screen abstains.
+    mother_cross_mps: float = 0.0
 
 
 class ScriptedHeuristic:
@@ -71,24 +75,72 @@ class ScriptedHeuristic:
         return ctx.pulse_width_est_s + self.safety_sigmas * ctx.pulse_width_sigma_s
 
     def _feasible(self, idx: int, ctx: Context, require_preferred: bool) -> bool:
-        range0_m, rate, rcs = ACTION_GRID[idx]
+        range0_m, rate, rcs, mother_rdot = ACTION_GRID[idx]
         if require_preferred and (rate == 0.0 or rcs < 1.0):
             return False
         # Full-trajectory causality AND eclipse check, evaluated against
-        # what this policy BELIEVES the pulse width to be.
+        # what this policy BELIEVES the pulse width to be, and against the
+        # platform track this action implies (S6: mother_rdot is an action, so
+        # causality now depends on the action itself).
+        from generator.platform import MotherTrack
+        mother = MotherTrack.crossing(ctx.mother_range_m,
+                                       cross_speed_mps=ctx.mother_cross_mps,
+                                       closing_speed_mps=-mother_rdot)
         plan = project_action(
             range0_m=range0_m, range_rate_mps=rate, times_s=self._times,
-            mother_range_m=ctx.mother_range_m, min_latency_s=MIN_LATENCY_S, rcs_m2=rcs,
-            pulse_width_s=self._believed_pulse_width_s(ctx),
+            mother_range_m=mother.range_m(self._times), min_latency_s=MIN_LATENCY_S,
+            rcs_m2=rcs, pulse_width_s=self._believed_pulse_width_s(ctx),
         )
         return plan.feasible
 
+    def _bearing_penalty(self, idx: int, ctx: Context) -> float:
+        """How badly this action breaks the conservation law screen 2c tests.
+
+        DERIVED, NOT SEARCHED, and this is the whole re-derivation S6 needed.
+        A phantom satisfies R^2*dtheta/dt = const exactly when its trajectory
+        and the platform's are PROPORTIONAL:
+
+            Rdot_mother / R_mother(0)  ==  Rdot_phantom / R_phantom(0)
+
+        so the ideal platform radial speed is R_m0 * Rdot_p / R_p0. The
+        penalty is the absolute miss against that ideal, and the policy
+        minimises it. Measured basin (+experiments/bearingHeadroom.m): the
+        score peaks exactly at the matched value and fails at zero and at
+        every OPENING rate, so "closest to matched" is the right rule.
+
+        ZERO PENALTY WHEN THE SCREEN CANNOT SEE. Two cases, both taken
+        straight from bearingRateScreen's own guards rather than guessed:
+          * the platform has no cross-range motion, so the bearing never
+            moves and the screen abstains;
+          * the phantom's range span is under 3 range cells, so 1/R is
+            constant and the two models are indistinguishable -- the cheaper
+            escape the basin sweep turned up.
+        In both, mother_rdot is free and the policy must not waste it.
+        """
+        range0_m, rate, _, mother_rdot = ACTION_GRID[idx]
+        if ctx.mother_cross_mps == 0.0:
+            return 0.0
+        span_m = abs(rate) * (NUM_FRAMES - 1) * FRAME_INTERVAL_S
+        if span_m < 3 * C.range_per_sample:
+            return 0.0
+        ideal = ctx.mother_range_m * rate / range0_m
+        return abs(mother_rdot - ideal)
+
     def act(self, ctx: Context) -> int:
         for require_preferred in (True, False):
-            best_idx, best_range0 = None, float("inf")
-            for idx, (range0_m, _, _) in enumerate(ACTION_GRID):
-                if self._feasible(idx, ctx, require_preferred) and range0_m < best_range0:
-                    best_idx, best_range0 = idx, range0_m
+            best_idx, best_key = None, None
+            for idx, (range0_m, _, _, _) in enumerate(ACTION_GRID):
+                if not self._feasible(idx, ctx, require_preferred):
+                    continue
+                # Bearing consistency FIRST, then closest range (strongest
+                # received power, Pr ~ 1/R^4). Ordered this way because a
+                # bearing-inconsistent phantom is condemned outright by 2c
+                # whereas a slightly weaker one is merely harder to detect --
+                # a failed screen costs the whole episode, a longer range
+                # costs some SNR.
+                key = (self._bearing_penalty(idx, ctx), range0_m)
+                if best_key is None or key < best_key:
+                    best_idx, best_key = idx, key
             if best_idx is not None:
                 return best_idx
         # Everything believed-infeasible: fall back to the farthest range,
@@ -113,9 +165,13 @@ class TabularBandit:
 
     def __init__(self, mother_buckets: tuple, pw_buckets_s: tuple,
                  epsilon: float = 0.1, seed: Optional[int] = None,
-                 init_q: float = 1.0):
+                 init_q: float = 1.0, cross_buckets: tuple = (0.0,)):
         self.mother_buckets = mother_buckets
         self.pw_buckets_s = pw_buckets_s
+        # Cross speed decides whether screen 2c binds at all, so a bandit
+        # without this axis cannot represent the task and its loss would be a
+        # statement about the discretisation, not about bandits.
+        self.cross_buckets = cross_buckets
         self.epsilon = epsilon
         self.rng = np.random.default_rng(seed)
         self.init_q = init_q
@@ -125,7 +181,8 @@ class TabularBandit:
     def _key(self, ctx: Context):
         m = min(self.mother_buckets, key=lambda c: abs(c - ctx.mother_range_m))
         p = min(self.pw_buckets_s, key=lambda c: abs(c - ctx.pulse_width_est_s))
-        return (m, p)
+        x = min(self.cross_buckets, key=lambda c: abs(c - ctx.mother_cross_mps))
+        return (m, p, x)
 
     def _cell(self, key):
         if key not in self.q:

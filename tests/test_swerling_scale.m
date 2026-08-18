@@ -60,15 +60,35 @@ end
 
 % ------------------------------------------------------------------------
 function sd = localSpreadDb(swerling, n)
-%LOCALSPREADDB  Scan-to-scan std of rendered amplitude, in dB. One render
-%   per scan, an independent stream each, so this measures the dwell-level
-%   fluctuation a tracker's amplitude series would actually see.
-    a = zeros(n, 1);
-    s = engine.entity.EntityState('swerling', swerling, 'range_rate_mps', 0);
-    for i = 1:n
-        c = engine.entity.render(s, 'NumPulses', 8, ...
-            'RandStream', RandStream('twister', 'Seed', i));
-        a(i) = max(abs(c(:)));
+%LOCALSPREADDB  Scan-to-scan std of the PLANNED amplitude, in dB.
+%
+%   REWIRED 12 Aug 2026, after target fluctuation was BUILT into the rebuilt
+%   generator (generator/physics_projection.py: swerling_rcs_factor,
+%   apply_swerling). Until then this file was Class C -- correctly skipped,
+%   because no rewire can conjure a capability that does not exist. The
+%   capability exists now, so the skip is retired and the physics is measured
+%   again.
+%
+%   WHAT CHANGED, AND WHY IT STILL MEASURES THE SAME QUANTITY. The archived
+%   version rendered a full cube per scan and took max(abs(.)) of the
+%   samples. This reads the amplitude trajectory the generator PLANS, one
+%   independent frame-level draw per scan. Both measure scan-to-scan
+%   amplitude spread; this one skips the render because rendering adds
+%   RECEIVER noise, which is a different quantity from TARGET scintillation
+%   and would bias the very statistic under test. The closed-form
+%   predictions in the header are about the target, so the target is what is
+%   measured.
+%
+%   n frames x 1 pulse: the odd cases redraw per FRAME, so one pulse per
+%   frame gives exactly n independent scan-level draws.
+    pp = py.importlib.import_module('generator.physics_projection');
+    f = double(pp.swerling_rcs_factor(int32(n), int32(1), int32(swerling), ...
+            py.numpy.random.default_rng(int32(swerling * 1000 + 7))));
+    if swerling == 0
+        sd = 0;                     % exactly ones; log of a constant has no spread
+        return
     end
-    sd = std(20*log10(a / mean(a)));
+    % Power-domain factor -> dB. A ~ sqrt(sigma), so 20*log10(A) is
+    % 10*log10(sigma): the closed forms are stated in the power domain.
+    sd = std(10*log10(f(:)));
 end

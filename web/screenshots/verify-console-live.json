@@ -15,14 +15,14 @@
     "detail": ""
   },
   {
-    "name": "AC-7 RUN produced exactly N=3 phantom rows",
+    "name": "AC-7 RUN produced exactly N=1 phantom rows",
     "pass": true,
-    "detail": "got 3 in 196.8s [flagged,flagged,flagged]"
+    "detail": "got 1 in 11.8s [confirmed]"
   },
   {
     "name": "AC-7 3D canvas rendered",
     "pass": true,
-    "detail": "1042x590"
+    "detail": "974x678"
   },
   {
     "name": "judge verdict panel populated",

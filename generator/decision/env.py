@@ -63,13 +63,71 @@ from generator.sensing import RadCharSensor, SensedRadar
 #               table already showed P_confirm=1.00 at rcs=1.0 across every
 #               radar class).
 # ---------------------------------------------------------------------------
-RANGE0_CHOICES = (1550.0, 1900.0, 2250.0, 2600.0)
-RATE_CHOICES = (-50.0, -20.0, 0.0, 20.0, 50.0)
-RCS_CHOICES = (0.05, 0.15, 0.5, 1.0)
-ACTION_GRID = list(itertools.product(RANGE0_CHOICES, RATE_CHOICES, RCS_CHOICES))
+#   mother_rdot the MOTHER PLATFORM's own radial speed, added 16 Aug 2026 and
+#               the reason this task is no longer a one-liner. Screen 2c
+#               (+track/bearingRateScreen.m) tests whether a track's bearing
+#               obeys the conservation law R^2*dtheta/dt = const that
+#               straight-line constant-velocity motion forces. A phantom
+#               inherits the MOTHER's bearing while claiming its OWN range, so
+#               it satisfies that law only when the two trajectories are
+#               PROPORTIONAL:
+#                   Rdot_mother / R_mother(0) == Rdot_phantom / R_phantom(0)
+#               The right value therefore depends on the agent's own choice of
+#               range0 and rate, and on the drawn context -- it cannot be
+#               written as a constant. Measured basin
+#               (+experiments/bearingHeadroom.m): for a phantom at 2300 m
+#               closing at -50, the score peaks at exactly the matched -19.6
+#               and fails at 0 and at every OPENING rate.
+# THE DWELL WAS LENGTHENED 8 -> 12 FRAMES, AND THAT IS A RADAR-SIDE COUNTER,
+# NOT A CONVENIENCE. At 8 frames the agent had a one-line dominant strategy:
+# close at -20 m/s, so the phantom's range moves only 140 m, under
+# bearingRateScreen's 3-range-cell resolvability guard -- 1/R is constant, the
+# screen ABSTAINS, and the bearing constraint vanishes for free. Measured:
+# both the matched route and the abstain route scored 8/8
+# (+experiments/evasionRouteCompare.m). That is the same ceiling
+# PHASE_C_RESULTS.md section 2 describes, rediscovered.
+#
+# The counter is computable rather than tuned: the dwell must be long enough
+# that the SLOWEST offered closing rate still clears the guard,
+#     |rate|*(N-1)*dt > 3*c/(2*fs) = 140.5 m,
+# which at -20 m/s and 1 Hz needs N >= 9. N = 12 gives 220 m, a comfortable
+# margin, and closes the escape for every non-zero rate in the grid. rate = 0
+# still abstains, and is still punished -- by the amplitude screen's own
+# dead-flat branch, which scores it 0.
+#
+# A LONGER DWELL TIGHTENS TWO OTHER BOUNDS, and the grid below is re-derived
+# against all three rather than carried over (each verified across all 120
+# combinations before being committed):
+#   ECLIPSE  R0 + rate*(N-1)*dt must clear the 1798.8 m blind range, so a
+#            -50 m/s action closing for 11 s needs R0 >= 2400 m.
+#   SECTOR   the platform must stay inside the +-2.8640 deg monopulse
+#            unambiguous sector for the WHOLE dwell, or its bearing WRAPS and
+#            2c measures the wrap. This is what a first attempt at 12 frames
+#            got wrong: at Rm0 = 900 m and 3 m/s the platform leaves the
+#            sector and the matched arm's score collapsed 0.966 -> 0.316.
+#            MotherTrack.within_unambiguous_sector is the check; it is why
+#            the mother ranges below start at 1400 m rather than 900 m.
+RANGE0_CHOICES = (2400.0, 2900.0, 3400.0, 3900.0)
+RATE_CHOICES = (-50.0, -35.0, -20.0, 0.0)
+RCS_CHOICES = (0.15, 1.0)
+MOTHER_RDOT_CHOICES = (20.0, 0.0, -20.0, -40.0)
+ACTION_GRID = list(itertools.product(RANGE0_CHOICES, RATE_CHOICES, RCS_CHOICES,
+                                      MOTHER_RDOT_CHOICES))
 N_ACTIONS = len(ACTION_GRID)
 
-NUM_FRAMES = 8
+# THE RADAR'S SCREEN SET, and why it is not the default three.
+# +experiments/bearingHeadroom.m measured this rather than assuming it: under
+# any mask containing 'doppler' the phantom is labelled `real` 8/8 REGARDLESS
+# of its bearing, because Physics Projection derives its Doppler from the same
+# range trajectory the delay comes from, so that screen scores 1.000 by
+# construction and outvotes everything. A radar gains nothing from running a
+# screen its adversary passes by construction. {amplitude, bearing} is the
+# informative configuration: it leaves TWO constraints the agent can actually
+# fail (a flat amplitude trajectory, and a bearing inconsistent with the
+# claimed range), measured 2/8 vs 8/8 across the two arms.
+ECCM_SCREENS = ("amplitude", "bearing")
+
+NUM_FRAMES = 12          # see the dwell derivation above the action grid
 NUM_PULSES_PER_FRAME = 32
 FRAME_INTERVAL_S = 1.0
 MIN_LATENCY_S = 1e-6   # plausible DRFM digital-delay latency, matches Gate A/B
@@ -87,8 +145,14 @@ MIN_LATENCY_S = 1e-6   # plausible DRFM digital-delay latency, matches Gate A/B
 # physics-constrained space". Kept as the DEFAULT so the run already
 # published against them stays reproducible; use the BINDING sets below
 # for an experiment that actually exercises the veto.
-MOTHER_RANGE_TRAIN = (500.0, 800.0, 1100.0)      # train on these
-MOTHER_RANGE_HELDOUT = (650.0, 950.0, 1400.0)    # DISJOINT eval set, Blueprint 5.5
+# S6: raised from (500, 800, 1100) / (650, 950, 1400). At the 12-frame dwell
+# a platform closer than ~1400 m leaves the monopulse unambiguous sector
+# partway through, and its measured bearing WRAPS -- so the old contexts
+# would have had screen 2c measuring phase wrap rather than bearing rate.
+# Verified across all 120 (range x cross x rdot) combinations with
+# MotherTrack.within_unambiguous_sector: zero violations.
+MOTHER_RANGE_TRAIN = (1400.0, 1900.0, 2400.0)    # train on these
+MOTHER_RANGE_HELDOUT = (1600.0, 2100.0, 2700.0)  # DISJOINT eval set, Blueprint 5.5
 
 # Contexts where causality genuinely BINDS: comparable to / above the
 # range0 choices (1900-3400 m), so a large, context-dependent fraction of
@@ -105,6 +169,26 @@ MOTHER_RANGE_HELDOUT = (650.0, 950.0, 1400.0)    # DISJOINT eval set, Blueprint 
 # of the mother's own range.
 MOTHER_RANGE_TRAIN_BINDING = (1800.0, 2600.0, 3200.0)
 MOTHER_RANGE_HELDOUT_BINDING = (2100.0, 2900.0, 3250.0)
+
+# The mother platform's CROSS-RANGE speed, drawn per episode. CONTEXT, NOT AN
+# ACTION, and the distinction is load-bearing: cross-range motion is what
+# gives the platform a bearing rate at all, so an agent allowed to choose it
+# would simply choose zero, and screen 2c would ABSTAIN (its own guard 1 --
+# a bearing that never moved is uninformative, not suspicious). That is the
+# "make the evidence inadmissible" hole this project already closed once for
+# the Doppler screen, and handing it back as a free action would reopen it.
+# A platform's lateral track is set by its mission, not by what would be
+# convenient for its deception; its RADIAL policy (MOTHER_RDOT_CHOICES) is
+# what it genuinely chooses.
+#
+# 0.0 is included deliberately: on those episodes the screen abstains and the
+# mother_rdot dimension does not matter, so the agent must learn WHEN the
+# constraint binds, not merely how to satisfy it.
+# Bounded above by the monopulse unambiguous sector, not by the airframe:
+# generator/platform.py's sector_dwell_s puts the ceiling near 5 m/s at 900 m
+# over an 8 s dwell.
+MOTHER_CROSS_TRAIN = (0.0, 1.5, 3.0)
+MOTHER_CROSS_HELDOUT = (0.75, 2.25, 3.0)
 
 
 @dataclass
@@ -131,19 +215,24 @@ class PhantomPlacementEnv:
 
     def __init__(self, bridge: MatlabBridge, mother_ranges: tuple = MOTHER_RANGE_TRAIN,
                  rng: Optional[np.random.Generator] = None,
-                 sensor: Optional["RadCharSensor"] = None, split: str = "train"):
+                 sensor: Optional["RadCharSensor"] = None, split: str = "train",
+                 mother_cross_speeds: tuple = MOTHER_CROSS_TRAIN):
         self.bridge = bridge
         self.mother_ranges = mother_ranges
+        self.mother_cross_speeds = mother_cross_speeds
         self.rng = rng or np.random.default_rng()
         self.sensor = sensor
         self.split = split
         self.waveform = RadarWaveformParams(frame_interval_s=FRAME_INTERVAL_S)
         self._times = frame_pulse_times(NUM_FRAMES, NUM_PULSES_PER_FRAME, FRAME_INTERVAL_S, C.PRI)
+        self._frame_times = [k * FRAME_INTERVAL_S for k in range(NUM_FRAMES)]
         self.mother_range_m: Optional[float] = None
+        self.mother_cross_mps: Optional[float] = None
         self.sensed: Optional[SensedRadar] = None
 
     def reset(self) -> np.ndarray:
         self.mother_range_m = float(self.rng.choice(self.mother_ranges))
+        self.mother_cross_mps = float(self.rng.choice(self.mother_cross_speeds))
         if self.sensor is not None:
             self.sensed = self.sensor.sample(self.rng, split=self.split)
         return self._obs()
@@ -170,6 +259,11 @@ class PhantomPlacementEnv:
             pw_est_us / 16.0,             # sensed pulse width (the blind-range driver)
             min(sigma_us, 16.0) / 16.0,   # how much to TRUST that estimate
             snr / 20.0,                   # intercept SNR
+            # The platform's own cross-range speed. Directly observable (it is
+            # the agent's OWN kinematics -- Blueprint 5.2 lists these as
+            # needing no sensing), and it decides whether screen 2c binds at
+            # all: at zero the bearing never moves and the screen abstains.
+            self.mother_cross_mps / 5.0,
         ], dtype=np.float32)
 
     def context(self):
@@ -181,10 +275,31 @@ class PhantomPlacementEnv:
                   else C.pulse_width)
         sigma = self.sensed.pulse_width_sigma_s if self.sensed is not None else 0.0
         return Context(mother_range_m=self.mother_range_m, pulse_width_est_s=pw_est,
-                        pulse_width_sigma_s=sigma)
+                        pulse_width_sigma_s=sigma,
+                        # Must match _obs element 4, or the baselines are being
+                        # compared on strictly less information than the agent
+                        # -- which would make any D3QN win meaningless. This
+                        # line was missing on the first wiring and the
+                        # heuristic silently chose its platform speed at
+                        # random; caught by a live 8-episode check, not by
+                        # reading the code.
+                        mother_cross_mps=self.mother_cross_mps)
+
+    def mother_track(self, mother_rdot_mps: float) -> "MotherTrack":
+        """This episode's platform: drawn cross-range speed (context), chosen
+        radial speed (action). generator/platform.py owns the geometry."""
+        from generator.platform import MotherTrack
+        return MotherTrack.crossing(
+            self.mother_range_m,
+            cross_speed_mps=self.mother_cross_mps,
+            # MotherTrack.crossing takes POSITIVE closing; the action grid is
+            # signed range-rate (negative = closing), matching the phantom's.
+            closing_speed_mps=-float(mother_rdot_mps),
+        )
 
     def step(self, action_idx: int) -> StepResult:
-        range0_m, range_rate_mps, rcs_m2 = ACTION_GRID[action_idx]
+        range0_m, range_rate_mps, rcs_m2, mother_rdot = ACTION_GRID[action_idx]
+        mother = self.mother_track(mother_rdot)
 
         # The eclipse veto is evaluated against the radar's TRUE pulse width
         # -- physics does not care what the interceptor believes. The agent
@@ -194,10 +309,14 @@ class PhantomPlacementEnv:
         # would quietly hand the agent perfect knowledge.
         pw_true = self.sensed.pulse_width_true_s if self.sensed is not None else None
 
+        # Causality against the platform's range AT EVERY SAMPLE. With a
+        # moving platform this varies WITHIN the engagement, so an action can
+        # be legal at t=0 and illegal by the last frame -- which is what makes
+        # the mother_rdot choice cost something rather than being free.
         plan = project_action(
             range0_m=range0_m, range_rate_mps=range_rate_mps, times_s=self._times,
-            mother_range_m=self.mother_range_m, min_latency_s=MIN_LATENCY_S, rcs_m2=rcs_m2,
-            pulse_width_s=pw_true, prf_hz=C.PRF,
+            mother_range_m=mother.range_m(self._times), min_latency_s=MIN_LATENCY_S,
+            rcs_m2=rcs_m2, pulse_width_s=pw_true, prf_hz=C.PRF,
         )
         if not plan.feasible:
             # Physics disposes: never reaches the judge, never costs a
@@ -214,8 +333,13 @@ class PhantomPlacementEnv:
             [PhantomExport(plan=plan, rcs_m2=rcs_m2)], self.waveform, pre_mat,
             num_pulses_per_frame=NUM_PULSES_PER_FRAME,
         )
-        judge_mat = self.bridge.render(pre_mat, IncludeAngleChannel=True)
-        fb = self.bridge.run_judge(judge_mat)
+        # The bearing every phantom is radiated on, one value per FRAME: the
+        # platform's own azimuth trajectory. This is the whole coupling --
+        # the agent cannot choose it, it follows from where its platform is.
+        judge_mat = self.bridge.render(
+            pre_mat, IncludeAngleChannel=True,
+            SourceAzimuthRad=[float(a) for a in mother.azimuth_rad(self._frame_times)])
+        fb = self.bridge.run_judge(judge_mat, EccmScreens=list(ECCM_SCREENS))
 
         success = fb["confirmed_tracks"] >= 1 and fb["eccm_label"] == "real"
         outcome = "confirmed_real" if success else "not_confirmed_or_flagged"

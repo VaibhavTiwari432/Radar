@@ -26,7 +26,12 @@ classdef test_judge_measured_doppler < matlab.unittest.TestCase
         N_FRAMES = 8;
         N_PULSES = 32;
         N_FAST   = 400;
-        R0_M     = 1800;
+        % Derived, not picked: the blind range (1798.75 m at PW=12 us) plus
+        % the 320 m a 40 m/s target covers in 8 frames, plus one range cell
+        % (46.84 m) of margin => 2166 m. 2400 m gives headroom without
+        % approaching R_ua (18737 m). Was 1800 m, which the eclipse veto
+        % correctly refuses -- see buildConsistent.
+        R0_M     = 2400;
     end
 
     methods (TestClassSetup)
@@ -141,24 +146,36 @@ classdef test_judge_measured_doppler < matlab.unittest.TestCase
         end
 
         function cube = buildConsistent(tc, v)
-        %BUILDCONSISTENT  A genuine entity through the VEE's single-source
-        %   renderer: range and Doppler cannot disagree, because both come
-        %   from the same propagated state. swerling 0 -- Swerling 1's
-        %   scan-to-scan fluctuation swamps the amplitude-range slope over
-        %   only 8 frames (measured: fitted slope -0.8 instead of -2), which
-        %   is a property of Swerling, not of the screen under test here.
-            rs = RandStream('twister', 'Seed', 4);
-            q = struct('sigma_accel_mps2', 0.05*9.80665, 'rcs_process_std_db', 0.233);
-            s = engine.entity.EntityState('range_m', tc.R0_M, 'range_rate_mps', v, ...
-                    'class', 'fighter', 'rcs_dbsm', 0, 'swerling', 0);
-            cube = complex(zeros(tc.N_FAST, tc.N_PULSES, tc.N_FRAMES));
-            for k = 1:tc.N_FRAMES
-                c = engine.entity.render(s, 'NumPulses', tc.N_PULSES, ...
-                        'FastTimeSamples', tc.N_FAST, 'CarrierHz', tc.CARRIER, ...
-                        'PrfHz', tc.PRF_HZ, 'RandStream', rs);
-                cube(:, :, k) = c + tc.noise(rs);
-                s = engine.entity.propagate(s, 1.0, q, rs);
-            end
+        %BUILDCONSISTENT  A genuine phantom whose range and Doppler cannot
+        %   disagree, because physics_projection derives the phase FROM the
+        %   range trajectory (phase_progression_rad) -- the rebuilt
+        %   generator's version of the archived VEE's single-source property,
+        %   and the same reason it cannot express the buildInconsistent
+        %   object below.
+        %
+        %   REWIRED 12 Aug 2026 from engine.entity.render (archived 7 Aug) to
+        %   generator.render via tests/renderPhantomScene.m. Two deliberate
+        %   differences from the archived version, neither of which touches
+        %   what this file asserts:
+        %
+        %   1. R0 moved 1800 -> R0_M below. 1800 m clears the 1798.75 m blind
+        %      range by 1.25 m at t=0 and is 280 m INSIDE it by the last
+        %      frame at 40 m/s, so the eclipse veto (which generator.render's
+        %      path actually evaluates, and engine.entity.render never did)
+        %      refuses it outright. Nothing here measures R0; it measures a
+        %      range RATE against its own velocity bin.
+        %   2. No Swerling. generator.render has none, and this test wanted
+        %      swerling 0 anyway -- the archived note below explains why, and
+        %      it still applies:
+        %        "Swerling 1's scan-to-scan fluctuation swamps the
+        %         amplitude-range slope over only 8 frames (measured: fitted
+        %         slope -0.8 instead of -2), which is a property of Swerling,
+        %         not of the screen under test here."
+            [judgeMat, ~] = renderPhantomScene(tc.R0_M, v, ...
+                'NumFrames', tc.N_FRAMES, 'NumPulses', tc.N_PULSES, ...
+                'Tag', sprintf('doppler_v%+d', v));
+            S = load(judgeMat, 'rx_frames');
+            cube = S.rx_frames;
         end
 
         function cube = buildInconsistent(tc, vRange, vDoppler)
