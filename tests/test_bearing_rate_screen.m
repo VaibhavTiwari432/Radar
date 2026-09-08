@@ -96,8 +96,33 @@ classdef test_bearing_rate_screen < matlab.unittest.TestCase
             az = linspace(0, 0.04, numel(tc.T))';
             [s, d] = track.bearingRateScreen(az, R, tc.T);
             tc.verifyTrue(isnan(s));
-            tc.verifyEqual(char(d.skipReason), ...
-                'range barely changed: 1/R is constant, model G degenerate');
+            % Substring, not the whole sentence: the reason now names the
+            % threshold it applied, because as of 9 Sep 2026 that threshold
+            % depends on the SIGNAL's range cell and "barely changed" is not
+            % checkable by a reader who does not know which radar was meant.
+            tc.verifySubstring(char(d.skipReason), 'range barely changed');
+            tc.verifySubstring(char(d.skipReason), '3 range cells');
+        end
+
+        function test_guard_2_uses_the_signals_own_range_cell(tc)
+            % The guard is "3 range cells", and a cell is c/(2*fs) of the
+            % signal that produced rangeM. +engine/runJudge.m judges .mat files
+            % at whatever fs they carry, so the cell size is an argument, not a
+            % constant: a span that clears 3 cells at this project's 3.2 MHz
+            % (140.5 m) does NOT clear them at the 1 MHz bench (449.7 m).
+            benchCellM = 149.8962290;                  % c/(2*1e6)
+            R  = tc.R0 + linspace(0, 200, numel(tc.T))';   % 200 m span
+            az = linspace(0, 0.04, numel(tc.T))';
+
+            [sSim, dSim] = track.bearingRateScreen(az, R, tc.T);
+            tc.verifyFalse(isnan(sSim), ...
+                '200 m clears 3 cells at 3.2 MHz and must be scored');
+            tc.verifyEqual(char(dSim.skipReason), '');
+
+            [sBench, dBench] = track.bearingRateScreen(az, R, tc.T, benchCellM);
+            tc.verifyTrue(isnan(sBench), ...
+                '200 m is under 3 cells at 1 MHz and must be skipped');
+            tc.verifySubstring(char(dBench.skipReason), '449.7');
         end
 
         function test_a_short_track_is_skipped(tc)

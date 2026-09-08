@@ -1,10 +1,28 @@
-function [score, diag] = bearingRateScreen(azRad, rangeM, timeS)
+function [score, diag] = bearingRateScreen(azRad, rangeM, timeS, rangeCellM)
 %BEARINGRATESCREEN  Is this track's BEARING consistent with its own RANGE?
 %   The first screen in this project that can condemn a SINGLE phantom.
 %
 %   score : [0,1], > 0.5 leans genuine, NaN = uninformative (screen skipped)
 %   diag  : struct of the quantities the score was computed from, so a caller
 %           can report WHY rather than only WHAT
+%
+%   rangeCellM : (optional) one fast-time sample of two-way range, c/(2*fs),
+%           for THE SIGNAL rangeM was measured from. Guard 2 below is stated
+%           in range cells, so it needs the cell size of the instrument that
+%           produced the track -- not of whichever radar physics.Constants()
+%           happens to describe. Omit it and you get physics.Constants()'s
+%           46.84 m, which is correct for every caller written before
+%           9 September 2026 because they all judged 3.2 MHz signals.
+%
+%           WHY THIS IS AN ARGUMENT NOW. +engine/runJudge.m builds rangeM from
+%           the fs carried in the .mat it is judging, so at the 1 MHz hardware
+%           bench a range cell is 149.90 m, not 46.84 m -- a factor of 3.2.
+%           Comparing one instrument's range span against another instrument's
+%           cell size is how a guard silently stops guarding: at the bench the
+%           old constant made this guard 140.5 m when it should have been
+%           449.7 m, so tracks that had NOT resolvably moved would have been
+%           scored instead of skipped. Same fix as +track/discriminator.m's
+%           screen 1 lever guard, same reason.
 %
 %   THE HOLE THIS CLOSES. Every existing screen is either per-track and
 %   forgeable (range, Doppler and amplitude can each be synthesised
@@ -99,9 +117,19 @@ function [score, diag] = bearingRateScreen(azRad, rangeM, timeS)
     % Guard 2 first: it is a property of the geometry alone, so it can be
     % decided before any fitting. Threshold is the instrument's own
     % resolution -- 3 range cells, not a tuned number.
-    C = physics.Constants();
-    if diag.rangeSpanM < 3 * C.range_per_sample
-        diag.skipReason = "range barely changed: 1/R is constant, model G degenerate";
+    if nargin < 4 || isempty(rangeCellM) || ~isfinite(rangeCellM) || rangeCellM <= 0
+        C = physics.Constants();
+        rangeCellM = C.range_per_sample;
+    else
+        rangeCellM = double(rangeCellM);
+    end
+    if diag.rangeSpanM < 3 * rangeCellM
+        % The threshold goes into the reason: "barely changed" is not checkable
+        % by a reader who does not know which radar's cells were meant.
+        diag.skipReason = string(sprintf( ...
+            ['range barely changed: span %.1f m is under 3 range cells ' ...
+             '(%.1f m), so 1/R is constant and model G degenerates'], ...
+            diag.rangeSpanM, 3 * rangeCellM));
         return
     end
 

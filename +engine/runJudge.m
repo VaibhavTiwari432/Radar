@@ -117,6 +117,39 @@ function feedback = runJudge(matFile, varargin)
     S = load(matFile);
     rxFrames = S.rx_frames;
 
+    % ================= THE RANGE AXIS IS THE SIGNAL'S, NOT THE PROJECT'S ====
+    % One fast-time sample is c/(2*fs) of two-way range, and fs is a property
+    % of THE SIGNAL BEING JUDGED -- it arrives in the .mat, and line ~200
+    % already uses S.fs to rebuild the matched filter's own waveform. Until
+    % 9 Sep 2026 the three places below instead used C.range_per_sample, i.e.
+    % physics.Constants()'s 3.2 MHz, no matter what fs the .mat carried.
+    %
+    % IDENTICAL FOR EVERY RESULT THIS PROJECT HAS PUBLISHED: C.range_per_sample
+    % IS c/(2*C.fs), and every existing exporter writes fs = C.fs = 3.2 MHz, so
+    % this derives the same 46.84 m it always did. tests/test_sim_units.m and
+    % the whole suite are unchanged by it.
+    %
+    % IT MATTERS FOR STAGE F, which judges a 1 MHz bench signal whose real bin
+    % is 149.9 m. With the old constant every range this function reported was
+    % compressed by 3.2x. That was SELF-CONSISTENT -- the ranges, the
+    % MeasurementNoise and the Cartesian covariance all shared the error, so
+    % the tracker and the log-log amplitude SLOPE were unaffected -- which is
+    % exactly why it survived unnoticed. What it broke is anything quoted in
+    % metres: a caller passing AssignmentThreshold in real metres was silently
+    % handing the tracker a 3.2x wider gate, and +track/discriminator.m's
+    % 3-range-cell lever guard was measured in the wrong instrument's cells.
+    if isfield(S, 'fs') && isfinite(S.fs) && S.fs > 0
+        rangePerSample = C.c / (2 * double(S.fs));
+    else
+        % A .mat with no fs at all: fall back to the project radar and say so,
+        % rather than silently assuming the caller meant 3.2 MHz.
+        rangePerSample = C.range_per_sample;
+        warning('engine:runJudge:noSampleRate', ...
+            ['%s carries no fs; range axis falls back to physics.Constants() ' ...
+             '(%.2f m/sample). Any range this run reports is in the project ' ...
+             'radar''s metres.'], matFile, rangePerSample);
+    end
+
     % Pulse cube [fastTime x numPulses x numFrames] vs legacy [fastTime x
     % numFrames]. See "DOPPLER IS NOW MEASURED" in the header.
     isCube = (ndims(rxFrames) == 3);
@@ -306,7 +339,21 @@ function feedback = runJudge(matFile, varargin)
             continue;
         end
 
-        peakRange{k} = (peakBins - 1) * C.range_per_sample;
+        % Range: integer bin, or refined to sub-bin if the caller asked. The
+        % AMPLITUDE deliberately stays the peak CELL's value even when the
+        % range is refined -- interpolating it too would change what the
+        % amplitude screen fits, which is a separate decision from being able
+        % to see a target move, and bundling them would make neither
+        % attributable.
+        if opts.SubBinInterp
+            refinedBins = zeros(numel(peakBins), 1);
+            for iPk = 1:numel(peakBins)
+                refinedBins(iPk) = radar.subBinPeak(power, peakBins(iPk));
+            end
+            peakRange{k} = (refinedBins - 1) * rangePerSample;
+        else
+            peakRange{k} = (peakBins - 1) * rangePerSample;
+        end
         peakAmp{k}   = sqrt(power(peakBins));
         if isCube
             % f_d = -2*Rdot/lambda  =>  Rdot = -lambda*f_d/2. Negative =
@@ -382,7 +429,8 @@ function feedback = runJudge(matFile, varargin)
         end
 
         % MeasurementNoise reflects the REAL range-bin quantization error
-        % (~C.range_per_sample, ~46.8 m std), not eye(3)'s claimed 1 m std.
+        % (~rangePerSample, ~46.8 m std at this project's own fs), not
+        % eye(3)'s claimed 1 m std.
         % That mismatch was a real bug (Task 2, PHASE2_COMPLETION_POA.md):
         % telling the tracker its measurements are ~47x more precise than
         % they actually are makes trackerGNN's gates falsely tight, so two
@@ -397,7 +445,7 @@ function feedback = runJudge(matFile, varargin)
         % cogengine/fixtures/runJudgeBatch*.m historical scripts) build
         % their OWN objectDetection with their OWN MeasurementNoise and are
         % untouched -- this fix is local to this function's own detections.
-        measNoise = diag([C.range_per_sample^2, 1, 1]);
+        measNoise = diag([rangePerSample^2, 1, 1]);
         detArr = objectDetection.empty;
         for j = 1:numel(peakBins)
             if useCartesian
@@ -425,7 +473,7 @@ function feedback = runJudge(matFile, varargin)
                 if ~isfinite(azj); azj = 0; end
                 if ~isfinite(elj); elj = 0; end
                 [pos, Rcov] = localSphericalToCartesian(Rj, azj, elj, ...
-                                  C.range_per_sample, sAz, sEl);
+                                  rangePerSample, sAz, sEl);
                 detArr(j) = objectDetection(times(k), pos, ...
                                 'MeasurementNoise', Rcov);
             else
@@ -610,7 +658,13 @@ function feedback = runJudge(matFile, varargin)
             % inadmissible -- see track/discriminator.m's "MISSING vs
             % ABSENT" block.
             ts = struct('range', rSeq, 'amplitude', aSeq, 'doppler', dSeq, ...
-                        'dopplerMeasured', isCube);
+                        'dopplerMeasured', isCube, ...
+                        'rangeResolutionM', rangePerSample);
+            % rangeResolutionM travels WITH the range series, and must: rSeq is
+            % now in the judged signal's own metres (see the range-axis note at
+            % the top), so a screen comparing it against physics.Constants()'s
+            % 46.84 m would be mixing two instruments' units. Screen 1's lever
+            % guard is the consumer.
             % MEASURED per-hit azimuth and the times it was measured at, for
             % screen 2c (bearing/range kinematic consistency). Set only when
             % the angle channel actually produced finite azimuths: on a
@@ -620,11 +674,33 @@ function feedback = runJudge(matFile, varargin)
             % spacing -- a coasted frame leaves a genuine gap, and closing it
             % would fabricate a bearing rate across a dwell the radar never
             % held the track.
+            % tSeq is set UNCONDITIONALLY. It used to be attached only
+            % alongside a finite azimuth, because screen 2c was the only
+            % consumer -- but screen 2d (range-rate magnitude) needs the time
+            % base and has nothing to do with the angle channel, and a
+            % sum-channel-only export would otherwise silently disable it.
+            % Attaching time does NOT enable the bearing screen: that one
+            % guards on isfield(trackStruct,'azimuth') separately.
+            ts.time = tSeq;
             azSeq = azByID(id);
             if any(isfinite(azSeq))
                 ts.azimuth = azSeq;
-                ts.time    = tSeq;
             end
+            % The radar this track was measured by, so screen 2d sizes its
+            % Doppler bin from the ACTUAL carrier and PRF rather than
+            % rangeRateConsistency's 10 GHz / C.PRF fallbacks. Each is guarded
+            % on presence: prf_hz and carrier_hz are only guaranteed on the
+            % cube path, and a legacy 2-D export must not be made to error by
+            % a screen that is off by default and cannot fire on it anyway
+            % (screen 2d needs dopplerMeasured, which is false there).
+            ts.numPulses = numPulses;
+            if isfield(S, 'carrier_hz') && ~isempty(S.carrier_hz)
+                ts.carrierHz = double(S.carrier_hz);
+            end
+            if isfield(S, 'prf_hz') && ~isempty(S.prf_hz)
+                ts.prfHz = double(S.prf_hz);
+            end
+            ts.rangeSigmaM = opts.RangeSigmaM;
             % MICRO-DOPPLER evidence. Two gates, both of which must be open
             % before discriminator.m is allowed to score it:
             %   microResolvable  -- this dwell could physically see a comb
@@ -799,7 +875,8 @@ function feedback = runJudge(matFile, varargin)
                 rrOut = track.rangeRateConsistency(trackRange{i}, trackTime{i}, ...
                             trackRate{i}, C, 'NumPulses', numPulses, ...
                             'CarrierHz', double(S.carrier_hz), 'PrfHz', double(S.prf_hz), ...
-                            'Sigmas', opts.RangeRateSigmas);
+                            'Sigmas', opts.RangeRateSigmas, ...
+                            'RangeSigmaM', opts.RangeSigmaM);
                 rrMismatch(i)  = rrOut.mismatchMps;
                 rrThreshold(i) = rrOut.thresholdMps;
                 rrPass(i)      = rrOut.pass;
@@ -1053,6 +1130,45 @@ function opts = localParseJudgeConfig(args)
     % tolerance itself is DERIVED from the two quantisers (see
     % track.rangeRateConsistency); this is only how many sigmas of it to allow.
     p.addParameter('RangeRateSigmas',       3);
+    % ---- Sub-bin peak interpolation (21 Aug 2026) --------------------------
+    % false = report the integer CFAR peak bin, which is what every published
+    % number in this repo was measured with. true = refine it with
+    % radar.subBinPeak, so a track's range can move by less than one 46.84 m
+    % cell.
+    %
+    % DEFAULTS TO false, same posture as MeasurementSpace above and for the
+    % same reason: range is the quantity the tracker gates on, the
+    % discriminator fits and rangeRateConsistency differences, so switching it
+    % on moves association, confirmation and every screen at once. Opt in per
+    % caller.
+    %
+    % AND ON THIS RADAR IT CURRENTLY BUYS NOTHING, which is the reason this is
+    % a flag rather than simply the new behaviour. C.bandwidth = 2 MHz against
+    % C.fs = 3.2 MHz aliases the transmit waveform -- MEASURED, 18.2% of the
+    % chirp's energy folds past +-fs/2 -- so the compressed mainlobe is
+    % corrupted and interpolating it returns 0.267 bins rms against the raw
+    % bin's 0.266. At the bench's clean 6.4/2 = 3.20 the same estimator
+    % reaches 0.0036 bins, a 74x improvement. Switch this on for a bench
+    % campaign; switching it on here fixes nothing until C.fs > 2*C.bandwidth.
+    % Numbers and cross-checks: radar.subBinPeak, tests/test_sub_bin_interp.m.
+    p.addParameter('SubBinInterp', false, @(x) isscalar(x) && islogical(x));
+    % The per-endpoint range accuracy, in metres, that track.rangeRateConsistency
+    % should size its gate from. [] = let it use its own uniform-quantiser
+    % derivation, delta/sqrt(12), which is correct WHEN AND ONLY WHEN
+    % SubBinInterp is false.
+    %
+    % This is a separate knob from SubBinInterp on purpose. The judge must not
+    % GUESS its own range accuracy: with interpolation on, accuracy depends on
+    % the oversampling ratio and the detection SNR, neither of which runJudge
+    % measures, and a self-assessed sigma would let the gate quietly re-size
+    % itself scene by scene. Whoever characterised the instrument states the
+    % number; tests/test_sub_bin_interp.m is where this one was characterised.
+    %
+    % Turning SubBinInterp on and leaving this empty is not an error, but it
+    % leaves the gate sized for a coarser range than the one being measured --
+    % i.e. LOOSE by ~23% at this simulation's fs/B. Stated so the combination
+    % is a choice rather than an oversight.
+    p.addParameter('RangeSigmaM', [], @(x) isempty(x) || (isscalar(x) && x > 0));
     % S3 -- what the tracker is handed as a measurement.
     %   'range'      [R; 0; 0] with diag([dR^2, 1, 1]) -- the historical
     %                shape, and a lie the tracker was never told about: the

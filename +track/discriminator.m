@@ -1,4 +1,4 @@
-function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
+function [label, confidence, diag] = discriminator(trackStruct, C)
 %DISCRIMINATOR  ECCM screen: is a confirmed track's signature physically
 %               real, or a naive DRFM repeater? (POA Part 4 Stage 5, C7)
 %
@@ -12,6 +12,20 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
 %
 %       label      : "real" | "decoy"
 %       confidence : 0..1
+%       diag       : (optional 3rd output) struct recording which screens
+%                    actually scored and why any of them abstained:
+%                      .numScores            how many screens were informative
+%                      .amplitudeSkipReason  "" if screen 1 scored, else why
+%                                            it could not (see its guards)
+%                    Two-output callers are unaffected.
+%
+%   AN ABSTAINING SCREEN IS NOT A PASS. With no informative screen at all the
+%   score is 0.5 and the label is "decoy" (see the end of this function). But
+%   an abstain does REMOVE that screen from the average, so a track that
+%   suppresses one screen while passing another is scored on the rest -- which
+%   is why every abstain has to be justified where it is written, and why
+%   `diag` exists: a caller reporting a deception rate needs to be able to say
+%   which screens were actually brought to bear.
 %
 %   trackStruct MAY also carry:
 %           .dopplerMeasured  logical. TRUE means .doppler is a real
@@ -90,10 +104,10 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     if isfield(trackStruct, 'screensEnabled')
         enabled = cellstr(trackStruct.screensEnabled);
     else
-        % 'residual', 'maneuver' and 'bearing' are DELIBERATELY NOT in this
-        % default -- see each screen's own block below for why. Opt in with
-        % screensEnabled = {'amplitude','doppler','micro','residual',...
-        %                   'maneuver','bearing'}.
+        % 'residual', 'maneuver', 'bearing' and 'rangerate' are DELIBERATELY
+        % NOT in this default -- see each screen's own block below for why.
+        % Opt in with screensEnabled = {'amplitude','doppler','micro',
+        %                   'residual','maneuver','bearing','rangerate'}.
         enabled = {'amplitude', 'doppler', 'micro'};
     end
     useAmplitude = any(strcmpi(enabled, 'amplitude'));
@@ -101,17 +115,101 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     useResidual  = any(strcmpi(enabled, 'residual'));
     useManeuver  = any(strcmpi(enabled, 'maneuver'));
     useBearing   = any(strcmpi(enabled, 'bearing'));
+    useRangeRate = any(strcmpi(enabled, 'rangerate'));
 
     scores = [];
+    amplitudeSkipReason = "";   % non-empty when screen 1 abstained; see diag output
+
+    % ONE fast-time sample of two-way range, for the signal .range was measured
+    % from. Two screens need it (screen 1's lever guard and screen 2c's), so it
+    % is resolved ONCE here rather than inside either -- putting it inside the
+    % amplitude block left it undefined whenever an ablation mask turned that
+    % screen off, which is a crash, not a fallback. +engine/runJudge.m supplies
+    % it; callers predating 9 Sep 2026 get physics.Constants(), correct for them
+    % because they all judged this project's own 3.2 MHz radar.
+    if isfield(trackStruct, 'rangeResolutionM') && ...
+            isfinite(trackStruct.rangeResolutionM) && trackStruct.rangeResolutionM > 0
+        rangeCellM = double(trackStruct.rangeResolutionM);
+    else
+        rangeCellM = C.range_per_sample;
+    end
 
     % ---- 1. amplitude-range consistency ----
+    % TWO ABSTAIN GUARDS, added 8 September 2026. Read the block above them
+    % before touching either -- they are the "MISSING vs ABSENT" doctrine
+    % applied to screen 1, which had no version of it.
+    %
+    % WHAT WAS WRONG. The old guard was `range(R) > 1e-9` -- a range change of
+    % one NANOMETRE was enough to make this screen fit a slope and commit to a
+    % verdict. Over a short lever arm the fit is dominated by amplitude noise,
+    % so the screen returned a meaningless slope, scored near 0, and CONDEMNED
+    % targets whose amplitude was 1/R^2 by construction -- while believing it
+    % had looked. MEASURED (STAGE_F_PHASE0p5_RESULTS.md 3.5): on a bench-config
+    % walk this screen returned `decoy` for the physically honest phantom AND
+    % for a constant-amplitude decoy, at both walk directions -- it could not
+    % separate them at all, yet its near-zero score still dragged the composite
+    % mean and handed the verdict to whichever other screen tipped it.
+    % This project has seen the same thing once before and recorded it without
+    % acting on it: the AUC 0.50 cell in the Stage F plan's 2.5 is this screen
+    % scoring a coin flip rather than abstaining.
+    %
+    % WHY ABSTAINING IS SAFE HERE, given the doctrine above says suppressing
+    % evidence must not be rewarded. Screen 2's hole was real because a target
+    % could decline to produce Doppler while still walking its range -- the
+    % attack proceeded, the evidence did not. Guard A below cannot be abused
+    % that way: it fires only when the range stays inside 3 range cells, and a
+    % target that is not moving in range is not executing RGPO or VGPO, which
+    % are the only attacks this screen exists to catch. The dead-flat branch
+    % still catches the static decoy underneath it, so nothing that used to be
+    % condemned by absence of scintillation escapes.
+    % Guard B is weaker on that point and it is stated rather than hidden: a
+    % target COULD inflate its own amplitude residual to force an abstain. It
+    % gains little -- deliberate amplitude jitter is what the opt-in residual
+    % screen (+track/amplitudeResidualScreen.m) and the flat/scintillation
+    % logic are looking at -- but it is not impossible, and if this screen ever
+    % becomes load-bearing against a fitted adversary, Guard B should report
+    % UNSCREENED upward rather than silently shrink the average.
     if useAmplitude
-    if range(R) > 1e-9                          % range actually varies
-        p = polyfit(log(R), log(A), 1);
-        slope = p(1);
-        scores(end+1) = max(0, 1 - abs(slope + 2) / 2); %#ok<AGROW>
-    elseif range(A) < 1e-12                     % range AND amplitude both dead flat
-        scores(end+1) = 0;                       %#ok<AGROW>  % no natural scintillation -> suspicious
+    rangeSpanM = range(R);
+    % Guard A (geometry, decidable before any fitting). Threshold is the
+    % instrument's own resolution -- 3 range cells, NOT a tuned number, and the
+    % same bar +track/bearingRateScreen.m already uses for the same question.
+    %
+    % THE CELL SIZE MUST BE THE JUDGED SIGNAL'S, not the project's. .range is
+    % built by +engine/runJudge.m from the fs carried in the .mat, so a signal
+    % at a different sample rate arrives here with a different metre per bin --
+    % 149.90 m at the 1 MHz bench against 46.84 m at this project's 3.2 MHz,
+    % a factor of 3.2. Comparing one instrument's range span against another
+    % instrument's cell size is how a guard silently stops guarding. Callers
+    % that do not supply .rangeResolutionM get physics.Constants(), which is
+    % correct for every caller this project had before 9 Sep 2026.
+    rangeResolvable = rangeSpanM >= 3 * rangeCellM;
+    if ~rangeResolvable && range(A) < 1e-12
+        % Range did not measurably change AND amplitude is dead flat: no
+        % natural scintillation, the original giveaway. Unchanged behaviour.
+        scores(end+1) = 0;                       %#ok<AGROW>
+    elseif ~rangeResolvable
+        % Guard A fires: to this radar the target did not move, so there is no
+        % log(R) lever to fit against. Genuinely uninformative, not a failure.
+        amplitudeSkipReason = string(sprintf( ...
+            'range span %.1f m is under 3 range cells (%.1f m)', ...
+            rangeSpanM, 3 * rangeCellM));
+    else
+        [slope, seSlope] = localLogLogSlope(R, A);
+        % Guard B (statistical). The score below spans its full range as
+        % |slope+2| goes 0 -> 2, so a standard error of 1 means +-2 sigma
+        % covers the ENTIRE scoring band: the fit cannot place the slope
+        % inside its own dynamic range and any score it returns is a draw from
+        % noise. Derived from the score function, not tuned. numel < 3 gives
+        % seSlope = Inf: two points fit a line exactly and leave no residual,
+        % so there is no uncertainty estimate to test.
+        if seSlope < 1
+            scores(end+1) = max(0, 1 - abs(slope + 2) / 2); %#ok<AGROW>
+        else
+            amplitudeSkipReason = string(sprintf( ...
+                'slope %.2f has standard error %.2f: not estimable', ...
+                slope, seSlope));
+        end
     end
     end
 
@@ -158,7 +256,8 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     % reported as a reading.
     if useBearing && isfield(trackStruct, 'azimuth') && ...
             isfield(trackStruct, 'time') && ~isempty(trackStruct.azimuth)
-        bScore = track.bearingRateScreen(trackStruct.azimuth, R, trackStruct.time);
+        bScore = track.bearingRateScreen(trackStruct.azimuth, R, ...
+                                          trackStruct.time, rangeCellM);
         if ~isnan(bScore)
             scores(end+1) = bScore; %#ok<AGROW>
         end
@@ -443,6 +542,44 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
         end
     end
 
+    % ---- 2d. Range-rate MAGNITUDE (the RGPO/VGPO gate) ----
+    % Screen 2 above tests only the SIGN of the range walk against the sign of
+    % the Doppler. +track/rangeRateConsistency.m's header names the hole that
+    % leaves: "a repeater that walks its false range at -50 m/s while
+    % transmitting only -5 m/s of Doppler passes that screen outright -- both
+    % quantities are negative." This is the magnitude test that closes it, and
+    % it has existed since Tier 1.2 as a REPORTED COLUMN in
+    % +engine/runJudge.m, deliberately kept off the verdict until its effect
+    % in isolation had been measured.
+    %
+    % A VETO, NOT A VOTE, and that is the whole reason it can be added at all.
+    % DECEPTION_MAP_RESULTS.md section 6 is the cautionary case: screen 2c
+    % measured a 0.968-vs-0.068 separation between a genuine target and a
+    % phantom, and mean(scores) > 0.5 threw it away, because two passing
+    % screens average a failing one back to `real`. F5 records the same
+    % mechanism twice more. A veto cannot be diluted, so this screen can add
+    % capability without subtracting any -- the identical argument the micro
+    % and residual blocks above make for themselves.
+    %
+    % OFF BY DEFAULT, like every screen that postdates the published numbers.
+    % Opt in with screensEnabled = {..., 'rangerate'}.
+    %
+    % GUARDED ON MEASURED EVIDENCE, not merely on presence. Without
+    % dopplerMeasured the Doppler series is the legacy 2-D export's all-zero
+    % placeholder, and vetoing a track for disagreeing with a number nobody
+    % measured is exactly the "absent vs missing evidence" error this file
+    % argues against at length for screen 2.
+    rangeRateVeto = false;
+    if useRangeRate && dopplerMeasured && isfield(trackStruct, 'time')
+        rrArgs = {};
+        if isfield(trackStruct, 'numPulses'); rrArgs = [rrArgs, {'NumPulses', trackStruct.numPulses}]; end
+        if isfield(trackStruct, 'carrierHz'); rrArgs = [rrArgs, {'CarrierHz', trackStruct.carrierHz}]; end
+        if isfield(trackStruct, 'prfHz');     rrArgs = [rrArgs, {'PrfHz',     trackStruct.prfHz}];     end
+        if isfield(trackStruct, 'rangeSigmaM'); rrArgs = [rrArgs, {'RangeSigmaM', trackStruct.rangeSigmaM}]; end
+        rr = track.rangeRateConsistency(R, trackStruct.time, D, C, rrArgs{:});
+        rangeRateVeto = rr.informative && ~rr.pass;
+    end
+
     if isempty(scores)
         score = 0.5;                            % nothing informative either way
     else
@@ -450,7 +587,7 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
     end
 
     % Vetoes apply AFTER the average, so they cannot be diluted by it.
-    if microVeto || residualVeto || maneuverVeto
+    if microVeto || residualVeto || maneuverVeto || rangeRateVeto
         score = 0;
     end
 
@@ -460,4 +597,33 @@ function [label, confidence] = discriminator(trackStruct, C) %#ok<INUSD>
         label = "decoy";
     end
     confidence = abs(score - 0.5) * 2;
+
+    if nargout > 2
+        diag = struct('numScores', numel(scores), ...
+                      'amplitudeSkipReason', amplitudeSkipReason);
+    end
+end
+
+
+function [slope, seSlope] = localLogLogSlope(R, A)
+%LOCALLOGLOGSLOPE  Least-squares slope of log(A) vs log(R), with its standard
+%   error. The standard error is the whole point: a slope on its own cannot
+%   say whether it measured anything, and screen 1 committed to verdicts for
+%   years on slopes it had no business trusting.
+%
+%   se(slope) = sqrt( SSR/(n-2) / Sxx ), the textbook OLS result. Returns Inf
+%   when n < 3 (a line through two points has zero residual and therefore no
+%   estimable error) or when Sxx is 0 (no lever arm at all).
+    x = log(double(R(:)));
+    y = log(double(A(:)));
+    n = numel(x);
+    p = polyfit(x, y, 1);
+    slope = p(1);
+    sxx = sum((x - mean(x)).^2);
+    if n < 3 || sxx <= 0
+        seSlope = Inf;
+        return
+    end
+    resid = y - polyval(p, x);
+    seSlope = sqrt(sum(resid.^2) / (n - 2) / sxx);
 end

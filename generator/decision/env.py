@@ -191,6 +191,29 @@ MOTHER_CROSS_TRAIN = (0.0, 1.5, 3.0)
 MOTHER_CROSS_HELDOUT = (0.75, 2.25, 3.0)
 
 
+def is_success(fb) -> bool:
+    """The reward rule, named so it can be tested without a MATLAB engine.
+
+    ONLY a confirmed track the independent judge labelled "real" pays. Every
+    other label pays nothing, and `unscreened` is deliberately among them: it
+    means the judge could not run its screens at all (fewer than 2 usable track
+    points, +engine/runJudge.m's `numel(rSeq) >= 2`), which is the absence of a
+    verdict, not a verdict in the generator's favour.
+
+    THIS HAS BEEN WRONG BEFORE. The archived +agent/buildEnvEntity.m paid +0.5
+    for `unscreened` -- the same bonus it paid for an outright `decoy` -- so a
+    learner could farm degenerate scenes that were never screened instead of
+    deceiving anything (trash/legacy-generator-20260807/+agent/buildEnvEntity.m
+    :308-320; CLAUDE.md's "Unscreened-reward logging" entry). Stage F gate F0.6
+    asks for that loophole to be confirmed shut; this function plus
+    tests/test_reward_pays_only_for_real.py is the confirmation.
+
+    Note `eccm_label` is "" when nothing confirmed and "mixed" when confirmed
+    tracks disagree (runJudge.m:855-863); neither is "real", so both pay 0.
+    """
+    return fb["confirmed_tracks"] >= 1 and fb["eccm_label"] == "real"
+
+
 @dataclass
 class StepResult:
     reward: float
@@ -341,7 +364,7 @@ class PhantomPlacementEnv:
             SourceAzimuthRad=[float(a) for a in mother.azimuth_rad(self._frame_times)])
         fb = self.bridge.run_judge(judge_mat, EccmScreens=list(ECCM_SCREENS))
 
-        success = fb["confirmed_tracks"] >= 1 and fb["eccm_label"] == "real"
+        success = is_success(fb)
         outcome = "confirmed_real" if success else "not_confirmed_or_flagged"
         return StepResult(reward=1.0 if success else 0.0, outcome=outcome,
                            confirmed_tracks=fb["confirmed_tracks"], eccm_label=fb["eccm_label"])

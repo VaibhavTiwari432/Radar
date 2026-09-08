@@ -284,6 +284,31 @@ default only 1.80 — the passing Doppler screen averages ~0.8 phantoms back to 
 Here it lowers the radar's false-alarm rate *and* helps the adversary at once. Stated
 plainly rather than scored as good or bad.
 
+> **FOLLOW-UP, 8 September 2026 — the cause is now fixed, not just attributed.**
+> F8 diagnosed these flags as amplitude-screen false positives and proved it by
+> ablation: they vanish when that one screen is disabled. The screen itself was
+> left alone, so the false positives stayed. `+track/discriminator.m` now has
+> two abstain guards on screen 1 (range span under 3 range cells, or a slope
+> whose standard error covers the screen's whole scoring band), replacing a
+> `range(R) > 1e-9` condition that let a one-nanometre range change trigger a
+> full-confidence verdict.
+>
+> **Re-run, `test_generator_phantom_count.m` 4/4:** the equal-RCS N=8 cell,
+> monopulse OFF, moves from **2.00 flagged / 6.00 surviving (75%)** to
+> **0.00 flagged / 8.00 surviving (100%)** — the ablation column's answer, now
+> reached with the screen ENABLED. `test_generator_gate_a.m` (4/4) and
+> `test_masquerade_amplitude.m` (4/4) are unchanged, and the latter confirms the
+> screen still discriminates where it has a lever arm: genuine and masquerade
+> both fit slope −1.709 and score 10/10 real, constant-ERP fits 0.002 and is
+> caught 7/10.
+>
+> This also closes **E4** ("rejects physically-consistent phantoms by
+> measurement noise, not discrimination") on the screen that produced it.
+> The 1.80/2.60 figures above are superseded, not deleted — the dilution point
+> they make about screen averaging still stands and is independent of this fix.
+> Derivation and the anti-exploit argument: `STAGE_F_PHASE0p5_RESULTS.md` 3.6;
+> regression cover: `tests/test_amplitude_lever_abstain.m` (7/7).
+
 ## G. What is complete, and what cannot be run
 
 **Phase 1 (the radar judge) is complete and green** — `results/full_suite_20260807.csv`:
