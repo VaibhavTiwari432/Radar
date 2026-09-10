@@ -108,6 +108,9 @@ function [judgeMat, truth] = renderPhantomScene(ranges0M, ratesMps, varargin)
     % or [nPhantoms x numFrames]. [] = every phantom shares SourceAzimuthRad
     % (the historical single-aperture case). Passed straight to generator.render.
     p.addParameter('PhantomAzimuthRad', [], @isnumeric);
+    % Second (wider) azimuth monopulse baseline -- the radar's swarm counter.
+    p.addParameter('IncludeSecondBaseline', false, @islogical);
+    p.addParameter('SubapertureSepM2', 0.90, @(x) isscalar(x) && x > 0);
     p.addParameter('NoiseAmplitude', 0.05, @(x) isscalar(x) && x > 0);
     % Ground clutter. Empty = OFF (the default), which keeps every published
     % scene reproducible sample for sample -- the clutter draw advances the
@@ -208,6 +211,10 @@ function [judgeMat, truth] = renderPhantomScene(ranges0M, ratesMps, varargin)
     end
     if ~isempty(o.PhantomAzimuthRad)
         renderArgs = [renderArgs, {'PhantomAzimuthRad', double(o.PhantomAzimuthRad)}];
+    end
+    if o.IncludeSecondBaseline
+        renderArgs = [renderArgs, {'IncludeSecondBaseline', true, ...
+                                   'SubapertureSepM2', double(o.SubapertureSepM2)}];
     end
     generator.render(preMat, judgeMat, renderArgs{:});
 

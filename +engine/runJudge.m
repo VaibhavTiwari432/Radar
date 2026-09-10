@@ -200,6 +200,18 @@ function feedback = runJudge(matFile, varargin)
             mat2str(size(rxDelta)), mat2str(size(rxFrames)));
         if isfield(S, 'subaperture_sep_m'); subSep = double(S.subaperture_sep_m); else; subSep = 0.30; end
     end
+    % SECOND azimuth baseline (SWARM_RESULTS.md counter): a wider subaperture
+    % whose ambiguous-but-precise phase the coarse baseline disambiguates. When
+    % present the azimuth estimate below is refined to it; absent -> the single
+    % coarse baseline exactly as before.
+    hasBaseline2 = hasAngle && isfield(S, 'rx_frames_delta2');
+    if hasBaseline2
+        rxDelta2 = S.rx_frames_delta2;
+        assert(isequal(size(rxDelta2), size(rxFrames)), 'engine:runJudge:delta2Shape', ...
+            'rx_frames_delta2 %s does not match rx_frames %s', ...
+            mat2str(size(rxDelta2)), mat2str(size(rxFrames)));
+        if isfield(S, 'subaperture_sep_m_2'); subSep2 = double(S.subaperture_sep_m_2); else; subSep2 = 0.90; end
+    end
     % ELEVATION channel (S3). Its own orthogonal subaperture pair, written by
     % +generator/render.m's IncludeElevationChannel. Gated on hasAngle too: an
     % elevation difference channel without an azimuth one is not a
@@ -312,6 +324,14 @@ function feedback = runJudge(matFile, varargin)
                 end
                 sumSpec   = fftshift(fft(compressed,  numPulses, 2), 2);
                 deltaSpec = fftshift(fft(compressedD, numPulses, 2), 2);
+                if hasBaseline2
+                    deltaCube2 = rxDelta2(:, :, k);
+                    compressedD2 = complex(zeros(size(deltaCube2)));
+                    for pIdx = 1:numPulses
+                        [~, compressedD2(:, pIdx)] = radar.pulseCompress(deltaCube2(:, pIdx), wavK);
+                    end
+                    deltaSpec2 = fftshift(fft(compressedD2, numPulses, 2), 2);
+                end
             end
             if hasElev
                 deltaElCube = rxDeltaEl(:, :, k);
@@ -397,6 +417,19 @@ function feedback = runJudge(matFile, varargin)
                 ratio = dif / sig;
                 phiEst = 2 * atan(imag(ratio));
                 sinTh  = phiEst * lambda / (2*pi*subSep);
+                if hasBaseline2
+                    % Two-baseline resolve: the coarse baseline picks which
+                    % fringe of the finer, wider baseline the target sits in,
+                    % then the fine phase gives the precise angle. The fine
+                    % electrical phase Phi_f = 2*pi*d2*sin(az)/lambda is measured
+                    % wrapped into (-pi,pi); add the multiple of 2*pi that lands
+                    % it nearest the coarse estimate, then invert.
+                    dif2 = deltaSpec2(b, dB);
+                    phiF = 2 * atan(imag(dif2 / sig));
+                    phiFexpected = 2*pi*subSep2 * sinTh / lambda;   % from coarse
+                    n = round((phiFexpected - phiF) / (2*pi));
+                    sinTh = (phiF + 2*pi*n) * lambda / (2*pi*subSep2);
+                end
                 az(j)  = asin(max(-1, min(1, sinTh)));   % clamp: outside the
             end                                          % unambiguous sector
             peakAz{k} = az;                              % asin would go complex

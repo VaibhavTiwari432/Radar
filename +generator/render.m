@@ -126,6 +126,14 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
     p.addParameter('PhantomAzimuthRad', [], @isnumeric);
     p.addParameter('SubapertureSepM', 0.30, @(x) isscalar(x) && x > 0);
     p.addParameter('SubapertureSepElM', 0.30, @(x) isscalar(x) && x > 0);
+    % SECOND azimuth monopulse baseline: a WIDER subaperture (finer angular
+    % resolution, narrower unambiguous sector) whose ambiguous-but-precise phase
+    % the judge disambiguates with the coarse 0.30 m baseline. The radar's
+    % un-built counter to the multi-drone swarm (SWARM_RESULTS.md). Off by
+    % default -- its own receive chain draws noise, advancing the shared RNG,
+    % so every existing render is byte-identical only while it is off.
+    p.addParameter('IncludeSecondBaseline', false, @islogical);
+    p.addParameter('SubapertureSepM2', 0.90, @(x) isscalar(x) && x > 0);
     % Place each phantom's pulse at a NON-INTEGER sample delay, instead of
     % rounding to the nearest whole sample.
     %
@@ -236,8 +244,20 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
             phiAntAzPh   = 2*pi*opts.SubapertureSepM .* sin(azPh) .* cos(srcEl) / lambda;
             deltaRatioPh = 1i*tan(phiAntAzPh/2);   % [nPhantoms x numFrames]
         end
+        % Second, wider azimuth baseline (same law, larger separation).
+        useBaseline2 = opts.IncludeSecondBaseline;
+        if useBaseline2
+            rxFramesDelta2 = complex(zeros(fastN, numPulsesPerFrame, numFrames));
+            phiAntAz2   = 2*pi*opts.SubapertureSepM2 .* sin(srcAz) .* cos(srcEl) / lambda;
+            deltaRatio2 = 1i*tan(phiAntAz2/2);
+            if perPhantomAz
+                phiAntAzPh2   = 2*pi*opts.SubapertureSepM2 .* sin(azPh) .* cos(srcEl) / lambda;
+                deltaRatioPh2 = 1i*tan(phiAntAzPh2/2);
+            end
+        end
     else
         perPhantomAz = false;
+        useBaseline2 = false;
     end
     if opts.IncludeElevationChannel
         rxFramesDeltaEl = complex(zeros(fastN, numPulsesPerFrame, numFrames));
@@ -288,6 +308,9 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
             sigBuf = complex(zeros(fastN, 1));
             if opts.IncludeAngleChannel && perPhantomAz
                 sigBufDelta = complex(zeros(fastN, 1));   % per-phantom Sigma-weighted echo
+                if useBaseline2
+                    sigBufDelta2 = complex(zeros(fastN, 1));
+                end
             end
             for ph = 1:nPhantoms
                 R = rangeM(ph, sampleIdx);
@@ -329,6 +352,9 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                 sigBuf(dst) = sigBuf(dst) + contrib;
                 if opts.IncludeAngleChannel && perPhantomAz
                     sigBufDelta(dst) = sigBufDelta(dst) + contrib * deltaRatioPh(ph, k);
+                    if useBaseline2
+                        sigBufDelta2(dst) = sigBufDelta2(dst) + contrib * deltaRatioPh2(ph, k);
+                    end
                 end
             end
 
@@ -355,6 +381,15 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                     % deltaRatio times the summed echo. Byte-identical.
                     rxFramesDelta(:, pIdx, k) = sigBuf * deltaRatio(k) + noiseDelta;
                 end
+                if useBaseline2
+                    % Its own receive chain, its own noise draw (like elevation).
+                    noiseDelta2 = opts.NoiseAmplitude * (randn(fastN,1) + 1i*randn(fastN,1)) / sqrt(2);
+                    if perPhantomAz
+                        rxFramesDelta2(:, pIdx, k) = sigBufDelta2 + noiseDelta2;
+                    else
+                        rxFramesDelta2(:, pIdx, k) = sigBuf * deltaRatio2(k) + noiseDelta2;
+                    end
+                end
             end
             if opts.IncludeElevationChannel
                 % Its OWN independent draw -- a third receive chain has its
@@ -380,6 +415,9 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
         if opts.IncludeElevationChannel
             rxFramesDeltaEl = reshape(rxFramesDeltaEl, fastN, numFrames);
         end
+        if opts.IncludeAngleChannel && useBaseline2
+            rxFramesDelta2 = reshape(rxFramesDelta2, fastN, numFrames);
+        end
     end
 
     out = struct();
@@ -400,6 +438,10 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
         % from the scene description and hoping the two agree.
         out.source_azimuth_rad = srcAz;
         out.source_elevation_rad = srcEl;
+        if useBaseline2
+            out.rx_frames_delta2 = rxFramesDelta2;
+            out.subaperture_sep_m_2 = opts.SubapertureSepM2;
+        end
     end
     if opts.IncludeElevationChannel
         out.rx_frames_delta_el = rxFramesDeltaEl;
