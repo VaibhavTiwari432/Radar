@@ -81,6 +81,40 @@ residual signal for a learner to exploit — the same verdict RL v2 reached, for
 the same reason. Deception here is GEOMETRY (spread the drones), not learning.
 No training was run, per the gate.
 
+## Phase 5 — the radar's counter (second monopulse baseline) FAILS
+
+The un-built counter the co-bearing screen's own note named is a SECOND, wider
+monopulse baseline — finer angular resolution (`render.m` `IncludeSecondBaseline`,
+0.90 m; `runJudge` resolves it against the coarse 0.30 m baseline). It is
+accurate and provably finer than the coarse baseline alone
+(`tests/test_second_baseline.m`). Does it catch the swarm?
+`experiments.swarmEmitterCheck` with `UseBaseline2`:
+
+| N | mode | radiated-fake, no baseline2 | radiated-fake, WITH baseline2 |
+|---|---|---|---|
+| 4 | moving  | 3.00 | 3.00 |
+| 4 | **genuine** | 3.00 | 3.00 |
+| 8 | moving  | 6.17 | 5.00 |
+| 8 | **genuine** | 5.33 | **5.00** |
+
+**No.** With the finer baseline a moving swarm and a genuine formation get
+IDENTICAL radiated-fake counts (3/4, 5/8) — emitter attribution still cannot
+separate them (C2 confirmed). The false-alarm reduction on genuine formations is
+marginal (N=8: 5.33 → 5.00), because the ±2.866° sector fundamentally limits how
+many distinct ω's are resolvable no matter how precise each measurement is (C1
+barely realized). The label survival stays 8/8 with the baseline on — it never
+entered the co-bearing verdict. **The swarm's deception is geometric and survives
+the counter.** The honest arms-race outcome (C3): a better-instrumented radar,
+and the swarm still wins.
+
+The genuinely promising counter is different and un-built: the drones are REAL
+objects, so each has a skin echo at its own near range. A radar that detects the
+M drone skin returns and backtracks the far phantoms to them
+(`emitterAttribution`'s emitter-position path, `IncludePlatformSkinReturn`) could
+expose a swarm whose phantoms all originate from a tight cluster of near
+emitters no genuine formation has. That needs per-drone geometry and detectable
+drone RCS — the next front, not this one.
+
 ## Conclusion — the monopulse wall falls to multi-aperture [SIM]
 
 - The single-aperture monopulse wall (F7) STANDS: one drone's N phantoms share a
