@@ -47,6 +47,28 @@ survives materially more than the single-aperture swarm — Wilson CI of the
 difference excluding 0. If not, the wall holds against a swarm too and the
 programme stops here.
 
+## Second-baseline counter — predictions (committed before its measurement)
+
+The radar's counter is a second, wider monopulse baseline (finer angular
+resolution → sharper angular rate ω). Predictions, before running
+`swarmEmitterCheck` with `UseBaseline2`:
+
+**C1 — it lowers emitter attribution's false alarms on genuine formations.**
+The finer ω resolves distinct rates that the coarse baseline grouped by noise,
+so a genuine (diverse-ω) formation's radiated-fake count DROPS toward 0.
+
+**C2 — it does NOT catch the swarm.** A moving swarm (each drone its own motion)
+produces diverse ω too, so its radiated-fake count drops alongside the genuine
+formation's — the swarm mimics a formation and the finer angle cannot separate
+them. A stationary swarm (ω≈0) stays grouped, but so does a genuine RADIAL
+formation, so that is still a false alarm, not discrimination.
+
+**C3 — net.** The second baseline makes the radar's emitter screen usable (fewer
+false alarms) but the swarm's deception is geometric and survives it. Honest
+expected outcome: better radar, swarm still wins. If instead the swarm's
+radiated-fake stays high while the genuine formation's drops, the counter
+works — and that is the result.
+
 ## What P2 does NOT yet claim
 
 Surviving the co-bearing screen is not deception: Phase 2 must show the phantom
