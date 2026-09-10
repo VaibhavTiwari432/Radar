@@ -1,0 +1,21 @@
+# preflight_check.py -- EXTRA dependencies beyond requirements.txt: NONE.
+#
+# Confirmed against the installed 3.12 venv on 20 Aug 2026. preflight_check.py
+# imports only argparse, logging, sys (stdlib), numpy, and usrp_common -- all of
+# which requirements.txt already covers, because the payload needs them anyway.
+# Deliberate: a preflight that pulled in packages the payload does not use could
+# pass on a machine the payload cannot run on.
+#
+# So install the payload's requirements and nothing else:
+#     pip install -r requirements.txt
+#
+# UHD is still the two halves requirements.txt describes, and preflight CHECK 1
+# is the thing that tells you whether you got both:
+#     bindings   pip install --only-binary=:all: --no-deps uhd==4.10.0.0
+#     runtime    Ettus Win64 installer, SAME version as the wheel
+# An 'import uhd' that succeeds is NOT evidence the runtime is present -- the
+# wheel ships libpyuhd.pyd alone, and CHECK 1 tests for uhd.find() for exactly
+# that reason.
+#
+# Python 3.12 is required, not preferred: libpyuhd is built against numpy 1.x,
+# and numpy 1.26.4 publishes no cp313 wheel.

@@ -60,6 +60,30 @@ function out = rangeRateConsistency(rangeSeq, timeSeq, dopplerSeq, C, varargin)
 %   The threshold TIGHTENS as the track lengthens (sigma_R ~ 1/T), which is
 %   correct: more dwells means a better-known range rate.
 %
+%   'RangeSigmaM' -- THE QUANTISER ABOVE IS AN ASSUMPTION, AND IT IS NOW
+%   OPTIONAL. Every line of the derivation above rests on range arriving as an
+%   integer bin index, which was true of +engine/runJudge.m until sub-bin
+%   interpolation (radar.subBinPeak) existed. A caller running the interpolated
+%   estimator has a range that is no longer quantiser-limited, and must say so
+%   by passing its own per-endpoint std; otherwise this gate stays sized for a
+%   coarser measurement than the one actually made, and is too LOOSE.
+%
+%   AND THE DEFAULT DELIBERATELY DOES NOT CHANGE, on measurement rather than
+%   caution. At the bench configuration (fs/B = 3.20) radar.subBinPeak reaches
+%   0.0036 bins = 0.09 m, so passing RangeSigmaM there would take sigma_R from
+%   2.73 m/s to essentially the Doppler term alone and tighten the 3-sigma
+%   gate from 8.81 m/s to about 3.2 m/s -- a real strengthening, worth having.
+%
+%   In THIS simulation it would be unearned. C.bandwidth = 2 MHz against
+%   C.fs = 3.2 MHz aliases the waveform (18.2% of the chirp's energy folds
+%   past +-fs/2, MEASURED), the compressed mainlobe is corrupted, and
+%   interpolating it returns 0.267 bins against the raw bin's 0.266 -- no gain
+%   at all. Tightening this gate here on the strength of an interpolator that
+%   recovers nothing would be exactly the unearned strengthening the
+%   anti-strawman requirement exists to prevent. Fix C.fs first; see
+%   radar.subBinPeak and tests/test_sub_bin_interp.m, which asserts the
+%   aliasing so that fixing it forces this note to be re-read.
+%
 %   REPORTED SEPARATELY, NOT FOLDED INTO THE ECCM SCORE, for the same reason
 %   as the NIS gate (track.nisConsistency): its effect on the evasion rate has
 %   to be readable in isolation before anyone decides to combine it.
@@ -69,6 +93,7 @@ function out = rangeRateConsistency(rangeSeq, timeSeq, dopplerSeq, C, varargin)
     p.addParameter('Sigmas',    3,   @(x) isscalar(x) && x > 0);
     p.addParameter('CarrierHz', 10e9, @(x) isscalar(x) && x > 0);
     p.addParameter('PrfHz',     [],  @(x) isempty(x) || (isscalar(x) && x > 0));
+    p.addParameter('RangeSigmaM', [], @(x) isempty(x) || (isscalar(x) && x > 0));
     p.parse(varargin{:});
     o = p.Results;
     prf = o.PrfHz; if isempty(prf); prf = C.PRF; end
@@ -77,8 +102,13 @@ function out = rangeRateConsistency(rangeSeq, timeSeq, dopplerSeq, C, varargin)
     t = double(timeSeq(:));
     D = double(dopplerSeq(:));
 
+    % rangeSigmaM is in the INITIALISER, not added on the success path only:
+    % an early return must produce the same field set, or a caller that
+    % concatenates these into a struct array gets a dimension error on the
+    % first uninformative track.
     out = struct('rangeDerivedMps', NaN, 'dopplerMps', NaN, 'mismatchMps', NaN, ...
-                 'thresholdMps', NaN, 'pass', true, 'informative', false);
+                 'thresholdMps', NaN, 'pass', true, 'informative', false, ...
+                 'rangeSigmaM', NaN);
 
     ok = isfinite(R) & isfinite(t) & isfinite(D);
     R = R(ok); t = t(ok); D = D(ok);
@@ -100,9 +130,23 @@ function out = rangeRateConsistency(rangeSeq, timeSeq, dopplerSeq, C, varargin)
 
     lambda     = C.c / o.CarrierHz;
     dopplerBin = lambda * (prf / o.NumPulses) / 2;
-    sigmaR     = C.range_per_sample / (sqrt(6) * T);
+
+    % Per-ENDPOINT range std. The default is the uniform-quantiser value the
+    % header derives, delta/sqrt(12); RangeSigmaM overrides it for a caller
+    % whose range estimate is NOT bin-quantised -- i.e. one running
+    % radar.subBinPeak. Written this way so the two lines below are one
+    % formula rather than two: sqrt(2)*(delta/sqrt(12))/T IS delta/(sqrt(6)*T),
+    % exactly, so passing nothing reproduces every previously published
+    % threshold bit for bit (tests/test_range_rate_consistency.m asserts it).
+    if isempty(o.RangeSigmaM)
+        endpointSigmaM = C.range_per_sample / sqrt(12);
+    else
+        endpointSigmaM = o.RangeSigmaM;
+    end
+    sigmaR     = sqrt(2) * endpointSigmaM / T;
     sigmaD     = dopplerBin / sqrt(12);
     out.thresholdMps = o.Sigmas * sqrt(sigmaR^2 + sigmaD^2);
+    out.rangeSigmaM  = endpointSigmaM;
 
     out.informative = true;
     out.pass = out.mismatchMps <= out.thresholdMps;

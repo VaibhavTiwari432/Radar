@@ -5,7 +5,7 @@ Needs no generator.
 
     python usrp_test_rx_only.py [--frames 1] [--save capture.npy]
 
-PASS when: 2000 samples are captured and an SNR is printed.
+PASS when: a full frame is captured and an SNR is printed.
 """
 import argparse
 import logging
@@ -32,7 +32,7 @@ def main():
 
     failures, last = 0, None
     for i in range(args.frames):
-        samples, error = uc.receive_frame(uhd, rx_stream)
+        samples, error, _t0 = uc.receive_frame(uhd, rx_stream)
         if error:
             failures += 1
             logging.error("[ERROR] frame %d/%d: %s", i + 1, args.frames, error)

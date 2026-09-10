@@ -46,6 +46,23 @@ MOTHER_RANGE_M = 900.0
 MIN_LATENCY_S = 1e-6
 
 
+def _retag(tagged, new_value):
+    """Return `tagged` carrying `new_value`, without mutating it.
+
+    common.provenance.Tagged is a FROZEN dataclass -- deliberately, so a value
+    cannot get separated from the provenance that backs it. Assigning
+    `.value` on one therefore raises FrozenInstanceError, which is how the
+    Swerling path in build() was found broken on 21 Aug 2026: any call with
+    swerling >= 1 raised, so no scene in this repo had ever been rendered with
+    target fluctuation through this builder. Rebuilding the Tagged keeps the
+    provenance attached and the immutability intact.
+    """
+    from dataclasses import replace as _dc_replace
+    if hasattr(tagged, "value"):
+        return _dc_replace(tagged, value=new_value)
+    return new_value
+
+
 def build(out_path: str,
           ranges_m: Sequence[float],
           rates_mps: Sequence[float],
@@ -64,7 +81,8 @@ def build(out_path: str,
           mother_elevation_rad: float = 0.0,
           include_platform_skin_return: bool = False,
           platform_rcs_m2: float = 0.05,
-          phantom_offsets: Optional[Sequence] = None) -> dict:
+          phantom_offsets: Optional[Sequence] = None,
+          ablation: Optional["render.Ablation"] = None) -> dict:
     """Write the pre-render .mat +generator/render.m consumes.
 
     Returns a dict of what was actually built, so a MATLAB caller can assert
@@ -184,14 +202,45 @@ def build(out_path: str,
             label = f"R0={r0}, v={v}"
         if not plan.feasible:
             raise ValueError(f"phantom {i} ({label}): {plan.veto_reason}")
+        # ---- V3 leave-one-out ablation, applied to the DERIVED quantities ----
+        # The trajectory, the vetoes and the causality check all ran already,
+        # so every arm shares one physically-legal motion and differs in
+        # exactly one observable. Corrupting the trajectory instead would move
+        # detection as well as the label and the row would stop being an
+        # attribution.
+        #
+        # Arm E runs BEFORE the Swerling block below, deliberately: flattening
+        # the 1/R^2 law and then fluctuating about the flat level keeps E and F
+        # orthogonal. Flattening afterwards would remove the scatter too, and a
+        # detection on arm E could then be credited to either screen.
+        if ablation is not None and ablation.constant_amplitude:
+            amp = np.asarray(plan.amplitude.value, dtype=float)
+            plan.amplitude = _retag(plan.amplitude, np.full_like(amp, float(np.mean(amp))))
+
         if swerling:
             # Each phantom gets its OWN fluctuation stream. Sharing one would
             # make an N-phantom swarm scintillate in lockstep, which is a
             # correlation no physical swarm has and which the co-bearing and
             # amplitude screens could both exploit.
             rng = np.random.default_rng(None if seed is None else seed + i)
-            plan.amplitude.value = apply_swerling(
-                plan.amplitude.value, num_frames, num_pulses_per_frame, swerling, rng)
+            plan.amplitude = _retag(plan.amplitude, apply_swerling(
+                plan.amplitude.value, num_frames, num_pulses_per_frame, swerling, rng))
+        if ablation is not None:
+            # Arm D: incoherent phase. Arm C: coherent, but derived from a
+            # range trajectory scaled about its own START -- phase_rad is
+            # already relative to R[0], so scaling the array IS scaling the
+            # trajectory, and the apparent RANGE is untouched. That is the
+            # RGPO/VGPO signature screen 2d exists to catch and screen 2's
+            # sign test cannot (both quantities keep their sign).
+            if ablation.random_phase:
+                prng = np.random.default_rng(None if seed is None else seed + 1000 + i)
+                plan.phase_rad = _retag(plan.phase_rad, prng.uniform(
+                    0.0, 2.0 * np.pi, np.asarray(plan.phase_rad.value).shape))
+            elif ablation.doppler_scale != 1.0:
+                plan.phase_rad = _retag(plan.phase_rad,
+                    np.asarray(plan.phase_rad.value, dtype=float)
+                    * float(ablation.doppler_scale))
+
         exports.append(PhantomExport(plan=plan, rcs_m2=s))
 
     platform_index = None

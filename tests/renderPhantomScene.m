@@ -89,6 +89,14 @@ function [judgeMat, truth] = renderPhantomScene(ranges0M, ratesMps, varargin)
     p.addParameter('ApplyVetoes', true, @islogical);
     p.addParameter('SweepSchedule', [], @isnumeric);
     p.addParameter('PhantomSweepSchedule', [], @isnumeric);
+    % Passed straight through to generator.render. Default false there,
+    % so omitting it keeps every scene in this repo byte-identical.
+    p.addParameter('FractionalDelay', false, @islogical);
+    % V3 leave-one-out ablation, as a struct with any of the fields
+    % constant_amplitude / random_phase / doppler_scale. [] = the genuine arm.
+    % Applied inside build_scene AFTER the vetoes, so every arm shares one
+    % physically-legal trajectory -- see +experiments/v3Ablation.m.
+    p.addParameter('Ablation', [], @(x) isempty(x) || isstruct(x));
     p.addParameter('IncludeAngleChannel', true, @islogical);
     p.addParameter('IncludeElevationChannel', false, @islogical);
     % Scalar (fixed bearing, the historical case) or a per-frame vector -- the
@@ -157,7 +165,8 @@ function [judgeMat, truth] = renderPhantomScene(ranges0M, ratesMps, varargin)
                'include_platform_skin_return', o.IncludePlatformSkinReturn, ...
                'platform_rcs_m2', double(o.PlatformRcs), ...
                'phantom_offsets', localOffsetArg(o.PhantomOffsets, ...
-                                                  o.PhantomOffsetVelocities, rcs)));
+                                                  o.PhantomOffsetVelocities, rcs), ...
+               'ablation', localAblationArg(o.Ablation)));
 
     % The bearing handed to render.m comes from the PLATFORM unless the caller
     % overrode it explicitly. Two sources for one quantity is what this is
@@ -179,7 +188,8 @@ function [judgeMat, truth] = renderPhantomScene(ranges0M, ratesMps, varargin)
 
     % NumPulses is NOT passed here: render.m reads num_pulses_per_frame out
     % of the .mat the builder just wrote, which is the single source of it.
-    renderArgs = {'IncludeAngleChannel', o.IncludeAngleChannel, ...
+    renderArgs = {'FractionalDelay', o.FractionalDelay, ...
+                  'IncludeAngleChannel', o.IncludeAngleChannel, ...
                   'IncludeElevationChannel', o.IncludeElevationChannel, ...
                   'SourceAzimuthRad', srcAz, ...
                   'SourceElevationRad', srcEl, ...
@@ -306,4 +316,22 @@ function M = localCellToMat(pyList)
     for k = 1:numel(rows)
         M(k, :) = cellfun(@double, cell(rows{k}));
     end
+end
+
+function a = localAblationArg(abl)
+%LOCALABLATIONARG  py.None, or a generator.render.Ablation built from a struct.
+%   Field names match the dataclass exactly, so an unknown field raises in
+%   Python rather than being silently ignored here -- a mis-spelled arm that
+%   quietly rendered the genuine one would put a wrong row in the table.
+    if isempty(abl)
+        a = py.None; return
+    end
+    kv = {};
+    f = fieldnames(abl);
+    for i = 1:numel(f)
+        v = abl.(f{i});
+        if islogical(v); v = logical(v); else; v = double(v); end
+        kv = [kv, {f{i}, v}]; %#ok<AGROW>
+    end
+    a = py.generator.render.Ablation(pyargs(kv{:}));
 end

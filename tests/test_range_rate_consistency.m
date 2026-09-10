@@ -70,6 +70,72 @@ classdef test_range_rate_consistency < matlab.unittest.TestCase
             tc.verifyLessThan(long.thresholdMps, short.thresholdMps);
         end
 
+        % ---- screen 2d: the same detector, now wired into the verdict ----
+        % Added 21 Aug 2026. Everything above tests the FUNCTION; these test
+        % its integration as a discriminator veto, which is a separate claim:
+        % a detector that measures correctly and is never consulted changes no
+        % label. This file opens by asserting the hole exists, so it is the
+        % right place to assert it closes.
+
+        function test_the_new_screen_closes_the_hole_this_file_opens_with(tc)
+            [ts, C] = localMismatchTrack();
+            ts.screensEnabled = {'amplitude', 'doppler', 'micro', 'rangerate'};
+            lbl = track.discriminator(ts, C);
+            tc.verifyEqual(lbl, "decoy", ...
+                'screen 2d did not catch a 10x range-rate magnitude mismatch');
+        end
+
+        function test_the_screen_is_off_by_default(tc)
+            % Every screen postdating the published numbers is opt-in, or a
+            % result measured last month silently changes meaning this month.
+            [ts, C] = localMismatchTrack();
+            tc.verifyEqual(track.discriminator(ts, C), "real", ...
+                'the default screen set has changed; published labels have moved');
+        end
+
+        function test_the_veto_cannot_be_diluted(tc)
+            % THE REASON IT IS A VETO. This track passes screens 1 and 2 (the
+            % amplitude law is exact and the Doppler sign is right), so as a
+            % VOTE a failing 2d would score mean([1 1 0]) = 0.67 -> `real` and
+            % the catch would be thrown away -- the same arithmetic that
+            % discarded screen 2c's measured 0.968-vs-0.068 separation
+            % (DECEPTION_MAP_RESULTS.md section 6).
+            [ts, C] = localMismatchTrack();
+            ts.screensEnabled = {'amplitude', 'doppler'};
+            tc.verifyEqual(track.discriminator(ts, C), "real", ...
+                'precondition: the other screens must PASS this track');
+            ts.screensEnabled = {'amplitude', 'doppler', 'rangerate'};
+            tc.verifyEqual(track.discriminator(ts, C), "decoy");
+        end
+
+        function test_a_genuine_track_is_not_condemned(tc)
+            % The negative control. A screen that flags everything is
+            % worthless, and this project has already withdrawn one screen
+            % that turned out to measure target speed rather than authenticity.
+            C = physics.Constants();
+            t = (0:7)';
+            R = 1800 - 50*t;
+            ts = struct('range', R, 'amplitude', 3.0*(1800./R).^2, ...
+                        'doppler', -50*ones(size(t)), 'dopplerMeasured', true, ...
+                        'time', t, 'carrierHz', 10e9, 'prfHz', C.PRF, ...
+                        'numPulses', 32, ...
+                        'screensEnabled', {{'amplitude', 'doppler', 'rangerate'}});
+            tc.verifyEqual(track.discriminator(ts, C), "real", ...
+                'screen 2d condemned a track whose range and Doppler agree');
+        end
+
+        function test_veto_requires_a_MEASURED_doppler(tc)
+            % "Absent vs missing evidence": on the legacy 2-D export the
+            % Doppler series is an all-zero placeholder, and vetoing a track
+            % for disagreeing with a number nobody measured is the error this
+            % project already had to remove from screen 2 once.
+            [ts, C] = localMismatchTrack();
+            ts.dopplerMeasured = false;
+            ts.screensEnabled = {'amplitude', 'doppler', 'rangerate'};
+            tc.verifyEqual(track.discriminator(ts, C), "real", ...
+                'screen 2d fired on a Doppler that was never measured');
+        end
+
         function test_stationary_consistent_track_is_not_accused(tc)
             % Range flat AND Doppler flat is a physically possible object
             % (a hover). Accusing it here would duplicate -- and contradict --
@@ -81,4 +147,20 @@ classdef test_range_rate_consistency < matlab.unittest.TestCase
             tc.verifyTrue(out.pass);
         end
     end
+end
+
+% ======================= file-local helpers ===========================
+
+function [ts, C] = localMismatchTrack()
+%LOCALMISMATCHTRACK  The track this file opens with: range walking at
+%   -50 m/s while the Doppler says -5 m/s. Signs agree, so screen 2 passes;
+%   the amplitude law is exact, so screen 1 passes. Only a MAGNITUDE test can
+%   catch it. Built once here so every screen-2d case below argues about the
+%   same track rather than five slightly different ones.
+    C = physics.Constants();
+    t = (0:7)';
+    R = 1800 - 50*t;
+    ts = struct('range', R, 'amplitude', 3.0*(1800./R).^2, ...
+                'doppler', -5*ones(size(t)), 'dopplerMeasured', true, ...
+                'time', t, 'carrierHz', 10e9, 'prfHz', C.PRF, 'numPulses', 32);
 end

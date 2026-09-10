@@ -1,0 +1,192 @@
+================================================================================
+                    AMPLITUDE BOOST APPLIED — OPTION C
+================================================================================
+Date: 2026-08-22
+Status: READY FOR NEXT RADIO RUN
+
+================================================================================
+PROBLEM IDENTIFIED
+================================================================================
+
+The structural phantom TX buffer was 6.4 dB WEAKER than loopback's known-working
+burst:
+
+  Loopback (working):        0.630 peak  (-4.0 dBFS)   ← heard at 45 dB TX gain
+  Structural phantom:        0.300 peak  (-10.5 dBFS)  ← too quiet, not detected
+  Gap:                       -6.4 dB
+
+This explains why MF gains were only 0.02–0.53 dB instead of detection-level
+SNR. The phantom shape was correct but the amplitude was below Mac's CFAR floor.
+
+================================================================================
+SOLUTION APPLIED — OPTION C
+================================================================================
+
+Two coordinated changes, +3.5 dB + 3 dB = +6.5 dB total:
+
+1. CODE CHANGE: TX_PEAK_AMPLITUDE
+   Old:  TX_PEAK_AMPLITUDE = 0.30
+   New:  TX_PEAK_AMPLITUDE = 0.45   ← +3.5 dB
+
+   File: stage_e_structural_drfm.py, line 92
+   Status: ✓ COMMITTED
+
+2. TX GAIN INCREASE
+   Old:  45 dB
+   New:  48 dB                       ← +3.0 dB
+
+   Action: Set on USRP before next run
+   Status: PENDING (set at runtime)
+
+================================================================================
+EXPECTED RESULT AFTER BOOST
+================================================================================
+
+TX Buffer Amplitude:
+  Old:  0.30 peak (-10.5 dBFS)
+  New:  0.45 peak (-6.9 dBFS)
+  ↑ Increase: +3.5 dB
+
+Total Power Increase (code + gain):
+  +3.5 dB (amplitude scaling) + 3.0 dB (TX gain) = +6.5 dB
+  Closes the gap from -6.4 dB to near-zero
+
+Received Power at Mac:
+  Before: phantom was ~4× weaker than loopback
+  After:  phantom should be within 3 dB of loopback at same TX/RX gains
+
+Detection Expectation:
+  Before: NOT heard (below CFAR)
+  After:  SHOULD be heard and scored by judge (real or decoy verdict)
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+1. stage_e_structural_drfm.py
+   - Line 92: TX_PEAK_AMPLITUDE changed from 0.30 to 0.45
+   - Added inline comment explaining the change
+   - DAC safety verified: 0.45 << 0.9 ceiling ✓
+
+2. stage_e_structural_drfm.py (instrumentation added, earlier)
+   - Line ~170 in run_dwell(): phantom TX buffer logging
+   - Logs: peak amplitude, dBFS, RMS, dtype, amplitude_scale, range
+
+3. usrp_loopback.py (instrumentation added, earlier)
+   - Line ~90 in fire_and_capture(): burst TX buffer logging
+   - Logs: peak amplitude, dBFS, RMS, dtype, sample count
+
+4. test_phantom_amplitude.py (new diagnostic script)
+   - Measures phantom amplitude at 90 km range vs loopback reference
+
+5. AMPLITUDE_DIAGNOSTIC_REPORT.md (new reference document)
+   - Full technical breakdown of the 6.4 dB gap
+
+6. COORDINATED_TEST_PLAN.md (new operational document)
+   - Step-by-step synchronized test procedure for Windows and Mac
+
+================================================================================
+NEXT STEPS — READY TO EXECUTE
+================================================================================
+
+When ready for next radio run:
+
+WINDOWS (Radio/DRFM):
+  1. Set TX gain to 48 dB (up from 45 dB)
+  2. Set RX gain to 20 dB
+  3. Pick UTC time for transmission
+  4. Send Mac: "Transmit [UTC time], 5 dwell run ~25 seconds, TX 48 dB"
+  5. Run: python stage_e_structural_drfm.py --dwells 5 --rate 500 --yes
+  6. Verify logs show: "peak=0.450000 (-6.9 dBFS)"
+
+MAC (Radar/Judge):
+  1. Start capture 5 seconds BEFORE Windows transmit time
+  2. Capture for 70 seconds total
+  3. After capture: run judge
+  4. Look for: confirmed_tracks ≥ 1, label != "unscreened"
+  5. Success: either "real" (deception works) or "decoy" (caught)
+
+BOTH:
+  1. Agree on UTC start time
+  2. Synchronize clocks
+  3. Run simultaneously
+  4. Compare logs and judge output
+
+See COORDINATED_TEST_PLAN.md for detailed procedures.
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+Code:
+  ✓ TX_PEAK_AMPLITUDE = 0.45 confirmed in stage_e_structural_drfm.py
+  ✓ Instrumentation in place for both scripts
+  ✓ DAC headroom verified (0.45 << 0.9)
+  ✓ Amplitude calculation confirmed: 0.45 peak = -6.9 dBFS
+
+Documentation:
+  ✓ AMPLITUDE_DIAGNOSTIC_REPORT.md (root cause analysis)
+  ✓ COORDINATED_TEST_PLAN.md (execution procedure)
+  ✓ This summary document
+
+Pre-Test Ready:
+  [ ] Run --demo to verify no errors
+  [ ] Verify TX gain can be set to 48 dB
+  [ ] Agree on UTC time with Mac
+  [ ] Confirm antennas are connected
+  [ ] Confirm Mac's capture software is ready
+
+================================================================================
+SAFETY NOTES
+================================================================================
+
+• DAC Ceiling: 0.45 peak × 1.0 amplitude_scale = 0.45, well under 0.9 ✓
+• No clipping risk at any point in the walk (walk recedes, amplitude drops)
+• TX gain increase (45→48 dB) is within B210 normal operating range
+• Loopback reference used 45 dB; we're adding just 3 dB more
+• Radio still receives 5 seconds of silence before transmission starts
+• No changes to timing, schedule, or delay calculation
+
+================================================================================
+COMMUNICATION TO MAC
+================================================================================
+
+Send to Mac:
+
+  "STRUCTURAL PHANTOM TEST — AMPLITUDE BOOST"
+
+  Diagnostic showed the phantom was 6.4 dB weaker than loopback.
+  Applied fix:
+    - TX buffer amplitude: 0.30 → 0.45 peak (+3.5 dB)
+    - TX gain: 45 → 48 dB (+3.0 dB)
+    - Total: +6.5 dB compensation
+
+  Expected: phantom should now reach detection threshold.
+
+  Ready to transmit at [UTC TIME]. Capture from [5 sec before] for 70 seconds.
+  I will log TX buffer amplitude in my output; you should see confirmed tracks.
+
+  Either outcome (real or decoy) is progress — at least we'll know it's loud enough.
+
+================================================================================
+READY TO PROCEED
+================================================================================
+
+All code changes made. All documentation created. Awaiting:
+
+  1. Mac's confirmation of capture software readiness
+  2. Agreed UTC transmission time
+  3. Windows command to start test
+
+See COORDINATED_TEST_PLAN.md for exact procedures.
+
+Command to run (at agreed UTC time):
+
+  cd E:\Radar\hardware
+  python stage_e_structural_drfm.py --dwells 5 --rate 500 --yes
+
+Expected log output showing new amplitude:
+
+  PHANTOM TX BUFFER (dwell 0, pulse 0): peak=0.450000 (-6.9 dBFS), ...
+
+================================================================================

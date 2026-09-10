@@ -116,6 +116,26 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
     p.addParameter('SourceElevationRad', 0, @isnumeric);
     p.addParameter('SubapertureSepM', 0.30, @(x) isscalar(x) && x > 0);
     p.addParameter('SubapertureSepElM', 0.30, @(x) isscalar(x) && x > 0);
+    % Place each phantom's pulse at a NON-INTEGER sample delay, instead of
+    % rounding to the nearest whole sample.
+    %
+    % DEFAULTS FALSE, and that preserves every published number: rounding is
+    % what this renderer has always done, so `false` is byte-identical to the
+    % pre-21-Aug-2026 behaviour (tests/test_fractional_delay_render.m asserts
+    % it).
+    %
+    % WHY IT MATTERS WHEN IT IS ON. One sample is 46.84 m here, so a target
+    % slower than one cell per revisit holds a FROZEN apparent range and then
+    % jumps a whole cell -- a staircase where the physics says ramp, on the one
+    % observable the range-rate screens integrate. At the hardware bench's
+    % 6.4 MS/s that step is 23.42 m, which is 4.0 sigma against a judge doing
+    % sub-bin interpolation. Rounding does not approximate the trajectory; it
+    % substitutes a different one that no real target could fly.
+    %
+    % It is also what makes the spec's V3 arm A expressible at all: with
+    % rounding always on, arm B (integer delay) IS the baseline and there is
+    % nothing to ablate against.
+    p.addParameter('FractionalDelay', false, @islogical);
     p.addParameter('IncludeAngleChannel', true, @islogical);
     p.addParameter('IncludeElevationChannel', false, @islogical);
     % ---- GROUND CLUTTER (16 Aug 2026) --------------------------------------
@@ -244,14 +264,36 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                 R = rangeM(ph, sampleIdx);
                 A = ampSim(ph, sampleIdx);
                 phi = phaseRad(ph, sampleIdx);
-                delaySamples = round(2*R/Cc.c * fs);
+                dExact = 2*R/Cc.c * fs;
+                delaySamples = round(dExact);
                 if delaySamples < 0 || delaySamples >= fastN
                     continue;   % outside the receive window this sample -- not an error
                 end
-                endIdx = min(fastN, delaySamples + pulseLen);
-                nCopy = endIdx - delaySamples;
-                sigBuf(delaySamples+1:endIdx) = sigBuf(delaySamples+1:endIdx) + ...
-                    A * exp(1i*phi) * pulseSamples(1:nCopy);
+                if ~opts.FractionalDelay
+                    endIdx = min(fastN, delaySamples + pulseLen);
+                    nCopy = endIdx - delaySamples;
+                    sigBuf(delaySamples+1:endIdx) = sigBuf(delaySamples+1:endIdx) + ...
+                        A * exp(1i*phi) * pulseSamples(1:nCopy);
+                else
+                    % Shape the pulse by the sub-sample remainder, then place
+                    % it at the rounded index MINUS the kernel's own integer
+                    % centre -- the kernel delays by (taps-1)/2 + mu, so the
+                    % centre has to come back off or every phantom sits 8
+                    % samples late. Same decomposition as
+                    % generator/render.py's delay_pulse().
+                    mu = dExact - delaySamples;
+                    hFd = generator.fracDelayKernel(mu);
+                    shaped = conv(pulseSamples, hFd);
+                    startIdx = delaySamples - (numel(hFd)-1)/2;   % 0-based
+                    srcFrom = max(1, 1 - startIdx);
+                    dstFrom = max(1, startIdx + 1);
+                    nCopy = min(numel(shaped) - srcFrom + 1, fastN - dstFrom + 1);
+                    if nCopy > 0
+                        dst = dstFrom:dstFrom+nCopy-1;
+                        sigBuf(dst) = sigBuf(dst) + ...
+                            A * exp(1i*phi) * shaped(srcFrom:srcFrom+nCopy-1);
+                    end
+                end
             end
 
             noiseSum = opts.NoiseAmplitude * (randn(fastN,1) + 1i*randn(fastN,1)) / sqrt(2);
