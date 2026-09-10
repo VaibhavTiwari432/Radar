@@ -49,9 +49,10 @@ function [judgeMat, truth] = renderPhantomScene(ranges0M, ratesMps, varargin)
 %   anywhere in the rebuild -- so tests/test_drone_models.m stays skipped.
 %   That is a CAPABILITY gap in the generator, not a wiring gap in the test,
 %   and a helper that faked it would make the test green while measuring
-%   nothing. It also has no PER-PHANTOM AZIMUTH, and that one is
-%   architectural rather than missing (Blueprint 2.4), which is why
-%   tests/test_monopulse_snr_boundary.m cannot be rewired either.
+%   nothing. PER-PHANTOM AZIMUTH was in this list until 11 Sep 2026 and is now
+%   BUILT ('PhantomAzimuthRad' above; +generator/render.m's per-phantom delta
+%   channel) -- the multi-drone swarm that Track A of the deep-research plan
+%   uses to test whether the co-bearing wall (F7) falls to multiple apertures.
 %
 %   Swerling fluctuation WAS in that list until 12 Aug 2026 and is now
 %   BUILT ('Swerling', 'Seed' above; physics_projection.apply_swerling).
@@ -103,6 +104,10 @@ function [judgeMat, truth] = renderPhantomScene(ranges0M, ratesMps, varargin)
     % mother platform's own azimuth trajectory. See +generator/render.m.
     p.addParameter('SourceAzimuthRad', 0, @isnumeric);
     p.addParameter('SourceElevationRad', 0, @isnumeric);
+    % PER-PHANTOM azimuth for a multi-drone swarm (11 Sep 2026): [nPhantoms x 1]
+    % or [nPhantoms x numFrames]. [] = every phantom shares SourceAzimuthRad
+    % (the historical single-aperture case). Passed straight to generator.render.
+    p.addParameter('PhantomAzimuthRad', [], @isnumeric);
     p.addParameter('NoiseAmplitude', 0.05, @(x) isscalar(x) && x > 0);
     % Ground clutter. Empty = OFF (the default), which keeps every published
     % scene reproducible sample for sample -- the clutter draw advances the
@@ -200,6 +205,9 @@ function [judgeMat, truth] = renderPhantomScene(ranges0M, ratesMps, varargin)
     end
     if ~isempty(o.PhantomSweepSchedule)
         renderArgs = [renderArgs, {'PhantomSweepSchedule', double(o.PhantomSweepSchedule)}];
+    end
+    if ~isempty(o.PhantomAzimuthRad)
+        renderArgs = [renderArgs, {'PhantomAzimuthRad', double(o.PhantomAzimuthRad)}];
     end
     generator.render(preMat, judgeMat, renderArgs{:});
 

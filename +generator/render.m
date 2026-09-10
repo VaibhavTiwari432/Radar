@@ -114,6 +114,16 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
     p.addParameter('NoiseAmplitude', 0.05, @(x) isscalar(x) && x > 0);
     p.addParameter('SourceAzimuthRad', 0, @isnumeric);
     p.addParameter('SourceElevationRad', 0, @isnumeric);
+    % PER-PHANTOM azimuth, for a multi-DRONE swarm: each phantom radiated from
+    % its OWN bearing, so the monopulse difference channel carries each echo at
+    % its own angle. [] (default) => every phantom shares SourceAzimuthRad, and
+    % the delta channel is computed the historical way (one deltaRatio times the
+    % summed echo), byte-identical to pre-swarm renders. Supply an
+    % [nPhantoms x 1] (constant per phantom) or [nPhantoms x numFrames] matrix
+    % to break the co-bearing assumption F7 rests on. Elevation stays shared:
+    % the swarm varies azimuth. tests/test_multi_aperture_render.m asserts both
+    % the byte-identity of the absent path and the two-bearing round trip.
+    p.addParameter('PhantomAzimuthRad', [], @isnumeric);
     p.addParameter('SubapertureSepM', 0.30, @(x) isscalar(x) && x > 0);
     p.addParameter('SubapertureSepElM', 0.30, @(x) isscalar(x) && x > 0);
     % Place each phantom's pulse at a NON-INTEGER sample delay, instead of
@@ -212,6 +222,22 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
         % which is why adding elevation costs the existing path nothing.
         phiAntAz   = 2*pi*opts.SubapertureSepM  .* sin(srcAz) .* cos(srcEl) / lambda;
         deltaRatio = 1i*tan(phiAntAz/2);        % [1 x numFrames]
+        % Per-phantom difference-channel weight, only when a swarm is declared.
+        % Row ph is that phantom's own bearing series through the same
+        % Delta/Sigma = 1i*tan(phi/2) law; elevation is the shared srcEl.
+        perPhantomAz = ~isempty(opts.PhantomAzimuthRad);
+        if perPhantomAz
+            azPh = opts.PhantomAzimuthRad;
+            if size(azPh, 2) == 1; azPh = repmat(azPh, 1, numFrames); end
+            assert(size(azPh, 1) == nPhantoms && size(azPh, 2) >= numFrames, ...
+                'generator:render:phantomAz', ...
+                'PhantomAzimuthRad must be [nPhantoms x 1] or [nPhantoms x numFrames]');
+            azPh = azPh(:, 1:numFrames);
+            phiAntAzPh   = 2*pi*opts.SubapertureSepM .* sin(azPh) .* cos(srcEl) / lambda;
+            deltaRatioPh = 1i*tan(phiAntAzPh/2);   % [nPhantoms x numFrames]
+        end
+    else
+        perPhantomAz = false;
     end
     if opts.IncludeElevationChannel
         rxFramesDeltaEl = complex(zeros(fastN, numPulsesPerFrame, numFrames));
@@ -260,6 +286,9 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
             sampleIdx = (k-1)*numPulsesPerFrame + pIdx;
 
             sigBuf = complex(zeros(fastN, 1));
+            if opts.IncludeAngleChannel && perPhantomAz
+                sigBufDelta = complex(zeros(fastN, 1));   % per-phantom Sigma-weighted echo
+            end
             for ph = 1:nPhantoms
                 R = rangeM(ph, sampleIdx);
                 A = ampSim(ph, sampleIdx);
@@ -269,11 +298,14 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                 if delaySamples < 0 || delaySamples >= fastN
                     continue;   % outside the receive window this sample -- not an error
                 end
+                % contrib + dst computed once, added to the sum channel exactly
+                % as before (so sigBuf, hence rx_frames, is bit-identical), then
+                % weighted by THIS phantom's own deltaRatio for the swarm delta.
                 if ~opts.FractionalDelay
                     endIdx = min(fastN, delaySamples + pulseLen);
                     nCopy = endIdx - delaySamples;
-                    sigBuf(delaySamples+1:endIdx) = sigBuf(delaySamples+1:endIdx) + ...
-                        A * exp(1i*phi) * pulseSamples(1:nCopy);
+                    dst = delaySamples+1:endIdx;
+                    contrib = A * exp(1i*phi) * pulseSamples(1:nCopy);
                 else
                     % Shape the pulse by the sub-sample remainder, then place
                     % it at the rounded index MINUS the kernel's own integer
@@ -288,11 +320,15 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                     srcFrom = max(1, 1 - startIdx);
                     dstFrom = max(1, startIdx + 1);
                     nCopy = min(numel(shaped) - srcFrom + 1, fastN - dstFrom + 1);
-                    if nCopy > 0
-                        dst = dstFrom:dstFrom+nCopy-1;
-                        sigBuf(dst) = sigBuf(dst) + ...
-                            A * exp(1i*phi) * shaped(srcFrom:srcFrom+nCopy-1);
+                    if nCopy <= 0
+                        continue;
                     end
+                    dst = dstFrom:dstFrom+nCopy-1;
+                    contrib = A * exp(1i*phi) * shaped(srcFrom:srcFrom+nCopy-1);
+                end
+                sigBuf(dst) = sigBuf(dst) + contrib;
+                if opts.IncludeAngleChannel && perPhantomAz
+                    sigBufDelta(dst) = sigBufDelta(dst) + contrib * deltaRatioPh(ph, k);
                 end
             end
 
@@ -312,7 +348,13 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
 
             if opts.IncludeAngleChannel
                 noiseDelta = opts.NoiseAmplitude * (randn(fastN,1) + 1i*randn(fastN,1)) / sqrt(2);
-                rxFramesDelta(:, pIdx, k) = sigBuf * deltaRatio(k) + noiseDelta;
+                if perPhantomAz
+                    rxFramesDelta(:, pIdx, k) = sigBufDelta + noiseDelta;
+                else
+                    % Historical single-bearing path, kept exactly: one
+                    % deltaRatio times the summed echo. Byte-identical.
+                    rxFramesDelta(:, pIdx, k) = sigBuf * deltaRatio(k) + noiseDelta;
+                end
             end
             if opts.IncludeElevationChannel
                 % Its OWN independent draw -- a third receive chain has its
