@@ -88,6 +88,25 @@ class MatlabBridge:
         }
 
 
+    def reactive_step(self, screens, confirm, agile_from, n_reactions,
+                      min_real_confidence, any_rate_fail, next_frame):
+        """RL v2 Step 3: advance the reactive radar one block via
+        +radar/reactiveStep.m (the reaction logic is MATLAB, judge-side --
+        Rule 2). Returns (screens list, confirm [M,N], agile_from, n_reactions,
+        last). NaN min_real_confidence (no real track to be suspicious of) is
+        passed straight through; MATLAB's isfinite handles it.
+        """
+        import matlab as _matlab
+        conf_in = float("nan") if min_real_confidence is None else float(min_real_confidence)
+        out = self._eng.radar.reactiveStep(
+            list(screens), _matlab.double([list(confirm)]), float(agile_from),
+            float(n_reactions), conf_in, bool(any_rate_fail), float(next_frame),
+            nargout=5)
+        screens_out, confirm_out, agile_out, nreact_out, last_out = out
+        return (list(screens_out), [float(x) for x in confirm_out[0]],
+                float(agile_out), int(nreact_out), str(last_out))
+
+
 def _flatten_name_value(kwargs: dict) -> list:
     """{'IncludeAngleChannel': True} -> ['IncludeAngleChannel', True], with
     Python bool/list converted to MATLAB-friendly types (matlab.engine

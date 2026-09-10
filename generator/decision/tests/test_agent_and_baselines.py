@@ -85,6 +85,61 @@ def test_replay_buffer_push_and_sample_shapes():
     assert rewards.shape == (3,)
 
 
+def test_replay_buffer_seq_roundtrips_next_obs_and_done():
+    """RL v2 Step 3: sample_seq returns the 5-tuple, and a terminal transition
+    (next_obs=None) stacks to a zero row rather than raising."""
+    buf = ReplayBuffer(capacity=10)
+    buf.push(np.array([1.0, 2.0]), 0, 1.0, next_obs=np.array([3.0, 4.0]), done=False)
+    buf.push(np.array([5.0, 6.0]), 1, 0.0, next_obs=None, done=True)
+    obs, actions, rewards, next_obs, done = buf.sample_seq(2)
+    assert obs.shape == (2, 2) and next_obs.shape == (2, 2)
+    assert done.shape == (2,) and rewards.shape == (2,)
+    # the terminal push's next_obs became a zero row
+    term = np.where(done == 1.0)[0][0]
+    assert np.array_equal(next_obs[term], np.zeros(2))
+
+
+def test_gamma_zero_update_is_identical_to_the_old_reward_only_target():
+    """The single-step path must not move. Same seed, same batch: an agent
+    trained with gamma=0 and next_obs supplied must land on the SAME weights as
+    one trained with the old reward-only update (no next_obs)."""
+    import copy
+    import torch
+
+    cfg = D3QNConfig(n_actions=N_ACTIONS, lr=1e-2, gamma=0.0)
+    a1 = D3QNAgent(cfg, seed=7)
+    a2 = D3QNAgent(cfg, seed=7)
+    a2.net.load_state_dict(copy.deepcopy(a1.net.state_dict()))
+    obs = np.random.RandomState(0).randn(8, cfg.obs_dim).astype(np.float32)
+    nxt = np.random.RandomState(1).randn(8, cfg.obs_dim).astype(np.float32)
+    act = np.zeros(8, dtype=int)
+    rew = np.ones(8, dtype=np.float32)
+    done = np.zeros(8, dtype=np.float32)
+    a1.update(obs, act, rew)                                  # old signature
+    a2.update(obs, act, rew, next_obs_batch=nxt, done_batch=done)   # gamma=0 ignores nxt
+    for p1, p2 in zip(a1.net.parameters(), a2.net.parameters()):
+        assert torch.allclose(p1, p2, atol=0.0)
+
+
+def test_positive_gamma_bootstrap_changes_the_target():
+    """With gamma>0 the loss on a fixed batch must differ from gamma=0, i.e. the
+    next-state value actually enters the target (and a target net was built)."""
+    import numpy as np
+    cfg0 = D3QNConfig(n_actions=N_ACTIONS, lr=1e-2, gamma=0.0)
+    cfgg = D3QNConfig(n_actions=N_ACTIONS, lr=1e-2, gamma=0.9)
+    a0 = D3QNAgent(cfg0, seed=3)
+    ag = D3QNAgent(cfgg, seed=3)
+    assert a0.target is None and ag.target is not None
+    obs = np.random.RandomState(0).randn(8, cfg0.obs_dim).astype(np.float32)
+    nxt = np.random.RandomState(1).randn(8, cfg0.obs_dim).astype(np.float32)
+    act = np.zeros(8, dtype=int)
+    rew = np.zeros(8, dtype=np.float32)          # zero reward: any loss is pure bootstrap
+    done = np.zeros(8, dtype=np.float32)
+    loss0 = a0.update(obs, act, rew, next_obs_batch=nxt, done_batch=done)
+    lossg = ag.update(obs, act, rew, next_obs_batch=nxt, done_batch=done)
+    assert loss0 != pytest.approx(lossg)
+
+
 def test_replay_buffer_respects_capacity():
     buf = ReplayBuffer(capacity=3)
     for i in range(10):
