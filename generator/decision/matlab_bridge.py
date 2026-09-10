@@ -81,6 +81,10 @@ class MatlabBridge:
             "flagged_decoys": int(fb["flagged_decoys"]),
             "eccm_label": str(fb["eccm_label"]),
             "track_label": str(fb["track_label"]).split(",") if fb["track_label"] else [],
+            # RL v2 reactive radar's trigger inputs (+generator/judgeSummary.m).
+            # .get so a judgeSummary without them still converts.
+            "min_real_confidence": float(fb.get("min_real_confidence", float("nan"))),
+            "any_rate_fail": bool(fb.get("any_rate_fail", False)),
         }
 
 

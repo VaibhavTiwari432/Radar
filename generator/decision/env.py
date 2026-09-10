@@ -221,6 +221,7 @@ class StepResult:
     confirmed_tracks: int
     eccm_label: str
     veto_reason: Optional[str] = None   # which physical constraint refused it
+    feedback: Optional[dict] = None     # the judge's scalar summary; None if vetoed
 
 
 class PhantomPlacementEnv:
@@ -377,4 +378,5 @@ class PhantomPlacementEnv:
         success = is_success(fb)
         outcome = "confirmed_real" if success else "not_confirmed_or_flagged"
         return StepResult(reward=1.0 if success else 0.0, outcome=outcome,
-                           confirmed_tracks=fb["confirmed_tracks"], eccm_label=fb["eccm_label"])
+                           confirmed_tracks=fb["confirmed_tracks"], eccm_label=fb["eccm_label"],
+                           feedback=fb)

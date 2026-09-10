@@ -35,4 +35,24 @@ function summary = judgeSummary(judgeMatPath, varargin)
     else
         summary.track_label = '';
     end
+
+    % RL v2 reactive radar (+radar/reactivePolicy.m) triggers. Scalars, because
+    % the bridge cannot return anything else (see the header). NaN when there is
+    % no confirmed real track to be suspicious of -- distinct from a real track
+    % that passed with low confidence, which is the trigger.
+    labels = cellstr(fb.track_label);
+    isReal = strcmp(labels, 'real');
+    if any(isReal)
+        summary.min_real_confidence = min(fb.track_confidence(isReal));
+    else
+        summary.min_real_confidence = NaN;
+    end
+    % The range-rate magnitude check (reported beside the ECCM score, not folded
+    % in) disagreeing on ANY confirmed track. false when the field is absent
+    % (legacy 2-D path) or empty.
+    if isfield(fb, 'track_rate_pass') && ~isempty(fb.track_rate_pass)
+        summary.any_rate_fail = any(~fb.track_rate_pass);
+    else
+        summary.any_rate_fail = false;
+    end
 end
