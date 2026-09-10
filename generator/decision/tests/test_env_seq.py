@@ -35,7 +35,8 @@ class FakeBridge:
                 "min_real_confidence": 0.9 if real else float("nan"),
                 "any_rate_fail": not real}
 
-    def reactive_step(self, screens, confirm, agile_from, n_reactions, conf, rate_fail, nf):
+    def reactive_step(self, screens, confirm, agile_from, n_reactions, conf, rate_fail, nf,
+                      reactions=None):
         self.reactive_calls += 1
         # Deterministic: first reaction turns agility on from the next block.
         return list(screens), list(confirm), float(nf), int(n_reactions) + 1, "agility"

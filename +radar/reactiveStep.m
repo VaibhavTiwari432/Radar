@@ -1,5 +1,6 @@
 function [screens, confirm, agileFrom, nReactions, last] = reactiveStep( ...
-        screens, confirm, agileFrom, nReactions, minRealConf, anyRateFail, nextFrame)
+        screens, confirm, agileFrom, nReactions, minRealConf, anyRateFail, nextFrame, ...
+        reactions)
 %REACTIVESTEP  Scalar/array-in, scalar/array-out wrapper over radar.reactivePolicy.
 %
 %   [screens, confirm, agileFrom, nReactions, last] = radar.reactiveStep( ...
@@ -19,7 +20,15 @@ function [screens, confirm, agileFrom, nReactions, last] = reactiveStep( ...
                    'n_reactions', double(nReactions), 'last', '');
     fb = struct('min_real_confidence', double(minRealConf), ...
                 'any_rate_fail', logical(anyRateFail));
-    s = radar.reactivePolicy(state, fb, 'NextFrame', double(nextFrame));
+    % reactions: optional escalation order (cellstr). Empty/missing -> policy
+    % default. Lets a caller isolate one lever, e.g. {'agility'} to test whether
+    % agility alone discriminates.
+    if nargin >= 8 && ~isempty(reactions)
+        s = radar.reactivePolicy(state, fb, 'NextFrame', double(nextFrame), ...
+                                 'Reactions', cellstr(reactions));
+    else
+        s = radar.reactivePolicy(state, fb, 'NextFrame', double(nextFrame));
+    end
     screens = s.screens;
     confirm = s.confirm;
     agileFrom = s.agile_from;

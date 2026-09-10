@@ -89,7 +89,7 @@ class MatlabBridge:
 
 
     def reactive_step(self, screens, confirm, agile_from, n_reactions,
-                      min_real_confidence, any_rate_fail, next_frame):
+                      min_real_confidence, any_rate_fail, next_frame, reactions=None):
         """RL v2 Step 3: advance the reactive radar one block via
         +radar/reactiveStep.m (the reaction logic is MATLAB, judge-side --
         Rule 2). Returns (screens list, confirm [M,N], agile_from, n_reactions,
@@ -101,6 +101,7 @@ class MatlabBridge:
         out = self._eng.radar.reactiveStep(
             list(screens), _matlab.double([list(confirm)]), float(agile_from),
             float(n_reactions), conf_in, bool(any_rate_fail), float(next_frame),
+            list(reactions) if reactions else [],
             nargout=5)
         screens_out, confirm_out, agile_out, nreact_out, last_out = out
         return (list(screens_out), [float(x) for x in confirm_out[0]],

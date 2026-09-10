@@ -115,7 +115,8 @@ class SequentialPhantomEnv:
     def __init__(self, bridge, rng: Optional[np.random.Generator] = None,
                  sensor=None, split: str = "train",
                  num_blocks: int = NUM_BLOCKS, frames_per_block: int = FRAMES_PER_BLOCK,
-                 reactive: bool = True, genuine: bool = False):
+                 reactive: bool = True, genuine: bool = False,
+                 reaction_order=None):
         self.bridge = bridge
         self.rng = rng or np.random.default_rng()
         self.sensor = sensor
@@ -134,6 +135,10 @@ class SequentialPhantomEnv:
         # discrimination, and any phantom "drop" is confounded. This is the
         # single-aperture version of benchmarkSuite's genuine+phantom scene.
         self.genuine = genuine
+        # Which escalation levers the reactive radar may use, in order. None =
+        # the policy default (screen -> agility -> confirm). Set e.g.
+        # ['agility'] to isolate whether agility alone discriminates.
+        self.reaction_order = reaction_order
         self.num_blocks = num_blocks
         self.frames_per_block = frames_per_block
         self.n_frames = num_blocks * frames_per_block
@@ -264,7 +269,8 @@ class SequentialPhantomEnv:
             self.screens, self.confirm, self.agile_from, self.n_reactions, reaction = \
                 self.bridge.reactive_step(
                     self.screens, self.confirm, self.agile_from, self.n_reactions,
-                    fb["min_real_confidence"], fb["any_rate_fail"], next_frame)
+                    fb["min_real_confidence"], fb["any_rate_fail"], next_frame,
+                    reactions=self.reaction_order)
 
         self.block += 1
         if last_block:
