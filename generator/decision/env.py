@@ -239,8 +239,15 @@ class PhantomPlacementEnv:
     def __init__(self, bridge: MatlabBridge, mother_ranges: tuple = MOTHER_RANGE_TRAIN,
                  rng: Optional[np.random.Generator] = None,
                  sensor: Optional["RadCharSensor"] = None, split: str = "train",
-                 mother_cross_speeds: tuple = MOTHER_CROSS_TRAIN):
+                 mother_cross_speeds: tuple = MOTHER_CROSS_TRAIN,
+                 radar: Optional[dict] = None):
         self.bridge = bridge
+        # Which radar this env is judged by (RL v2 Step 1, the radar suite).
+        # Keys: "render" / "judge" -> extra name-value args for render.m /
+        # runJudge.m (they override the defaults below), "sweep_schedule" -> the
+        # radar's true per-frame chirp, written into the pre-render .mat.
+        # None = the radar every published Phase C number was measured on.
+        self.radar = radar or {}
         self.mother_ranges = mother_ranges
         self.mother_cross_speeds = mother_cross_speeds
         self.rng = rng or np.random.default_rng()
@@ -355,14 +362,17 @@ class PhantomPlacementEnv:
         export_plan_for_render(
             [PhantomExport(plan=plan, rcs_m2=rcs_m2)], self.waveform, pre_mat,
             num_pulses_per_frame=NUM_PULSES_PER_FRAME,
+            sweep_schedule=self.radar.get("sweep_schedule"),
         )
         # The bearing every phantom is radiated on, one value per FRAME: the
         # platform's own azimuth trajectory. This is the whole coupling --
         # the agent cannot choose it, it follows from where its platform is.
-        judge_mat = self.bridge.render(
-            pre_mat, IncludeAngleChannel=True,
-            SourceAzimuthRad=[float(a) for a in mother.azimuth_rad(self._frame_times)])
-        fb = self.bridge.run_judge(judge_mat, EccmScreens=list(ECCM_SCREENS))
+        judge_mat = self.bridge.render(pre_mat, **{
+            "IncludeAngleChannel": True,
+            "SourceAzimuthRad": [float(a) for a in mother.azimuth_rad(self._frame_times)],
+            **self.radar.get("render", {})})
+        fb = self.bridge.run_judge(judge_mat, **{
+            "EccmScreens": list(ECCM_SCREENS), **self.radar.get("judge", {})})
 
         success = is_success(fb)
         outcome = "confirmed_real" if success else "not_confirmed_or_flagged"

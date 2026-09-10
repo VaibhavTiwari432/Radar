@@ -135,7 +135,7 @@ both published refutations are in the un-archived half and still run.
 | E1 | The amplitude screen's weakness is its **lever arm** — a slope over a 1.27× range change in 8 frames, bounded above by the CFAR blind zone (1124.2 m) and below by `v_ua` | **STANDS** | §8.3 |
 | E2 | The only variable with established predictive power over the judge is a **direct proxy for that lever arm** | **STANDS** | §10 |
 | E3 | Frames and speed are interchangeable levers on the same quantity | **STANDS** — P1 holds, slow arm +25.8 pp from F=8 to F=16 | `leverArm.m` |
-| E4 | At the default 8-frame dwell the amplitude screen scores **AUC ≈ 0.50** and rejects physically-consistent phantoms **by measurement noise, not by discrimination** | **STANDS** | `leverArm.m` §11.2 |
+| E4 | At the default 8-frame dwell the amplitude screen scores **AUC ≈ 0.50** and rejects physically-consistent phantoms **by measurement noise, not by discrimination** | **CLOSED (8 Sep 2026)** — true of the screen as it stood; the screen now abstains when it has no lever arm, so it no longer rejects by noise. See the 8 Sep follow-up in §F and `STAGE_F_PHASE0p5_RESULTS.md` §3.6 | `leverArm.m` §11.2 |
 | E5 | Doubling the dwell to 16 frames takes the screen to **AUC 0.634 (slow) / 0.797 (fast)** and the same generator's pass rate from 19 % to 57 % | **STANDS** — rise measured *inside* each speed, so it is not the speed confound | `leverArm.m` §11.1 |
 | E6 | A fast closer clamped at the CFAR floor goes flat and is caught | **QUALIFIED — predicted and refuted at F=16.** Only ~2 of 16 frames clamp; the mechanism is real but is outweighed by the longer lever arm at this F | `leverArm.m` P2 |
 | E7 | "The radar's ECCM rejects the structural swarm" at the default dwell | **QUALIFIED** — that verdict measures a screen too short-armed to make the measurement. Does **not** extend to the monopulse veto (geometric, A3) or to naive-DRFM arms (flat history, no lever arm would rescue) | §11.2 |
@@ -159,7 +159,7 @@ No twin: every number is a real judge verdict.
 | F5 | **Averaging screens loses detections.** The 3-screen default catches the flat-amplitude repeater **0.80** where amplitude-alone catches it **1.00**; adding screen 2b drops both single-phantom decoys to **0.00** | **STANDS** | same |
 | F6 | A learned D3QN policy beats a scripted heuristic | **WITHDRAWN — four runs, never significant.** Run 4's perfect 1.00 vs 0.92 gives Fisher *p* = 0.24 | `PHASE_C_RESULTS.md`, Gate C |
 | F7 | **The monopulse wall is total and N-INDEPENDENT.** 8 phantoms fare exactly as badly as 2: 8/8 confirmed, 8/8 flagged, **0 survivors**, in both power arms. Angle-blind, the same swarm sustains **8/8 at 100%** | **STANDS** | `generator.phantomCountSweep`, N=5 seeds |
-| F8 | The equal-RCS arm's loss at N=8 (6.20/8) is the radar **catching** phantoms | **WITHDRAWN — they are FALSE POSITIVES.** All 8 are confirmed; the 1.80 flags are the amplitude screen misfiring on weak far returns, and vanish (0.00) when that one screen is disabled. The phantoms are physically consistent by construction | same, screen-attribution run |
+| F8 | The equal-RCS arm's loss at N=8 (6.20/8) is the radar **catching** phantoms | **WITHDRAWN — they are FALSE POSITIVES.** All 8 are confirmed; the 1.80 flags are the amplitude screen misfiring on weak far returns, and vanish (0.00) when that one screen is disabled. The phantoms are physically consistent by construction. **Cause FIXED 8 Sep 2026:** with screen 1's abstain guards the cell reaches **0.00 flagged / 8.00 surviving** with the screen *enabled* (8 Sep follow-up below; `test_generator_phantom_count.m` 4/4). The 6.20/8 above is the pre-fix number | same, screen-attribution run |
 
 ### F4/F5 — per-screen attribution, measured
 
@@ -307,7 +307,8 @@ plainly rather than scored as good or bad.
 > The 1.80/2.60 figures above are superseded, not deleted — the dilution point
 > they make about screen averaging still stands and is independent of this fix.
 > Derivation and the anti-exploit argument: `STAGE_F_PHASE0p5_RESULTS.md` 3.6;
-> regression cover: `tests/test_amplitude_lever_abstain.m` (7/7).
+> regression cover: `tests/test_amplitude_lever_abstain.m` (8/8; an earlier "7/7"
+> miscounted a file that holds 8 tests, corrected 10 Sep 2026).
 
 ## G. What is complete, and what cannot be run
 

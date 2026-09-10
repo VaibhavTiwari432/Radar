@@ -49,6 +49,11 @@ class MatlabBridge:
             self._eng.quit()
             self._eng = None
 
+    def seed(self, s: int) -> None:
+        """MATLAB's rng, so a judge call's render noise is reproducible --
+        the same rng(seed,'twister') phaseBSweep.m uses."""
+        self._eng.rng(float(s), "twister", nargout=0)
+
     def render(self, pre_render_mat_path: str, judge_mat_path: Optional[str] = None,
                **render_kwargs) -> str:
         """Calls generator.render(preRenderMatPath, judgeMatPath, Name, value, ...).

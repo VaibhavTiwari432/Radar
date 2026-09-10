@@ -349,7 +349,7 @@ shrink the average.
 
 | test | result | change |
 |---|---|---|
-| `test_amplitude_lever_abstain.m` (new) | **7/7** | — |
+| `test_amplitude_lever_abstain.m` (new) | **8/8** | — (was misprinted 7/7; the file holds 8 tests. Corrected 10 Sep 2026) |
 | `test_generator_gate_a.m` | **4/4** | none |
 | `test_masquerade_amplitude.m` | **4/4** | none. Genuine and masquerade still fit slope −1.709 -> 10/10 real; constant-ERP fits 0.002 -> caught 7/10. The screen still works where it has a lever |
 | `test_generator_phantom_count.m` | **4/4** | **a published number moves — see below** |
@@ -542,9 +542,11 @@ does not exist until a session measures the same cells for real.
   runs, so the gap is falsifiable. The cell list is now stable enough for that,
   but the predictions should be committed against the configuration the F0.5
   decision actually settles on — and that decision needs the Mac.
-- No MATLAB source was modified, so no full-suite regression was run. The one
-  MATLAB test executed (`test_generator_phantom_count.m`) is the F0.2 gate.
-  Note that `CLAUDE.md`'s 119/119 baseline is already stale by design: 16+
+- ~~No MATLAB source was modified, so no full-suite regression was run.~~
+  *Superseded (9 Sep 2026): stale from the 8 Sep draft.* §3.6 and §3.7 did
+  modify MATLAB source, and the full suite was run: **258 passed / 0 failed /
+  52 incomplete** at the time of §3.6, and **260 / 0 / 52 across 21 files** on
+  the independent 9 Sep re-run. Note that `CLAUDE.md`'s 119/119 baseline is already stale by design: 16+
   tests were left broken by the 7 Aug archive (`trash/BROKEN_DOWNSTREAM.md`),
   including `test_multi_target_judge.m`.
 - Tier-2 refinement, the response surface, and per-screen attribution (Stage F
