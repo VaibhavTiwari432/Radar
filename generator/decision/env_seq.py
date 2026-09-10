@@ -105,11 +105,17 @@ class SeqStepResult:
 class SequentialPhantomEnv:
     def __init__(self, bridge, rng: Optional[np.random.Generator] = None,
                  sensor=None, split: str = "train",
-                 num_blocks: int = NUM_BLOCKS, frames_per_block: int = FRAMES_PER_BLOCK):
+                 num_blocks: int = NUM_BLOCKS, frames_per_block: int = FRAMES_PER_BLOCK,
+                 reactive: bool = True):
         self.bridge = bridge
         self.rng = rng or np.random.default_rng()
         self.sensor = sensor
         self.split = split
+        # reactive=False freezes the radar at its opening configuration -- the
+        # Step 2 kill-switch control: the SAME fixed phantom against a radar
+        # that reacts vs one that cannot. If reactions never help the radar,
+        # there is nothing for a sequential learner to exploit.
+        self.reactive = reactive
         self.num_blocks = num_blocks
         self.frames_per_block = frames_per_block
         self.n_frames = num_blocks * frames_per_block
@@ -221,7 +227,7 @@ class SequentialPhantomEnv:
         self._last_flagged = 0.0 if fb["eccm_label"] == "real" and fb["confirmed_tracks"] >= 1 else 1.0
 
         reaction = ""
-        if not last_block:
+        if not last_block and self.reactive:
             next_frame = (k + 1) * self.frames_per_block + 1     # 1-based first frame of block k+1
             self.screens, self.confirm, self.agile_from, self.n_reactions, reaction = \
                 self.bridge.reactive_step(

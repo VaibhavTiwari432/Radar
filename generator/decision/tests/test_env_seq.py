@@ -120,6 +120,19 @@ def test_hidden_reactions_never_enter_the_observation(tmp_path):
     assert 4.0 not in obs.tolist() and 4 not in obs.tolist()
 
 
+def test_non_reactive_radar_never_reacts(tmp_path):
+    # The kill-switch control: reactive=False freezes the radar for the whole
+    # episode, so reactive_step is never called and the same fixed phantom is
+    # scored against an unchanging radar.
+    b, e = _env(tmp_path, num_blocks=4)
+    e.reactive = False
+    e.reset()
+    for _ in range(4):
+        e.step(0)
+    assert b.reactive_calls == 0
+    assert e.agile_from == 0                         # never armed
+
+
 def test_flag_surfaces_next_block(tmp_path):
     b, e = _env(tmp_path, verdict="decoy", num_blocks=2)
     e.reset()
