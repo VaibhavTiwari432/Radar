@@ -60,10 +60,19 @@ ACTION_GRID_SEQ = list(itertools.product(RATE_CHOICES, CHIRP_BELIEFS))
 N_ACTIONS_SEQ = len(ACTION_GRID_SEQ)            # 8
 
 # Context grids. Drawn per episode, never chosen (see the module header on why).
-RANGE0_SEQ = (2900.0, 3400.0)                   # both 'real' on the base radar in the smoke probe
-MOTHER_RDOT_SEQ = (0.0, -20.0)
-MOTHER_RANGE_SEQ = (1400.0, 1900.0)             # clear of the sector wrap at 12 frames
-MOTHER_CROSS_SEQ = (1.5, 3.0)                   # non-zero, so the bearing screen can bind
+#
+# MEASURED, not guessed (envelope stage B, radar=base, 10 Sep 2026): the ONLY
+# cells that pass the STATIC base radar have a CLOSING platform. mrdot=0 is an
+# unwinnable trap -- the bearing screen then wants rate=0 while the amplitude
+# screen punishes a dead-flat return, so no policy can satisfy both. The winning
+# fixed cell (range0=3900, rate=-50, mrdot=-20) scored 10/10 at mother range
+# 1400, 1900 AND 2400. The context is drawn from that winnable region so the
+# kill-switch measures a drop from a real baseline, not from a floor of zero;
+# the phantom's rate and belief stay the agent's to choose.
+RANGE0_SEQ = (3400.0, 3900.0)
+MOTHER_RDOT_SEQ = (-20.0,)                      # closing; mrdot=0 is unwinnable (measured)
+MOTHER_RANGE_SEQ = (1400.0, 1900.0, 2400.0)     # all three winnable, clear of sector wrap
+MOTHER_CROSS_SEQ = (1.5,)                       # the envelope's own cross speed; bearing binds
 
 
 def radar_chirp_schedule(agile_from_frame: int, num_frames: int) -> np.ndarray:
@@ -106,7 +115,7 @@ class SequentialPhantomEnv:
     def __init__(self, bridge, rng: Optional[np.random.Generator] = None,
                  sensor=None, split: str = "train",
                  num_blocks: int = NUM_BLOCKS, frames_per_block: int = FRAMES_PER_BLOCK,
-                 reactive: bool = True):
+                 reactive: bool = True, genuine: bool = False):
         self.bridge = bridge
         self.rng = rng or np.random.default_rng()
         self.sensor = sensor
@@ -116,6 +125,15 @@ class SequentialPhantomEnv:
         # that reacts vs one that cannot. If reactions never help the radar,
         # there is nothing for a sequential learner to exploit.
         self.reactive = reactive
+        # genuine=True is the FALSE-ALARM control: render the target on its OWN
+        # (radially-consistent, constant) bearing instead of the cross-moving
+        # mother's. A real aircraft carries the bearing its range/rate imply, so
+        # the bearing screen passes it and its confidence stays high; a phantom
+        # is bearing-slaved to the mother and cannot. If the reactive radar
+        # ALSO flips a genuine target, its escalation is a false alarm, not
+        # discrimination, and any phantom "drop" is confounded. This is the
+        # single-aperture version of benchmarkSuite's genuine+phantom scene.
+        self.genuine = genuine
         self.num_blocks = num_blocks
         self.frames_per_block = frames_per_block
         self.n_frames = num_blocks * frames_per_block
@@ -127,6 +145,13 @@ class SequentialPhantomEnv:
     # -- episode setup ------------------------------------------------------
 
     def reset(self) -> np.ndarray:
+        # One seed per episode, drawn from the env rng, used to seed MATLAB's
+        # render noise per block (episode_seed*100 + block). Two episodes with
+        # the same env seed -- e.g. the kill-switch's frozen and reacting runs --
+        # then see IDENTICAL noise and diverge ONLY where a reaction changes the
+        # render or judge, which is exactly the effect being measured.
+        # Bounded so episode_seed*100 + block stays < 2^32 (MATLAB rng's cap).
+        self.episode_seed = int(self.rng.integers(1, 40_000_000))
         self.range0 = float(self.rng.choice(RANGE0_SEQ))
         self.mother_range = float(self.rng.choice(MOTHER_RANGE_SEQ))
         self.mother_cross = float(self.rng.choice(MOTHER_CROSS_SEQ))
@@ -214,9 +239,16 @@ class SequentialPhantomEnv:
         export_plan_for_render(
             [PhantomExport(plan=plan, rcs_m2=RCS_M2)], self.waveform, pre_mat,
             num_pulses_per_frame=NUM_PULSES_PER_FRAME, sweep_schedule=radar_sched)
+        if hasattr(self.bridge, "seed"):
+            self.bridge.seed(self.episode_seed * 100 + k)   # reproducible render noise
+        # Bearing: the phantom inherits the mother's (cross-moving) azimuth; a
+        # genuine target carries its own, which for radial motion is constant.
+        if self.genuine:
+            az = [0.0] * n_frames
+        else:
+            az = [float(a) for a in self.mother.azimuth_rad(frame_times)]
         judge_mat = self.bridge.render(
-            pre_mat, IncludeAngleChannel=True,
-            SourceAzimuthRad=[float(a) for a in self.mother.azimuth_rad(frame_times)],
+            pre_mat, IncludeAngleChannel=True, SourceAzimuthRad=az,
             PhantomSweepSchedule=[float(x) for x in belief_sched])
         fb = self.bridge.run_judge(judge_mat, EccmScreens=list(self.screens),
                                    ConfirmationThreshold=list(self.confirm))

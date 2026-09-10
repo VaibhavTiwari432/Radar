@@ -29,13 +29,13 @@ def _fixed_action(rate: float, belief: str = "up") -> int:
     return ACTION_GRID_SEQ.index((rate, belief))
 
 
-def _run(bridge, action_idx, n_episodes, reactive, base_seed):
+def _run(bridge, action_idx, n_episodes, reactive, base_seed, genuine=False):
     """REAL count over n_episodes of the fixed policy. Each episode uses its own
-    seed so reactive and frozen runs draw IDENTICAL engagements."""
+    seed so reactive/frozen/genuine runs draw IDENTICAL engagements and noise."""
     reals = 0
     for ep in range(n_episodes):
         env = SequentialPhantomEnv(bridge, rng=np.random.default_rng(base_seed + ep),
-                                   reactive=reactive)
+                                   reactive=reactive, genuine=genuine)
         env.reset()
         result = None
         done = False
@@ -75,21 +75,38 @@ def main():
                 best_reals, best_rate = k, rate
         print(f"  -> best fixed phantom: rate {best_rate:+.1f}, belief 'up'", flush=True)
 
-        # 2/3. that phantom vs frozen (control) and reacting (test) radar
+        # 2/3. that phantom vs frozen (control) and reacting (test) radar, plus
+        # a GENUINE target vs the reacting radar (the false-alarm control).
         a = _fixed_action(best_rate)
+        n = args.test_seeds
         seed2 = args.seed + 10_000
-        print("\n=== step 2: fixed phantom vs frozen vs reacting radar ===", flush=True)
-        k_frozen = _run(bridge, a, args.test_seeds, reactive=False, base_seed=seed2)
-        k_react = _run(bridge, a, args.test_seeds, reactive=True, base_seed=seed2)
-        p0, lo0, hi0 = wilson_ci(k_frozen, args.test_seeds)
-        p1, lo1, hi1 = wilson_ci(k_react, args.test_seeds)
-        drop_lo = wilson_diff_lo(k_react, args.test_seeds, k_frozen, args.test_seeds)
-        print(f"  frozen radar:   REAL {k_frozen}/{args.test_seeds}  {p0:.2f} [{lo0:.2f}, {hi0:.2f}]")
-        print(f"  reacting radar: REAL {k_react}/{args.test_seeds}  {p1:.2f} [{lo1:.2f}, {hi1:.2f}]")
-        print(f"  drop (frozen - reacting), lower 95% bound: {drop_lo:+.2f}")
-        verdict = ("LEARNABLE -- reactions bite; proceed to Step 4 training"
-                   if drop_lo > 0 else
-                   "NOT LEARNABLE -- reactions do not bite; a fixed phantom suffices (P6)")
+        print("\n=== step 2: phantom vs frozen/reacting, and the genuine-target control ===", flush=True)
+        k_frozen = _run(bridge, a, n, reactive=False, base_seed=seed2)
+        k_react = _run(bridge, a, n, reactive=True, base_seed=seed2)
+        k_genuine = _run(bridge, a, n, reactive=True, base_seed=seed2, genuine=True)
+        p0, lo0, hi0 = wilson_ci(k_frozen, n)
+        p1, lo1, hi1 = wilson_ci(k_react, n)
+        pg, log, hig = wilson_ci(k_genuine, n)
+        drop_lo = wilson_diff_lo(k_react, n, k_frozen, n)
+        print(f"  phantom vs frozen radar:    REAL {k_frozen}/{n}  {p0:.2f} [{lo0:.2f}, {hi0:.2f}]")
+        print(f"  phantom vs reacting radar:  REAL {k_react}/{n}  {p1:.2f} [{lo1:.2f}, {hi1:.2f}]")
+        print(f"  GENUINE vs reacting radar:  REAL {k_genuine}/{n}  {pg:.2f} [{log:.2f}, {hig:.2f}]")
+        print(f"  phantom drop (frozen - reacting), lower 95% bound: {drop_lo:+.2f}")
+
+        bites = drop_lo > 0
+        discriminates = pg >= 0.8                # a genuine target mostly survives
+        if bites and discriminates:
+            verdict = ("LEARNABLE -- reactions bite the phantom AND spare the genuine "
+                       "target; the escalation is discrimination, not a false alarm. "
+                       "Proceed to Step 4 training.")
+        elif bites and not discriminates:
+            verdict = ("CONFOUNDED -- reactions drop the phantom but ALSO flip the genuine "
+                       f"target ({pg:.2f} real). The escalation is a false alarm, not "
+                       "discrimination; a 'win' here would be the radar crying wolf. "
+                       "Report this; do not train on it.")
+        else:
+            verdict = ("NOT LEARNABLE -- reactions do not measurably drop the phantom; "
+                       "a fixed phantom suffices (P6).")
         print(f"\n  VERDICT [SIM]: {verdict}", flush=True)
 
 

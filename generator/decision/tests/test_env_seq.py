@@ -133,6 +133,20 @@ def test_non_reactive_radar_never_reacts(tmp_path):
     assert e.agile_from == 0                         # never armed
 
 
+def test_genuine_target_renders_on_its_own_constant_bearing(tmp_path):
+    # The false-alarm control: a genuine (radial) target carries a constant
+    # bearing, not the cross-moving mother's. The phantom does not.
+    b_ph, e_ph = _env(tmp_path)
+    e_ph.reset(); e_ph.step(0)
+    b_gen, e_gen = _env(tmp_path)
+    e_gen.genuine = True
+    e_gen.reset(); e_gen.step(0)
+    ph_az = b_ph.render_calls[0]["SourceAzimuthRad"]
+    gen_az = b_gen.render_calls[0]["SourceAzimuthRad"]
+    assert gen_az == [0.0, 0.0, 0.0]                # genuine: constant boresight
+    assert ph_az != [0.0, 0.0, 0.0]                 # phantom: slaved to the moving mother
+
+
 def test_flag_surfaces_next_block(tmp_path):
     b, e = _env(tmp_path, verdict="decoy", num_blocks=2)
     e.reset()
