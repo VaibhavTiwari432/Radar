@@ -28,9 +28,17 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
         N_FAST   = 400;  N_PULSES = 32;  N_FRAMES = 8
         SUBAP_M  = 0.30
         NOISE    = 0.05
-        % Inside R_ua = 2997.9 m (Phase C1) -- this project's older angle
-        % scene ran 1800-4200 m, which at 50 kHz PRF is partly ambiguous.
-        RANGES   = [900 1600 2300 2900]
+        % REWIRED 11 Sep 2026 onto generator.render's per-phantom azimuth
+        % (PhantomAzimuthRad) -- the capability these tests were filtered for.
+        % Ranges LIFTED clear of the corrected 1798.8 m blind range (the old
+        % 900-2900 m scene predates the 8 kHz PRF and its near members are now
+        % eclipsed). A consequence, itself the P3 finding of SWARM_RESULTS.md:
+        % the wrap regime (a formation WIDER than the +-2.866 deg sector) needs
+        % near ranges that are now inside the blind zone, so it is unreachable
+        % here and the two-sided bound below no longer has an out-of-sector row.
+        RANGES   = [2200 2800 3400 4000]
+        RATE_MPS = -20                   % gentle closer; stays clear of blind range over the dwell
+        REF_RANGE_M = 2200               % SNR reference (equal received power to here)
         FORMATION_CROSS_RANGE_M = 100    % genuine formation's real spread
         N_SEEDS  = 8
         THETA_3DB_DEG = 3.0
@@ -57,26 +65,10 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
         end
 
         function test_d2_sweep_snr_vs_monopulse_flag_rate(tc)
-            % 12 Aug 2026: NOT "pending rewire". This file needs
-            % PER-OBJECT AZIMUTH -- its genuine-formation arm places targets
-            % on different bearings and asks whether the co-bearing screen
-            % can tell them from a collinear fan. +generator/render.m takes
-            % ONE SourceAzimuthRad for the WHOLE scene, and that is
-            % ARCHITECTURAL rather than an omission (Blueprint 2.4: a single
-            % transmit aperture cannot be projected into looking angularly
-            % separated, so there is deliberately no code path that could
-            % give two phantoms different bearings -- it is the mechanism
-            % behind the co-bearing screen working at all).
-            %
-            % The rebuilt generator models the ADVERSARY, so it cannot render
-            % a genuine multi-bearing formation, which is what this test's
-            % control arm is. CAPABILITY ABSENT -- see
-            % trash/BROKEN_DOWNSTREAM.md Class C.
-            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
-                ['This test needs PER-OBJECT AZIMUTH for its genuine-formation ' ...
-                 'arm. generator.render takes one SourceAzimuthRad per scene ' ...
-                 'by design (Blueprint 2.4). NOT rewirable -- see ' ...
-                 'trash/BROKEN_DOWNSTREAM.md Class C.']);
+            % REWIRED 11 Sep 2026: the genuine-formation arm places targets on
+            % DIFFERENT bearings, which +generator/render.m now renders via
+            % PhantomAzimuthRad (per-phantom azimuth). Previously filtered as
+            % "not rewirable"; the capability is built.
         % THE DELIVERABLE. Two scenes swept over the same SNR axis:
         %   collinear  -- 4 phantoms from ONE jammer, all on one bearing
         %   formation  -- 4 GENUINE objects, ~100 m cross-range spread
@@ -136,10 +128,20 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
             % scatter even though it does not move the screen -- that is what
             % distinguishes "SNR-invariant by construction" from "the angle
             % channel is not responding to SNR at all".
-            expectedRatio = sqrt(10^((snrGrid(end)-snrGrid(1))/10));
-            measuredRatio = azScatter(1) / azScatter(end);
-            fprintf('[D2] scatter ratio across the sweep: measured %.1fx | 1/sqrt(SNR) predicts %.1fx\n', ...
-                measuredRatio, expectedRatio);
+            %
+            % Measured over the SNR points where the angle is MEASURABLE at all.
+            % Below the detection floor nothing confirms, so azScatter is NaN
+            % there (rebuilt-generator measurement, 11 Sep 2026: the corrected
+            % 2200-4000 m geometry stops confirming below ~0 dB); ratioing that
+            % endpoint would compare a real scatter against "no measurement".
+            valid = find(~isnan(azScatter));
+            tc.assertGreaterThanOrEqual(numel(valid), 2, ...
+                'Angle scatter was measurable at fewer than two SNR points.');
+            expectedRatio = sqrt(10^((snrGrid(valid(end))-snrGrid(valid(1)))/10));
+            measuredRatio = azScatter(valid(1)) / azScatter(valid(end));
+            fprintf(['[D2] scatter ratio over the measurable SNR span (%+d..%+d dB): ' ...
+                     'measured %.1fx | 1/sqrt(SNR) predicts %.1fx\n'], ...
+                snrGrid(valid(1)), snrGrid(valid(end)), measuredRatio, expectedRatio);
             tc.verifyEqual(measuredRatio, expectedRatio, 'RelTol', 0.35, ...
                 ['Measured angular scatter does not follow 1/sqrt(SNR) -- the angle ' ...
                  'channel is not behaving like monopulse.']);
@@ -157,26 +159,10 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
         end
 
         function test_d2_the_boundary_is_cross_range_not_snr(tc)
-            % 12 Aug 2026: NOT "pending rewire". This file needs
-            % PER-OBJECT AZIMUTH -- its genuine-formation arm places targets
-            % on different bearings and asks whether the co-bearing screen
-            % can tell them from a collinear fan. +generator/render.m takes
-            % ONE SourceAzimuthRad for the WHOLE scene, and that is
-            % ARCHITECTURAL rather than an omission (Blueprint 2.4: a single
-            % transmit aperture cannot be projected into looking angularly
-            % separated, so there is deliberately no code path that could
-            % give two phantoms different bearings -- it is the mechanism
-            % behind the co-bearing screen working at all).
-            %
-            % The rebuilt generator models the ADVERSARY, so it cannot render
-            % a genuine multi-bearing formation, which is what this test's
-            % control arm is. CAPABILITY ABSENT -- see
-            % trash/BROKEN_DOWNSTREAM.md Class C.
-            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
-                ['This test needs PER-OBJECT AZIMUTH for its genuine-formation ' ...
-                 'arm. generator.render takes one SourceAzimuthRad per scene ' ...
-                 'by design (Blueprint 2.4). NOT rewirable -- see ' ...
-                 'trash/BROKEN_DOWNSTREAM.md Class C.']);
+            % REWIRED 11 Sep 2026: the genuine-formation arm places targets on
+            % DIFFERENT bearings, which +generator/render.m now renders via
+            % PhantomAzimuthRad (per-phantom azimuth). Previously filtered as
+            % "not rewirable"; the capability is built.
         % THE SWEEP ABOVE FOUND NO SNR BOUNDARY, AND THE REASON IS STRUCTURAL.
         % +engine/runJudge.m's co-bearing screen is a SELF-CALIBRATING RATIO
         % test: it asks whether the spread of the tracks' mean azimuths is
@@ -299,26 +285,10 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
         end
 
         function test_d2_interaction_does_masquerade_buy_back_angle_survivability(tc)
-            % 12 Aug 2026: NOT "pending rewire". This file needs
-            % PER-OBJECT AZIMUTH -- its genuine-formation arm places targets
-            % on different bearings and asks whether the co-bearing screen
-            % can tell them from a collinear fan. +generator/render.m takes
-            % ONE SourceAzimuthRad for the WHOLE scene, and that is
-            % ARCHITECTURAL rather than an omission (Blueprint 2.4: a single
-            % transmit aperture cannot be projected into looking angularly
-            % separated, so there is deliberately no code path that could
-            % give two phantoms different bearings -- it is the mechanism
-            % behind the co-bearing screen working at all).
-            %
-            % The rebuilt generator models the ADVERSARY, so it cannot render
-            % a genuine multi-bearing formation, which is what this test's
-            % control arm is. CAPABILITY ABSENT -- see
-            % trash/BROKEN_DOWNSTREAM.md Class C.
-            tc.assumeTrue(archivedDepsPresent({'engine.entity.render'}), ...
-                ['This test needs PER-OBJECT AZIMUTH for its genuine-formation ' ...
-                 'arm. generator.render takes one SourceAzimuthRad per scene ' ...
-                 'by design (Blueprint 2.4). NOT rewirable -- see ' ...
-                 'trash/BROKEN_DOWNSTREAM.md Class C.']);
+            % REWIRED 11 Sep 2026: the genuine-formation arm places targets on
+            % DIFFERENT bearings, which +generator/render.m now renders via
+            % PhantomAzimuthRad (per-phantom azimuth). Previously filtered as
+            % "not rewirable"; the capability is built.
         % THE INTERACTION THE BRIEF CALLS THE MOST INTERESTING OPEN QUESTION.
         %
         % First, the premise needs correcting, because the arithmetic does not
@@ -385,23 +355,35 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
     methods (Access = private)
 
         function [nConf, nFlag, azSig] = runScene(tc, snrDb, crossRangeM)
-        %RUNSCENE  N objects, one bearing each. crossRangeM = 0 puts them all
-        %   on the SAME bearing (the collinear one-jammer signature);
-        %   crossRangeM > 0 spreads them like a genuine formation.
-            C = physics.Constants();
-            amp = tc.NOISE * 10^(snrDb/20);           % pre-compression amplitude SNR
+        %RUNSCENE  N objects, one bearing each, through generator.render's
+        %   per-phantom azimuth. crossRangeM = 0 puts them all on the SAME
+        %   bearing (the collinear one-jammer signature); crossRangeM > 0
+        %   spreads them like a genuine formation. An on-manifold phantom is
+        %   signal-identical to a genuine target, so the same renderer builds
+        %   both arms -- that is exactly why the co-bearing screen is the only
+        %   thing that can tell a one-aperture fan from a real formation.
             nObj = numel(tc.RANGES);
-            % A real formation is spread in CROSS-RANGE (metres), so its
-            % angular spread shrinks with range -- deriving the angles from a
-            % fixed metre offset rather than a fixed angle is what makes the
-            % comparison fair at every range in the scene.
+            % A real formation is spread in CROSS-RANGE (metres), so its angular
+            % spread shrinks with range -- fixed metre offset, not fixed angle,
+            % is what makes the comparison fair at every range in the scene.
             offsets = linspace(-crossRangeM/2, crossRangeM/2, nObj);
-            azs = atan2(offsets, tc.RANGES);
+            azs = atan2(offsets, tc.RANGES);                 % per-object azimuth
+            % Equal received power to the reference range: comparably detectable
+            % objects, the AmpScale compensation the archived scene did by hand.
+            rcs = (tc.RANGES / tc.REF_RANGE_M).^4;
+            % SNR set by the noise floor relative to the reference object's own
+            % received amplitude (pre-compression amplitude SNR = A_ref/noise).
+            Aref = physics.targetReturn('RangeM', tc.REF_RANGE_M, 'RcsM2', 1.0).sim_amplitude;
+            noiseAmp = Aref / 10^(snrDb/20);
 
             nConf = 0; nFlag = 0; sigAcc = [];
             for seed = 1:tc.N_SEEDS
-                [sumC, dltC] = tc.render(tc.RANGES, azs, amp, seed);
-                fb = tc.judge(sumC, dltC);
+                rng(9000 + seed, 'twister');
+                jm = renderPhantomScene(tc.RANGES, tc.RATE_MPS, 'Rcs', rcs, ...
+                    'MotherRangeM', 900, 'NumFrames', tc.N_FRAMES, 'NumPulses', tc.N_PULSES, ...
+                    'PhantomAzimuthRad', azs(:), 'NoiseAmplitude', noiseAmp, ...
+                    'Tag', sprintf('d2_%d_%d', round(crossRangeM), seed));
+                fb = engine.runJudge(jm);
                 nConf = nConf + fb.confirmed_tracks;
                 nFlag = nFlag + double(fb.cobearing_flagged);
                 s = fb.track_azimuth_rad;
@@ -411,69 +393,6 @@ classdef test_monopulse_snr_boundary < matlab.unittest.TestCase
             end
             nConf = nConf / tc.N_SEEDS;
             azSig = mean(sigAcc);
-        end
-
-        function [sumC, dltC] = render(tc, ranges, azs, amp, seed)
-            C = physics.Constants();
-            rs = RandStream('twister', 'Seed', 9000 + seed);
-            n = round(tc.PW_S * C.fs); t = (0:n-1)'/C.fs;
-            chirp = exp(1i*pi*(tc.BW_HZ/tc.PW_S)*t.^2);
-            q = struct('sigma_accel_mps2', 0.05*9.80665, 'rcs_process_std_db', 0.233);
-
-            states = cell(1, numel(ranges)); ampScale = zeros(1, numel(ranges));
-            for i = 1:numel(ranges)
-                states{i} = engine.entity.EntityState('range_m', ranges(i), ...
-                    'range_rate_mps', -40, 'class', 'fighter', 'rcs_dbsm', 0, ...
-                    'swerling', 0, 'azimuth_rad', azs(i));
-                % Compensated ONCE from the initial range so every object is
-                % comparably detectable while its amplitude still rises as
-                % 1/R^2 as it closes -- recomputing per frame pins amplitude
-                % flat, which is the naive-DRFM signature and gets the GENUINE
-                % formation flagged by the amplitude screen (a bug found in
-                % tests/test_angle_channel.m and not repeated here).
-                ampScale(i) = amp * (ranges(i) / 1800)^2;
-            end
-
-            sumC = complex(zeros(tc.N_FAST, tc.N_PULSES, tc.N_FRAMES));
-            dltC = complex(zeros(tc.N_FAST, tc.N_PULSES, tc.N_FRAMES));
-            for k = 1:tc.N_FRAMES
-                fsum = complex(zeros(tc.N_FAST, tc.N_PULSES));
-                fdlt = complex(zeros(tc.N_FAST, tc.N_PULSES));
-                for i = 1:numel(states)
-                    [cs, ~, cd] = engine.entity.render(states{i}, 'AmpScale', ampScale(i), ...
-                        'NumPulses', tc.N_PULSES, 'FastTimeSamples', tc.N_FAST, ...
-                        'CarrierHz', tc.CARRIER, 'PrfHz', tc.PRF_HZ, ...
-                        'PulseWidth', tc.PW_S, 'Bandwidth', tc.BW_HZ, ...
-                        'SubapertureSepM', tc.SUBAP_M, 'ChirpOverride', chirp, ...
-                        'RandStream', rs);
-                    fsum = fsum + cs; fdlt = fdlt + cd;
-                end
-                % Independent noise per channel -- they are separate receivers,
-                % so it does not cancel in the monopulse ratio. That is exactly
-                % what sets the angle accuracy this test is sweeping.
-                sumC(:,:,k) = fsum + tc.noise(rs);
-                dltC(:,:,k) = fdlt + tc.noise(rs);
-                for i = 1:numel(states)
-                    states{i} = engine.entity.propagate(states{i}, 1.0, q, rs);
-                end
-            end
-        end
-
-        function nz = noise(tc, rs)
-            nz = tc.NOISE * (randn(rs, tc.N_FAST, tc.N_PULSES) + ...
-                          1i*randn(rs, tc.N_FAST, tc.N_PULSES)) / sqrt(2);
-        end
-
-        function fb = judge(tc, sumC, dltC)
-            C = physics.Constants();
-            f = [tempname '.mat'];
-            S = struct('rx_frames', sumC, 'rx_frames_delta', dltC, 'fs', C.fs, ...
-                'pulse_width_s', tc.PW_S, 'bandwidth_hz', tc.BW_HZ, ...
-                'prf_hz', tc.PRF_HZ, 'carrier_hz', tc.CARRIER, ...
-                'frame_interval_s', 1.0, 'subaperture_sep_m', tc.SUBAP_M);
-            save(f, '-struct', 'S');
-            cleanup = onCleanup(@() delete(f)); %#ok<NASGU>
-            fb = engine.runJudge(f);
         end
 
         function [lo, hi] = wilson(~, k, n)
