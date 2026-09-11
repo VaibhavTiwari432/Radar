@@ -7,6 +7,8 @@ classdef test_skin_backtrack < matlab.unittest.TestCase
 %   3. causality: the NEAR member is never backtracked to the far one
 %   4. bearings that CROSS mid-dwell (zero-mean difference, real trend) are not
 %      a pair -- the case a mean-only test would wrongly accept
+%   5. a track failing runJudge's NIS test (stitched from two objects) is
+%      never used as an emitter
 
     properties (Constant)
         T = 0:7                         % 8 frames at 1 s
@@ -44,6 +46,17 @@ classdef test_skin_backtrack < matlab.unittest.TestCase
             fb.track_range_m = fliplr(fb.track_range_m);      % track 1 is now FAR
             v = track.skinBacktrack(fb);
             tc.verifyEqual(v, ["backtracked", "emitter"]);
+        end
+
+        function test_an_incoherent_track_cannot_be_an_emitter(tc)
+            % A track stitched from two objects alternates between their
+            % bearings; its huge scatter would make it pair with anything.
+            % runJudge's NIS column marks it, and the counter must refuse it.
+            azF = deg2rad(-0.6) * ones(1, 8);
+            fb = tc.scene(deg2rad(repmat([0.2 -0.6], 1, 4)), azF);
+            fb.track_nis_pass = [false, true];
+            v = track.skinBacktrack(fb);
+            tc.verifyEqual(v, ["undetermined", "unpaired"]);
         end
 
         function test_crossing_bearings_are_not_a_pair(tc)

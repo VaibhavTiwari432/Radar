@@ -608,11 +608,26 @@ function feedback = runJudge(matFile, varargin)
     for k = 1:numFrames
         tk = history{k};
         if isempty(tk) || isempty(peakRange{k}); continue; end
+        estAll = arrayfun(@(x) localTrackRange(x.State, useCartesian), tk);
         for t = 1:numel(tk)
             id = tk(t).TrackID;
             if ~isKey(rangeByID, id); continue; end
-            estRange = localTrackRange(tk(t).State, useCartesian);
+            estRange = estAll(t);
             [~, im] = min(abs(peakRange{k} - estRange));
+            % ONE PEAK, ONE TRACK (11 Sep 2026) -- trackerGNN's own rule. A
+            % track COASTING through a missed frame used to borrow whatever
+            % peak was nearest, even one GNN had already given to another
+            % track -- measured: a weak skin track at 4403 m exported
+            % [4403 3185 4356 3138 4356 3138], alternating with its 3185 m
+            % neighbour, and every exported series (range, az, rate, NIS...)
+            % inherited the splice. Keep the peak only if this track is also
+            % the peak's nearest track. NOT the frame log's 200 "m" gate:
+            % trackerGNN reads that number as a normalised distance (~14
+            % sigma), so as metres it empties genuinely confirmed tracks at
+            % low SNR (test_monopulse_snr_boundary D2, 0 dB). Skipping the
+            % whole frame keeps every per-track series aligned.
+            [~, owner] = min(abs(estAll - peakRange{k}(im)));
+            if owner ~= t; continue; end
             rangeByID(id) = [rangeByID(id); peakRange{k}(im)];
             ampByID(id)   = [ampByID(id);   peakAmp{k}(im)];
             timeByID(id)  = [timeByID(id);  times(k)];
@@ -1029,13 +1044,19 @@ function feedback = runJudge(matFile, varargin)
         feedback.cross_range_ceiling_m = [];
     end
     % ================= BACKTRACK: WHERE IS THE EMITTER? ======================
-    % Run the deception backwards. Every phantom is radiated from one physical
-    % platform, so each confirmed track carries that platform's OWN bearing
-    % (Blueprint 2.4, enforced architecturally in +generator/render.m -- there
-    % is no per-phantom angle argument to forge with). Pooling the tracks'
-    % measured azimuths therefore estimates the EMITTER's bearing, and does so
-    % better the more phantoms it transmits: the adversary pays for each extra
-    % false target with another independent look at itself.
+    % Run the deception backwards. Every phantom from one aperture carries that
+    % platform's OWN bearing (Blueprint 2.4). Pooling the tracks' measured
+    % azimuths therefore estimates the EMITTER's bearing, and does so better
+    % the more phantoms it transmits: the adversary pays for each extra false
+    % target with another independent look at itself.
+    %
+    % ONLY WHEN THE TRACKS SHARE A BEARING (11 Sep 2026). A genuine formation,
+    % or a multi-drone swarm (+generator/render.m PhantomAzimuthRad), puts its
+    % tracks at several bearings; their mean is no emitter's bearing, yet it
+    % used to be exported as a 'nearest-cobearing' fix regardless. The pool is
+    % now taken only for one track or a co-bearing group; otherwise the fix is
+    % 'none-multiple-bearings' and pairwise attribution is
+    % +track/skinBacktrack.m's job.
     %
     % WHAT ONE APERTURE CAN AND CANNOT RECOVER, stated plainly because the
     % difference is geometry and no amount of processing changes it:
@@ -1057,12 +1078,17 @@ function feedback = runJudge(matFile, varargin)
     % which case it is in; it reports the bound and lets the caller say.
     emitterAz = NaN; emitterEl = NaN; emitterRangeMax = Inf;
     emitterPos = nan(3,1); emitterFix = 'none';
-    if hasAngle && confirmedCount > 0
+    multiBearing = hasAngle && nnz(valid) >= 2 && ~coBearing;
+    if multiBearing
+        emitterFix = 'none-multiple-bearings';
+    elseif hasAngle && confirmedCount > 0
         azAll = cell2mat(cellfun(@(a) a(:), trackAz(:)', 'UniformOutput', false)');
         emitterAz = mean(azAll(isfinite(azAll)));
         elAll = cell2mat(cellfun(@(e) e(:), trackEl(:)', 'UniformOutput', false)');
         if any(isfinite(elAll)); emitterEl = mean(elAll(isfinite(elAll))); end
-        nearestPerTrack = cellfun(@(r) min(r), trackRange);
+        % [r; Inf]: a confirmed track can own no peak at all (every frame's
+        % nearest peak belonged to another track), and min([]) is [].
+        nearestPerTrack = cellfun(@(r) min([r(:); Inf]), trackRange);
         [emitterRangeMax, iNear] = min(nearestPerTrack);
         elForPos = emitterEl; if ~isfinite(elForPos); elForPos = 0; end
         emitterPos = localSphericalToCartesian(emitterRangeMax, emitterAz, ...

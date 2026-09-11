@@ -19,10 +19,12 @@ function [verdict, diag] = emitterAttribution(feedback)
 %   THE PHYSICS, WHICH IS THE WHOLE RULE. A repeater transmits from ONE
 %   aperture. Every phantom it radiates therefore leaves that aperture at the
 %   platform's own bearing and sweeps at the platform's own angular rate,
-%   while each phantom independently reports a range of its choosing. That is
-%   architectural in this project, not incidental: +generator/render.m has one
-%   bearing per frame shared by every phantom and no per-phantom angle
-%   argument exists to pass (Blueprint 2.4).
+%   while each phantom independently reports a range of its choosing
+%   (Blueprint 2.4). That holds per APERTURE: since 11 Sep 2026
+%   +generator/render.m's PhantomAzimuthRad renders a multi-drone swarm, each
+%   drone its own bearing and rate, and this rule then groups nothing a
+%   genuine formation would not (SWARM_RESULTS.md Phase 4). For a swarm whose
+%   drones' own skin echoes confirm, see +track/skinBacktrack.m.
 %
 %   So a group of tracks at DIFFERENT ranges sharing ONE angular rate is a
 %   group radiated from one place. Independent aircraft cannot produce it:

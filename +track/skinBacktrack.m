@@ -9,7 +9,8 @@ function [verdict, diag] = skinBacktrack(feedback)
 %       "emitter"       the nearer member of such a pair (and not itself
 %                       backtracked further): the platform's own skin echo
 %       "unpaired"      no nearer track shares its bearing
-%       "undetermined"  fewer than 4 usable azimuths: no pair test possible
+%       "undetermined"  fewer than 4 usable azimuths, or the track fails
+%                       runJudge's NIS test (not one coherent object)
 %   diag    : per track, partner index (0 = none) and the pair's two z-scores
 %
 %   THE PHYSICS. A repeater radiates from its own aperture, so each phantom's
@@ -48,6 +49,17 @@ function [verdict, diag] = skinBacktrack(feedback)
     az = feedback.track_azimuth_rad; t = feedback.track_time_s;
     meanR = cellfun(@(r) mean(r(isfinite(r))), feedback.track_range_m);
     usable = cellfun(@(a) nnz(isfinite(a)) >= MIN_COMMON, az);
+    % ONE OBJECT PER TRACK. A weak echo can be stitched to a neighbour's hits
+    % (measured: a 0.03 m^2 skin track hopping 4403 <-> 3138 m, NIS 184 vs
+    % 0.1-0.3 for clean tracks). Its azimuths then alternate between two
+    % bearings, the pair scatter explodes, and it "pairs" with everything --
+    % 40/80 genuine far aircraft backtracked before this gate. The splice's
+    % root cause (runJudge's ungated series rebuild) is fixed; this stays as
+    % the defence for any other incoherent track. runJudge's own NIS column is
+    % the coherence test; absent (synthetic input) = pass.
+    if isfield(feedback, 'track_nis_pass')
+        usable = usable & logical(feedback.track_nis_pass(:)');
+    end
     verdict(usable) = "unpaired";
     cellM = physics.Constants().range_per_sample;
 
