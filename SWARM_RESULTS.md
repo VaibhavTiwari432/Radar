@@ -188,6 +188,14 @@ also the peak's nearest track (trackerGNN's own exclusivity). With it, the
 0.03 m² drone confirms 18/20 (was 0/20) and genuine false alarms fall 40 → 9/80.
 Rows 3–0.1 m² are bit-identical before and after: no splice occurred there.
 
+**Mandatory qualifier — thermal noise only (CLAIMABLE_RESULTS I6).** Clutter was
+OFF, the repo default. With ground clutter on, I2 measured drones of 0.10, 0.03
+and 0.01 m² going 5/5 → 0/5 detected, and I4 showed the MTI notch removes a
+tangentially-flying drone at any RCS. Either would starve this counter of skin
+echoes at realistic drone sizes. `skinBacktrackCheck` with clutter on
+(`renderPhantomScene`'s `ClutterGammaDB`, not yet passed through) is the
+unmeasured, decisive next run.
+
 **How to read it.** The skin backtrack is the first counter in this programme
 that separates a swarm from a genuine formation. Its reach is set by
 detectability, not processing: the drones must sit outside the blind range, have
