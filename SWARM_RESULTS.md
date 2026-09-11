@@ -115,6 +115,85 @@ expose a swarm whose phantoms all originate from a tight cluster of near
 emitters no genuine formation has. That needs per-drone geometry and detectable
 drone RCS — the next front, not this one.
 
+## Phase 6 — the skin-echo backtrack counter WORKS, inside a detectability envelope
+
+The drones are real objects: each reflects the radar's pulse. A repeater radiates
+from its own aperture, so a phantom's bearing series IS its drone's, frame for
+frame, and a confirmed drone skin echo forms a co-bearing PAIR with its phantom
+at a nearer range. The scene-wide co-bearing screen cannot see pairs (it asks
+whether ALL tracks share a bearing). `+track/skinBacktrack.m` tests every
+(nearer, farther) pair: the per-frame azimuth difference must have mean AND slope
+within 3 SE of zero, SE from the pair's own scatter; only NIS-coherent tracks.
+Separate diagnostic, not in the label. Predictions D1–D5 committed first
+(`SWARM_PREDICTIONS.md`, `9e225753`).
+
+`experiments.skinBacktrackCheck`, N = 4, 20 seeds. Drones at 2000–5600 m (clear
+of the 1798.8 m blind range; every earlier swarm run parked them at 900 m,
+inside it), each crossing at its own speed; phantoms beyond the whole swarm at
+equal received power. Three arms share the SAME 2N ranges, rates and powers row
+for row: `swarm` (far i carries near i's bearing series), `genuine` (every far
+object its own bearing and motion), `trailing` (far i starts directly behind
+near i at the same linear cross speed — the counter's hard case). "Backtracked"
+counts far objects out of 80; every swarm backtrack below went to its OWN drone.
+Log: `results/swarm/skin_backtrack_N4_fixedjudge.log`.
+
+| drone RCS | skin echoes confirmed, by drone range | swarm backtracked | genuine | trailing |
+|---|---|---|---|---|
+| 3 m² | 20 20 20 **0** | 58/80 — 0.72 [0.62, 0.81] | 0/80 [0.00, 0.05] | 6/80 [0.03, 0.15] |
+| 1 m² | 20 20 20 **0** | 59/80 — 0.74 [0.63, 0.82] | 0/80 [0.00, 0.05] | 9/80 [0.06, 0.20] |
+| 0.3 m² | 20 20 20 **0** | 59/80 — 0.74 [0.63, 0.82] | 0/80 [0.00, 0.05] | 18/80 [0.15, 0.33] |
+| 0.1 m² | 20 20 20 **0** | 59/80 — 0.74 [0.63, 0.82] | 3/80 [0.01, 0.10] | 23/80 [0.20, 0.39] |
+| 0.03 m² | 20 20 18 **0** | 45/80 — 0.56 [0.45, 0.67] | 9/80 [0.06, 0.20] | 19/80 [0.16, 0.34] |
+| 0.01 m² | 20 20 0 **0** | 38/80 — 0.48 [0.37, 0.58] | 14/80 [0.11, 0.27] | 15/80 [0.12, 0.29] |
+
+**Masking check** (`'GapM', 2400`: first phantom 2400 m past the last drone
+instead of 1200 m, nothing else changed):
+
+| drone RCS | skin by drone range | swarm | genuine | trailing |
+|---|---|---|---|---|
+| 3 m² | 20 20 20 **20** | 80/80 — **1.00 [0.95, 1.00]** | 0/80 [0.00, 0.05] | 32/80 [0.30, 0.51] |
+| 1 m² | 20 20 20 **20** | 79/80 — 0.99 [0.93, 1.00] | 0/80 [0.00, 0.05] | 29/80 [0.27, 0.47] |
+
+- **D1 confirmed.** Every phantom whose drone's skin echo confirms is backtracked
+  to that drone: 58–59 of 60 at 3–0.1 m², 80/80 and 79/80 with all four visible.
+- **D2 confirmed.** A genuine formation at the same ranges and powers: 0/80 down to
+  0.3 m², rising only to 14/80 at 0.01 m² (a faint echo's bearing is too noisy to
+  reject a crossing aircraft).
+- **D3 confirmed, and it is the physical limit.** A trailing formation is
+  co-bearing with its leader until the angular rates diverge (ω = v/R), which over
+  an 8 s dwell at these ranges is ~0.1–0.2°. It false-alarms 6→23/80 as RCS falls,
+  and 29–32/80 once every leader is visible. This is not a tuning defect: an
+  aircraft directly behind another IS a co-bearing pair.
+- **D4 confirmed, with a second escape found.** Undetectable drones escape
+  (0.01 m² loses drones 3–4, halving the catch). And the nearest phantom can HIDE
+  its drone: at the default geometry the first phantom closes from 1200 m to
+  ~1025 m of the 5600 m drone — inside the 1124 m CFAR training window — and that
+  drone is never detected, even at 3 m², though the 4400 m drone is seen at
+  0.3 m². Widening the gap alone restores it to 20/20. The attacker gets this for
+  free: park a strong phantom within one CFAR window beyond each drone.
+- **D5 confirmed.** Far-object `real` survivors are 80/80 in every arm: it is a
+  diagnostic column, and the label is untouched.
+- **Success criterion met at every RCS**: the swarm's Wilson lower bound exceeds
+  both genuine arms' upper bounds (tightest: 0.37 vs 0.29 at 0.01 m²).
+
+**The judge bug this counter exposed (fixed).** The first sweep
+(`results/swarm/skin_backtrack_N4.log`, SUPERSEDED for 0.03 and 0.01 m²) showed
+genuine formations backtracked 40/80 at 0.03 m². Cause: `runJudge.m` rebuilt each
+track's exported series by UNGATED nearest-peak match, so a track coasting
+through a missed frame borrowed a peak trackerGNN had already given to another
+track — a weak skin track at 4403 m exported `[4403 3185 4356 3138 4356 3138]`,
+spliced with its 3185 m neighbour, and its range, azimuth, rate and NIS all
+inherited the splice. Fix: one peak, one track — keep a peak only if this track is
+also the peak's nearest track (trackerGNN's own exclusivity). With it, the
+0.03 m² drone confirms 18/20 (was 0/20) and genuine false alarms fall 40 → 9/80.
+Rows 3–0.1 m² are bit-identical before and after: no splice occurred there.
+
+**How to read it.** The skin backtrack is the first counter in this programme
+that separates a swarm from a genuine formation. Its reach is set by
+detectability, not processing: the drones must sit outside the blind range, have
+enough RCS to confirm, and not be masked by their own phantoms. Each of those is
+an attacker's lever, and none needs learning.
+
 ## Conclusion — the monopulse wall falls to multi-aperture [SIM]
 
 - The single-aperture monopulse wall (F7) STANDS: one drone's N phantoms share a
@@ -126,12 +205,19 @@ drone RCS — the next front, not this one.
   condemns genuine formations as heavily as swarms and does not enter the label.
 - No learning is required; a naive spread swarm suffices. The result is
   geometric: a coordinated real drone swarm is indistinguishable from a genuine
-  aircraft formation to this radar.
+  aircraft formation to this radar's co-bearing and emitter screens.
+- **Unless the drones themselves are seen (Phase 6).** Their own skin echoes pair
+  with their phantoms, and the skin backtrack catches every phantom whose drone
+  confirms (up to 1.00 [0.95, 1.00]) at 0/80 genuine false alarms. The swarm
+  escapes it only by detectability: a drone inside the blind range, below the
+  RCS floor, or masked by its own phantom within one CFAR window.
 
 **Scope / limits.** SIM only; one radar (phase-comparison monopulse, single
 azimuth baseline). The real escape the co-bearing screen's own note names — a
 SECOND baseline (third subaperture or second PRF) to resolve wrap and rate — is
 not built and is the honest way the radar could push back. Causality is enforced
-per phantom against a single 900 m drone reference, not per-drone positions;
-per-drone causality + emitter backtrack (`emitter_range_max`) is the next
-refinement. Hardware (the Mac judge) validation remains outstanding.
+per phantom against a single drone reference, not per-drone positions (Phase 6
+asserts per-drone causality in the experiment instead: every phantom starts
+> 1 km beyond every drone). The skin-backtrack scenes render each drone's skin
+echo as an ordinary row — physically the same reflection — because
+`build_scene`'s platform-skin path supports one platform. Hardware (the Mac judge) validation remains outstanding.

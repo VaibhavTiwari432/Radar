@@ -28,6 +28,9 @@ function results = skinBacktrackCheck(varargin)
     p.addParameter('NumSeeds', 10);
     p.addParameter('DroneStartM', 2000);             % clear of 1798.8 m blind range for the dwell
     p.addParameter('SpacingM', 1200);                % clears the CFAR window (1124 m)
+    % Farthest drone -> first phantom. [] = SpacingM. Widen it to test whether a
+    % strong phantom closing into the last drone's CFAR window masks its skin.
+    p.addParameter('GapM', []);
     p.addParameter('DroneRateMps', -10);
     p.addParameter('PhantomRateMps', -35);
     p.addParameter('SpreadDeg', 2.0);
@@ -36,7 +39,8 @@ function results = skinBacktrackCheck(varargin)
 
     N = o.N; t = 0:7;
     Rd = o.DroneStartM + o.SpacingM * (0:N-1);
-    Rp = o.DroneStartM + o.SpacingM * (N:2*N-1);
+    gap = o.GapM; if isempty(gap); gap = o.SpacingM; end
+    Rp = Rd(end) + gap + o.SpacingM * (0:N-1);
     rates = [repmat(o.DroneRateMps, 1, N), repmat(o.PhantomRateMps, 1, N)];
     assert(max(Rp) + 50 < physics.Constants().R_unambiguous, 'far rows would fold');
     % ponytail: build_scene checks causality against ONE mother range, so it is
@@ -54,7 +58,7 @@ function results = skinBacktrackCheck(varargin)
         N, o.NumSeeds, Rd(1), Rd(end));
     fprintf('%-9s %8s %10s %16s %10s %22s\n', 'arm', 'rcs', 'skin det', ...
         'far backtracked', 'to own', 'far real / flagged CI');
-    results = struct('arm', {}, 'rcs', {}, 'skinDetected', {}, 'farBacktracked', {}, ...
+    results = struct('arm', {}, 'rcs', {}, 'skinByDrone', {}, 'skinDetected', {},'farBacktracked', {}, ...
         'toOwnDrone', {}, 'farReal', {}, 'k', {}, 'n', {}, 'ciLow', {}, 'ciHigh', {});
 
     for rcsSkin = o.PlatformRcs
@@ -65,18 +69,19 @@ function results = skinBacktrackCheck(varargin)
                 case "genuine";  azFar = atan2(Rp' .* tan(c) - v .* t, Rp');
                 case "trailing"; azFar = atan2(Rp' .* tan(b) + v .* t, Rp');
             end
-            det = 0; k = 0; own = 0; real_ = 0;
+            det = 0; k = 0; own = 0; real_ = 0; detByDrone = zeros(1, N);
             for seed = 1:o.NumSeeds
                 rng(seed, 'twister');
                 [jm, truth] = renderPhantomScene([Rd, Rp], rates, 'Rcs', rcs, ...
                     'MotherRangeM', 1700, 'NumFrames', 8, 'NumPulses', 32, ...
                     'SourceAzimuthRad', 0, 'PhantomAzimuthRad', [azNear; azFar], ...
-                    'Tag', sprintf('skinbt_%s_r%g_%d', arm, rcsSkin, seed));
+                    'Tag', sprintf('skinbt_%s_r%g_g%d_%d', arm, rcsSkin, gap, seed));
                 fb = engine.runJudge(jm);
                 [verdict, d] = track.skinBacktrack(fb);
                 row = localMatchRows(fb, truth);          % track -> truth row (0 = none)
                 lbl = string(fb.track_label);
                 det = det + nnz(ismember(1:N, row));
+                detByDrone = detByDrone + ismember(1:N, row);
                 for j = 1:N
                     tr = find(row == N + j, 1);
                     if isempty(tr); continue; end
@@ -89,9 +94,9 @@ function results = skinBacktrackCheck(varargin)
             end
             n = N * o.NumSeeds;
             [lo, hi] = localWilson(k, n);
-            fprintf('%-9s %8.2g %6d/%-3d %12d/%-3d %6d %11d/%d [%.2f,%.2f]\n', ...
-                arm, rcsSkin, det, n, k, n, own, real_, n, lo, hi);
-            results(end+1) = struct('arm', char(arm), 'rcs', rcsSkin, ...
+            fprintf('%-9s %8.2g %6d/%-3d %12d/%-3d %6d %11d/%d [%.2f,%.2f]   skin by drone range: %s\n', ...
+                arm, rcsSkin, det, n, k, n, own, real_, n, lo, hi, mat2str(detByDrone));
+            results(end+1) = struct('arm', char(arm), 'rcs', rcsSkin, 'skinByDrone', detByDrone, ...
                 'skinDetected', det / n, 'farBacktracked', k / n, 'toOwnDrone', own, ...
                 'farReal', real_ / n, 'k', k, 'n', n, 'ciLow', lo, 'ciHigh', hi); %#ok<AGROW>
         end
