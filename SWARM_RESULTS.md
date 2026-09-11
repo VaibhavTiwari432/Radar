@@ -202,6 +202,148 @@ detectability, not processing: the drones must sit outside the blind range, have
 enough RCS to confirm, and not be masked by their own phantoms. Each of those is
 an attacker's lever, and none needs learning.
 
+## Phase 7 — the moving mother: speed matters only through what the radar can see
+
+Predictions S1–S6 were committed first (`b838970b`). The rules were fixed before
+the run: 10 seeds per cell; cells whose CI straddles 0.5 get seeds 11–20 (none
+did). `experiments.motherSpeedSweep`: one mother drone at 4000 m, skin echo
+0.1 m², its path centred on boresight (≤ 2.51°, inside the ±2.864° sector); K
+phantoms at 6400/7600/8800 m, −35 m/s. The genuine arm is a formation: far
+aircraft at their own bearings, flying the drone's cross velocity. Two
+environments: thermal-only, and clutter −15 dB + MTI 3.75 m/s.
+Logs: `results/swarm/mother_speed_{thermal,mti}.log`.
+
+The columns below give the fraction of far objects labelled `real` for the
+swarm (the deception rate) and the co-bearing flag rate for the genuine
+formation (a false alarm). Heading 0° = closing, 90° = crossing; cross speed =
+speed·sin(heading).
+
+| speed, heading | cross m/s | K=1 thermal swarm real | K=1 thermal genuine flagged | K=1 MTI swarm real | K=1 MTI genuine flagged | K=3 thermal swarm real | K=3 thermal genuine flagged | K=3 MTI swarm real | K=3 MTI genuine flagged |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | 0 | 0.00 | 0.00 | **1.00** | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 10, 0° | 0 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 10, 45° | 7.1 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 10, 90° | 10 | 0.00 | 0.00 | **1.00** | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 20, 0° | 0 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 20, 45° | 14.1 | 0.00 | *0.90* | 0.00 | *1.00* | 0.00 | 0.00 | 0.00 | 0.00 |
+| 20, 90° | 20 | 0.00 | *1.00* | **1.00** | 0.00 | 0.00 | *1.00* | 0.00 | 0.00 |
+| 35, 0° | 0 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| 35, 45° | 24.7 | 0.00 | *1.00* | 0.00 | *1.00* | 0.00 | *1.00* | 0.00 | *1.00* |
+| 35, 90° | 35 | 0.00 | *1.00* | **1.00** | 0.00 | 0.00 | *1.00* | 0.00 | *1.00* |
+| 50, 0° | 0 | 0.00 | 0.00 | 0.00 | 0.00 | 0.10 | 0.00 | 0.00 | 0.00 |
+| 50, 45° | 35.4 | 0.00 | *1.00* | 0.00 | *1.00* | 0.00 | *1.00* | 0.00 | *1.00* |
+| 50, 90° | 50 | 0.00 | *1.00* | **1.00** | 0.00 | 0.00 | *1.00* | 0.00 | *1.00* |
+
+- **S1 confirmed.** With K=3 the siblings share a bearing, and the scene is
+  flagged in 51 of 52 cell-envs; real ≈ 0. One unexplained escape: thermal,
+  50 m/s closing, 1 seed of 10 not flagged (3/30 real). This is one seed and
+  has not been investigated.
+- **S2 confirmed.** K=1 in thermal noise: the 0.1 m² skin is seen in every
+  cell, skin and phantom are co-bearing, and the phantom is `real` 0/10 at
+  every speed and heading. Without clutter, speed buys the attacker nothing.
+- **S3 confirmed: "fly tangentially" is a deception map.** K=1 with
+  clutter + MTI: in the five cells where the drone has ~no radial speed
+  (parked, and crossing at 10–50 m/s), MTI removes its skin echo and the lone
+  phantom is `real` **10/10**. In all eight cells with ≥ 7 m/s radial speed
+  (closing, 45°) the skin survives and the phantom is caught 0/10. Success
+  criterion met: notched lower bound 0.72 > un-notched upper bound 0.28.
+  45° × 10 m/s (7.07 m/s radial, the borderline cell) sits on the caught side.
+- **S4 confirmed: a radar defect, measured and NOT fixed.** The co-bearing
+  screen builds its threshold from the RAW per-track azimuth std. A crossing
+  formation's bearing sweep therefore counts as "noise", and a genuine
+  formation 1° wide is condemned wholesale once it crosses fast enough:
+  - K=1: onset between 10 and 14.1 m/s (predicted 12.2).
+  - K=3 with the skin visible: between 14.1 and 20 m/s (predicted 14.8; the
+    MTI 45° cells agree).
+  - K=3 with the skin notched: between 20 and 35 m/s (predicted 18.8; 20 was
+    NOT flagged, so this threshold is falsified upward).
+
+  Detrending each track's azimuth before the std would remove the motion term.
+  That is a judge change which would move published results, so it is left
+  for a decision.
+- **S5 confirmed.** Skin-backtrack false alarms on the genuine arm: 0 in every
+  cell and both envs. Swarm backtracks 70–100% with the skin visible; with the
+  skin notched and K=3, 60–63% (siblings pair: the predicted (K−1)/K = 0.67).
+- **S6 confirmed.** Emitter attribution calls genuine far aircraft
+  "radiated-fake" 60–100% in almost every cell, including every zero-cross
+  cell. It is no discriminator.
+
+**Reading.** A single mother drone's speed does not change the label's verdict
+directly. It changes whether the radar can SEE the drone. Without clutter the
+drone is always seen and always betrays its phantom. With clutter + MTI, a
+drone with no radial velocity disappears and its lone phantom deceives 100%;
+any closing component above ~5.6 m/s gives it away. K ≥ 2 phantoms from one
+drone never deceive, at any speed, because the siblings betray each other.
+
+## Phase 8 — multiple swarms (M drones × K phantoms): a second drone breaks the wall for everyone
+
+Predictions M1–M5 were committed first (`b838970b`).
+`experiments.skinBacktrackCheck` with `K`, 20 seeds. Drones sit at
+2000 + 1200·(0:M−1) m at −10 m/s. Phantoms start 2400 m past the last drone,
+1200 m apart, siblings interleaved in range. Skin RCS {1, 0.01} m². Swarm vs
+genuine arm (the same rows, every far object at its own bearing). Both envs.
+Logs: `results/swarm/multi_swarm_{thermal,mti}.log`.
+
+**The label.** Every shape with M ≥ 2 drones: co-bearing flag **0/20**, far
+objects `real` **100%** (80/80, 160/160, 180/180), in both arms and both envs.
+The 1×4 shape (one drone): flag **20/20**, `real` **0/80**. Nothing in between.
+
+**The skin backtrack**: swarm phantoms tied to their own drone (skin OR sibling)
+vs genuine false alarms. Fractions of far objects, with Wilson CIs.
+
+| shape | env | 1 m²: swarm | 1 m²: genuine | 0.01 m²: swarm | 0.01 m²: genuine | predicted (0.01) |
+|---|---|---|---|---|---|---|
+| 4×1 (F12) | thermal | 0.99 [0.93,1.00] | 0.00 [0.00,0.05] | 0.46 [0.36,0.57] | 0.11 [0.06,0.20] | 0.50 |
+| 4×1 (F12) | clutter+MTI | 0.96 [0.90,0.99] | 0.00 [0.00,0.05] | 0.45 [0.35,0.56] | 0.14 [0.08,0.23] | 0.50 |
+| 1×4 | thermal | 1.00 [0.95,1.00] | 0.00 [0.00,0.05] | 0.99 [0.93,1.00] | 0.00 [0.00,0.05] | 1.0 |
+| 1×4 | clutter+MTI | 0.99 [0.93,1.00] | 0.00 [0.00,0.05] | 0.99 [0.93,1.00] | 0.00 [0.00,0.05] | 1.0 |
+| 2×2 | thermal | 0.99 [0.93,1.00] | 0.00 [0.00,0.05] | 0.83 [0.73,0.89] | 0.01 [0.00,0.07] | 1.0 |
+| 2×2 | clutter+MTI | 1.00 [0.95,1.00] | 0.00 [0.00,0.05] | 0.86 [0.77,0.92] | 0.01 [0.00,0.07] | 1.0 |
+| 2×4 | thermal | 0.99 [0.97,1.00] | 0.00 [0.00,0.02] | 0.91 [0.86,0.95] | 0.01 [0.00,0.03] | 1.0 |
+| 2×4 | clutter+MTI | 1.00 [0.98,1.00] | 0.00 [0.00,0.02] | 0.94 [0.89,0.97] | 0.00 [0.00,0.02] | 1.0 |
+| 3×3 | thermal | 0.95 [0.91,0.97] | 0.11 [0.07,0.17] | 0.88 [0.83,0.92] | 0.17 [0.12,0.23] | 0.89 |
+| 3×3 | clutter+MTI | 0.96 [0.91,0.98] | 0.11 [0.07,0.17] | 0.87 [0.81,0.91] | 0.18 [0.13,0.24] | 0.89 |
+| 4×2 | thermal | 0.94 [0.90,0.97] | 0.06 [0.03,0.11] | 0.61 [0.53,0.68] | 0.13 [0.09,0.19] | 0.75 |
+| 4×2 | clutter+MTI | 0.92 [0.87,0.95] | 0.09 [0.06,0.15] | 0.61 [0.53,0.68] | 0.15 [0.10,0.21] | 0.75 |
+
+Every swarm backtrack at 1 m² went to the phantom's own drone. At 0.01 m² the
+far drones are lost ([20 20 0 0]-type detection), and the siblings carry the
+attribution.
+
+- **M1 confirmed.** One drone's four phantoms are flagged 20/20: F7 holds with a
+  skin echo present.
+- **M2 confirmed: the wall falls to a second drone, for the WHOLE group.** The
+  co-bearing screen asks whether ALL tracks share one bearing. Any second
+  bearing in the scene switches it off, so two drones × four phantoms, each
+  group of four sitting on one bearing, pass 160/160. F7 ("the wall is total and
+  N-independent") therefore holds only when the entire scene comes from one
+  aperture. The per-group structure the screen ignores is exactly what a
+  pairwise test sees (next bullet).
+- **M3 confirmed in its floor, not its ceiling.** Siblings betray each other: in
+  every shape the backtrack is at least (K−1)/K even where drones go unseen. The
+  full K of K predicted for 2×2, 2×4 and 4×2 at 0.01 m² did not always come
+  (0.83, 0.91, 0.61 vs 1.0, 1.0, 0.75): a faint skin echo that confirms is not
+  always a clean partner.
+- **M4 confirmed.** Emitter attribution marks the siblings, but it also calls
+  genuine far aircraft "radiated-fake" at high rates (e.g. 3×3: 180/180; 2×4:
+  85–102/160). It is no discriminator.
+- **M5 confirmed.** Drones at −10 m/s stay clear of the MTI notch: every
+  clutter+MTI row sits inside its thermal row's CI. This answers F12's clutter
+  qualifier for RADIALLY moving drones (a crossing drone is Phase 7's case).
+- **Success criterion met in every shape, RCS and env.** The swarm's lower bound
+  exceeds the genuine arm's upper bound; the tightest is 4×1 at 0.01 m² under
+  clutter+MTI, 0.35 vs 0.23. Genuine false alarms rise to 0.06–0.18 in the
+  dense shapes (3×3, 4×2), where 8–9 genuine far aircraft share 2° and some
+  line up behind a drone.
+
+**Reading.** Against the label, adding drones is free deception: a second
+aperture anywhere in the scene disables the co-bearing screen for all phantoms.
+Against a pairwise attribution test, adding phantoms per drone is costly:
+siblings tie each other to their drone even when the drone itself is invisible.
+The attacker's best shape is therefore many drones × ONE phantom each (4×1),
+with drones too small to see: that is the only cell where the counter falls
+toward half.
+
 ## Conclusion — the monopulse wall falls to multi-aperture [SIM]
 
 - The single-aperture monopulse wall (F7) STANDS: one drone's N phantoms share a
@@ -219,6 +361,13 @@ an attacker's lever, and none needs learning.
   confirms (up to 1.00 [0.95, 1.00]) at 0/80 genuine false alarms. The swarm
   escapes it only by detectability: a drone inside the blind range, below the
   RCS floor, or masked by its own phantom within one CFAR window.
+- **Speed and multiplicity (Phases 7–8).** A single mother's speed matters only
+  through visibility: under clutter + MTI a drone with no radial velocity
+  vanishes and its lone phantom deceives 10/10; any closing component gives it
+  away. More drones defeat the label outright (M ≥ 2 → 100% `real`); more
+  phantoms per drone feed the pairwise counter (siblings betray each other).
+  Side finding: the co-bearing screen false-alarms genuine formations crossing
+  faster than ~12–35 m/s (raw, non-detrended azimuth std). NOT fixed.
 
 **Scope / limits.** SIM only; one radar (phase-comparison monopulse, single
 azimuth baseline). The real escape the co-bearing screen's own note names — a
