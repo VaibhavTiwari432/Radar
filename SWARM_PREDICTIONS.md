@@ -69,6 +69,42 @@ expected outcome: better radar, swarm still wins. If instead the swarm's
 radiated-fake stays high while the genuine formation's drops, the counter
 works — and that is the result.
 
+## Skin-echo backtrack counter — predictions (committed before its measurement)
+
+The drones are real objects, so each reflects the radar's own pulse. A repeater
+radiates from its own aperture, so a phantom's bearing series IS its drone's
+bearing series, frame for frame. If the drone's skin echo confirms as a track,
+the far phantom and the near skin echo form a co-bearing PAIR: their per-frame
+azimuth difference is zero-mean and trend-free within the pair's own scatter.
+The scene-wide co-bearing screen cannot see this — it asks whether ALL tracks
+share one bearing, and a swarm's pairs sit at N different bearings.
+`+track/skinBacktrack.m` tests every (nearer, farther) pair; separate diagnostic,
+not in the label. `experiments.skinBacktrackCheck`, drones placed OUTSIDE the
+blind range (the earlier swarm runs parked them at 900 m, inside it).
+
+**D1 — a detectable swarm is caught.** Drones beyond 1798.8 m with a skin echo
+that confirms: ≈N/N phantoms backtracked to their own drone (misses ≈5%, from
+two 3σ t-tests at K−2 = 6 dof).
+
+**D2 — a genuine formation is not.** Same 2N ranges, rates and received powers,
+every object at its own bearing: ≈0 far objects backtracked.
+
+**D3 — the hard case is a trailing formation.** A far aircraft starting directly
+behind a near one, same linear cross speed, differs only in angular rate
+(ω = v/R). Its false-alarm rate RISES as the near echo weakens (noisier bearing →
+wider pairing tolerance); predicted non-zero at the lowest RCS.
+
+**D4 — the escape is detectability, not geometry.** Below some drone RCS the
+skin echo does not confirm, there is nothing to pair with, and the swarm
+survives (backtracked → 0). Any drone inside the blind range is eclipsed and
+always escapes, whatever its RCS.
+
+**D5 — the label does not move.** A diagnostic column only: far-object `real`
+survivors are unchanged in every arm.
+
+**Success criterion:** at some drone RCS, the Wilson CI lower bound of the
+swarm's backtracked fraction exceeds the upper bound of BOTH genuine arms'.
+
 ## What P2 does NOT yet claim
 
 Surviving the co-bearing screen is not deception: Phase 2 must show the phantom
