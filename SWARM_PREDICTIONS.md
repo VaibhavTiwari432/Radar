@@ -105,6 +105,76 @@ survivors are unchanged in every arm.
 **Success criterion:** at some drone RCS, the Wilson CI lower bound of the
 swarm's backtracked fraction exceeds the upper bound of BOTH genuine arms'.
 
+## Moving mother — predictions S1–S6 (committed before its measurement)
+
+One mother drone at 4000 m, with a skin echo of 0.1 m², radiates K ∈ {1, 3}
+phantoms at 6400/7600/8800 m. Its speed ∈ {0, 10, 20, 35, 50} m/s ×
+heading ∈ {0° closing, 45°, 90° crossing}; the crossing path is centred on
+boresight. Two environments: thermal-only, and clutter −15 dB + MTI notch
+3.75 m/s. MTI removes returns under about 5.6 m/s radial: the notched cells are
+speed 0 and 90° at every speed; 45° × 10 m/s (7.07 m/s radial) is borderline.
+The genuine arm is a formation: far aircraft at their own bearings with the
+drone's cross velocity. `experiments.motherSpeedSweep`, 10 seeds.
+
+**S1 — K=3 never deceives.** The three siblings share a bearing, so the scene is
+flagged co-bearing ≈ 100% in every cell and both envs; far objects labelled
+real ≈ 0.
+
+**S2 — K=1, thermal: speed does not matter.** The skin is seen in every cell, so
+skin + phantom are co-bearing and flagged ≈ 100%.
+
+**S3 — K=1, clutter+MTI: "fly tangentially" as a deception map.** In the
+notched cells MTI removes the skin, the phantom stands alone and is labelled
+real ≈ 100%. In the other cells it is flagged ≈ 100%. K=3 in the notched cells
+is still flagged (S1).
+
+**S4 — a suspected radar defect: motion counted as noise.** The co-bearing
+screen's pooled scatter is the RAW per-track azimuth std, not detrended. A
+genuine formation 1° wide is falsely flagged once 3·pooled > spread:
+≈ 0 at v_cross ≤ 10 m/s and ≈ 100% at ≥ 20 m/s. Predicted thresholds are
+12.2 m/s (K=1), 14.8 m/s (K=3) and 18.8 m/s (K=3, MTI, no skin), from the std
+of a linear ramp over 8 samples (0.327 × peak-to-peak). Measured here, NOT fixed.
+
+**S5 — skin backtrack stays clean on the genuine arm:** ≤ 10% in every cell.
+
+**S6 — emitter attribution is no discriminator here:** it false-alarms the
+genuine formation ≈ 100% where the cross speed is 0 (every ω ≈ 0).
+
+## Multiple swarms — predictions M1–M5 (committed before its measurement)
+
+M drones × K phantoms, siblings interleaved in range, shapes
+4×1 (= F12), 1×4, 2×2, 2×4, 3×3, 4×2. Drones at 2000 + 1200·(0:M−1) m, radial
+−10 m/s; phantoms start 2400 m past the last drone. Skin RCS {1, 0.01} m², both
+envs, 20 seeds. The skin-backtrack "same drone" count means the partner is the
+drone's skin echo OR one of its sibling phantoms.
+
+**M1 — one drone is still the wall.** 1×4 is flagged ≈ 100% (F7, now with a
+skin echo present).
+
+**M2 — a second drone breaks the wall for the WHOLE group.** The co-bearing
+screen is scene-wide, so for every M ≥ 2 the flag is ≈ 0 and far objects are
+labelled real ≈ 100%, even though K of them share each drone's bearing. Both
+arms, both envs.
+
+**M3 — siblings betray each other to the skin backtrack.** At 1 m² it catches
+≈ K of K per drone. At 0.01 m² an unseen drone still yields K−1 of K (the
+nearest sibling becomes the 'emitter'). Predicted swarm fractions at 0.01 m²:
+4×1 0.50, 1×4 1.0, 2×2 1.0, 2×4 1.0, 3×3 0.89, 4×2 0.75. Genuine false alarms
+stay at F12 levels.
+
+**M4 — emitter attribution marks siblings but also false-alarms genuine
+formations.** No separation is claimed unless the CIs split.
+
+**M5 — radial movers survive MTI.** Drones at −10 m/s are clear of the notch, so
+clutter+MTI results fall within the thermal CIs. This answers F12's clutter
+qualifier for radially moving drones.
+
+**Rules fixed before running.** Any speed cell whose CI straddles 0.5 gets seeds
+11–20. Success (speed): under MTI, the notched cells' real-rate CI lower bound is
+above the upper bound of the cells where the skin survives. Success (multi): in
+every shape, the swarm's backtrack CI lower bound is above the genuine arm's
+upper bound.
+
 ## What P2 does NOT yet claim
 
 Surviving the co-bearing screen is not deception: Phase 2 must show the phantom
