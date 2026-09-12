@@ -206,6 +206,16 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
 
     if isempty(opts.PhantomSweepSchedule)
         phantomSched = sweepSched;   % omniscient default -- see header
+    elseif ~isvector(opts.PhantomSweepSchedule)
+        % PER-ROW belief [nPhantoms x numFrames] (12 Sep 2026). A repeater row
+        % replays its own, possibly stale, intercept; a REFLECTION row (a
+        % drone's skin echo, a genuine aircraft) carries the radar's true
+        % schedule. The vector form below gives one belief to every row, which
+        % is wrong the moment a scene mixes the two.
+        phantomSched = double(opts.PhantomSweepSchedule);
+        assert(size(phantomSched, 1) == nPhantoms && size(phantomSched, 2) >= numFrames, ...
+            'generator:render:phantomSchedRows', ...
+            'a per-row PhantomSweepSchedule must be [nPhantoms x >=numFrames]');
     else
         phantomSched = double(opts.PhantomSweepSchedule(:)');
         assert(numel(phantomSched) >= numFrames, 'generator:render:shortPhantomSchedule', ...
@@ -298,9 +308,14 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
         % (sweepSched) -- see 'PhantomSweepSchedule' above. They are equal
         % by default, which is why agility costs nothing until a caller
         % deliberately supplies a stale belief.
-        [~, pulseSamples] = radar.agileWaveform(phantomSched(k), fs, pulseWidthS, prfHz, bandwidthHz);
+        [~, pulseSamples] = radar.agileWaveform(phantomSched(1, k), fs, pulseWidthS, prfHz, bandwidthHz);
         pulseSamples = pulseSamples(:);
         pulseLen = numel(pulseSamples);
+        perRowSched = size(phantomSched, 1) > 1;
+        if perRowSched   % both chirps once per frame; each row picks its own below
+            [~, pulseUp]   = radar.agileWaveform(+1, fs, pulseWidthS, prfHz, bandwidthHz);
+            [~, pulseDown] = radar.agileWaveform(-1, fs, pulseWidthS, prfHz, bandwidthHz);
+        end
 
         for pIdx = 1:numPulsesPerFrame
             sampleIdx = (k-1)*numPulsesPerFrame + pIdx;
@@ -321,6 +336,10 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                 if delaySamples < 0 || delaySamples >= fastN
                     continue;   % outside the receive window this sample -- not an error
                 end
+                rowPulse = pulseSamples;
+                if perRowSched
+                    if phantomSched(ph, k) >= 0; rowPulse = pulseUp(:); else; rowPulse = pulseDown(:); end
+                end
                 % contrib + dst computed once, added to the sum channel exactly
                 % as before (so sigBuf, hence rx_frames, is bit-identical), then
                 % weighted by THIS phantom's own deltaRatio for the swarm delta.
@@ -328,7 +347,7 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                     endIdx = min(fastN, delaySamples + pulseLen);
                     nCopy = endIdx - delaySamples;
                     dst = delaySamples+1:endIdx;
-                    contrib = A * exp(1i*phi) * pulseSamples(1:nCopy);
+                    contrib = A * exp(1i*phi) * rowPulse(1:nCopy);
                 else
                     % Shape the pulse by the sub-sample remainder, then place
                     % it at the rounded index MINUS the kernel's own integer
@@ -338,7 +357,7 @@ function judgeMatPath = render(preRenderMatPath, judgeMatPath, varargin)
                     % generator/render.py's delay_pulse().
                     mu = dExact - delaySamples;
                     hFd = generator.fracDelayKernel(mu);
-                    shaped = conv(pulseSamples, hFd);
+                    shaped = conv(rowPulse, hFd);
                     startIdx = delaySamples - (numel(hFd)-1)/2;   % 0-based
                     srcFrom = max(1, 1 - startIdx);
                     dstFrom = max(1, startIdx + 1);

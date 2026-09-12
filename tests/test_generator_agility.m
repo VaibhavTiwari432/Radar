@@ -96,6 +96,27 @@ classdef test_generator_agility < matlab.unittest.TestCase
                  'counts would mean the sweep schedule is not reaching render.']);
         end
 
+        function test_per_row_belief_reduces_to_the_vector_and_bites_when_it_differs(tc)
+            % render.m's per-row PhantomSweepSchedule (12 Sep 2026), which lets
+            % a stale repeater share a scene with reflections that carry the
+            % true chirp. A matrix of identical rows must reproduce the vector
+            % path bit for bit, and one row with a different belief must change
+            % what the radar receives.
+            s = [1 -1 -1 1 -1 1 1 -1];
+            args = {'Rcs', [1 1], 'NumFrames', 8, 'NumPulses', 32, 'Seed', 1, ...
+                    'SweepSchedule', s, 'OutDir', tc.FixtureDir};
+            rng(1); v = load(renderPhantomScene([2400 3600], -35, args{:}, ...
+                'PhantomSweepSchedule', s, 'Tag', 'rowVec'));
+            rng(1); m = load(renderPhantomScene([2400 3600], -35, args{:}, ...
+                'PhantomSweepSchedule', [s; s], 'Tag', 'rowMat'));
+            tc.verifyEqual(m.rx_frames, v.rx_frames, ...
+                'Identical per-row beliefs must reproduce the single-vector path bit for bit.');
+            rng(1); d = load(renderPhantomScene([2400 3600], -35, args{:}, ...
+                'PhantomSweepSchedule', [s; -s], 'Tag', 'rowDiff'));
+            tc.verifyNotEqual(d.rx_frames, v.rx_frames, ...
+                'A row with a different belief must change what the radar receives.');
+        end
+
     end
 end
 

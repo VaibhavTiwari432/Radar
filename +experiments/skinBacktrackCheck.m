@@ -55,6 +55,10 @@ function results = skinBacktrackCheck(varargin)
     p.addParameter('Arms', ["swarm", "genuine", "trailing"]);
     p.addParameter('SeedOffset', 0);   % seeds SeedOffset+(1:NumSeeds); 0 = the published runs
     p.addParameter('MeasurementSpace', 'range');   % runJudge's; 'range' = the published runs
+    % "off" (published runs) | "fresh" (a true DRFM: copies the current pulse)
+    % | "stale" (swarm repeaters replay LAST frame's chirp). Agile = the radar
+    % reverses its sweep on a secret i.i.d. per-frame schedule.
+    p.addParameter('Agility', "off");
     p.parse(varargin{:});
     o = p.Results;
 
@@ -90,12 +94,15 @@ function results = skinBacktrackCheck(varargin)
         b = 0; v = vel(2); vg = -v * ones(N*K, 1); t0 = t(end) / 2;
     end
     tt = t - t0;
+    agility = string(o.Agility);
+    repeaterRows = N + (1:N*K);                      % rows = [drone skins, far rows]
+    if moving; repeaterRows = 1:N*K; end              % builder appends the skin LAST
     judgeArgs = {'MeasurementSpace', o.MeasurementSpace};
     if o.MtiNotchMps > 0; judgeArgs = [judgeArgs, {'MtiNotchMps', o.MtiNotchMps}]; end
 
-    fprintf('\n=== SKIN BACKTRACK CHECK [SIM] === N=%d K=%d, %d seeds, drones %g-%g m, clutter %s, MTI %g, vel %s, space %s\n', ...
+    fprintf('\n=== SKIN BACKTRACK CHECK [SIM] === N=%d K=%d, %d seeds, drones %g-%g m, clutter %s, MTI %g, vel %s, space %s, agility %s\n', ...
         N, K, o.NumSeeds, Rd(1), Rd(end), mat2str(o.ClutterGammaDB), o.MtiNotchMps, mat2str(o.DroneVelocityMps), ...
-        char(o.MeasurementSpace));
+        char(o.MeasurementSpace), char(agility));
     fprintf('%-9s %8s %10s %16s %10s %22s %8s %8s %6s\n', 'arm', 'rcs', 'skin det', ...
         'far backtracked', 'to own', 'far real / flagged CI', 'cob', 'EA fake', 'unm');
     results = struct('arm', {}, 'rcs', {}, 'K', {}, 'skinByDrone', {}, 'skinDetected', {}, ...
@@ -121,6 +128,21 @@ function results = skinBacktrackCheck(varargin)
                 tag = sprintf('skinbt_%s_r%g_g%d_K%d_c%s_m%g_v%s_%d', arm, rcsSkin, gap, ...
                     K, mat2str(o.ClutterGammaDB), o.MtiNotchMps, ...
                     strjoin(string(o.DroneVelocityMps), '_'), seed + o.SeedOffset);
+                agileArgs = {};
+                if agility ~= "off"
+                    % The radar's secret schedule, from its OWN stream, so the
+                    % scene noise stays identical to the agility-off run.
+                    rs = RandStream('mt19937ar', 'Seed', 1e6 + seed + o.SeedOffset);
+                    s = sign(randn(rs, 1, numel(t) + 1));  % s(1) = the frame before the dwell
+                    agileArgs = {'SweepSchedule', s(2:end)};
+                    if agility == "stale" && arm == "swarm"
+                        % Only repeater rows replay last frame's chirp; skin
+                        % echoes are reflections and carry the true one.
+                        belief = repmat(s(2:end), N + N*K, 1);
+                        belief(repeaterRows, :) = repmat(s(1:end-1), numel(repeaterRows), 1);
+                        agileArgs = [agileArgs, {'PhantomSweepSchedule', belief}];
+                    end
+                end
                 if moving
                     % The builder appends the skin row LAST; map back to drones-first.
                     [jm, truth] = renderPhantomScene(Rp, o.PhantomRateMps, 'Rcs', rcs(N+1:end), ...
@@ -128,7 +150,7 @@ function results = skinBacktrackCheck(varargin)
                         'MotherVelocityMps', vel, 'IncludePlatformSkinReturn', true, ...
                         'PlatformRcs', rcsSkin, 'NumFrames', 8, 'NumPulses', 32, ...
                         'PhantomAzimuthRad', [azFar; azNear], ...
-                        'ClutterGammaDB', o.ClutterGammaDB, 'Tag', tag);
+                        'ClutterGammaDB', o.ClutterGammaDB, 'Tag', tag, agileArgs{:});
                     assert(truth.platform_row == K + 1 && ...
                         max(abs(truth.source_azimuth_rad(:)' - azNear)) < 1e-9, ...
                         'MotherTrack and the builder disagree on the platform');
@@ -136,7 +158,7 @@ function results = skinBacktrackCheck(varargin)
                     [jm, truth] = renderPhantomScene([Rd, Rp], rates, 'Rcs', rcs, ...
                         'MotherRangeM', 1700, 'NumFrames', 8, 'NumPulses', 32, ...
                         'SourceAzimuthRad', 0, 'PhantomAzimuthRad', [azNear; azFar], ...
-                        'ClutterGammaDB', o.ClutterGammaDB, 'Tag', tag);
+                        'ClutterGammaDB', o.ClutterGammaDB, 'Tag', tag, agileArgs{:});
                 end
                 fb = engine.runJudge(jm, judgeArgs{:});
                 [verdict, d] = track.skinBacktrack(fb);

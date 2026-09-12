@@ -209,6 +209,49 @@ raw peak azimuth std, not the filter state, so a genuine formation crossing at
 range-space log, and trace it to confirmation or peak assignment before calling it
 a physics result.
 
+## Agile radar vs the swarm — predictions A1–A4 (committed before its measurement)
+
+Agility is per-frame sweep reversal (`+radar/agileWaveform.m`): the radar's
+schedule is i.i.d. ±1 per frame, and it is the radar's secret. Two repeaters:
+- **fresh**: a true DRFM that copies the CURRENT pulse (its belief = the radar's
+  schedule).
+- **stale**: a template jammer that replays LAST frame's chirp.
+
+Every swarm phantom starts more than 1 km behind its drone, so a causal repeater
+always holds the current pulse. Fresh is physically available; stale is a jammer
+choosing not to use it.
+
+Only repeater rows carry the stale belief. Drone skin echoes and genuine or
+trailing aircraft are reflections, so they always carry the true chirp.
+`render.m` gains a per-row `PhantomSweepSchedule` for this; the default and
+vector paths stay byte-identical, which is tested.
+
+Run: `skinBacktrackCheck` with `'Agility'` fresh/stale on 4×1 at {1, 0.01} m² and
+2×4 at 1 m², swarm and genuine arms, seeds 21–30, range space. The baseline is
+the 12 Sep agility-off rows (T3, T5): same seeds and same noise, because the
+schedule is drawn from its own RandStream.
+
+**A1 — fresh agility is inert.** Every fraction (label, co-bearing flag,
+backtrack, genuine false alarm) stays within one seed per cell of agility-off.
+Sweep reversal cannot beat a causal repeater.
+
+**A2 — stale agility costs the jammer detections, not labels.** About half the
+frames are mismatched (P(s_k ≠ s_{k−1}) = 0.5), at about −14 dB with a smeared
+response. Phantom confirmation, and so the far real-rate, falls below
+agility-off. No screen reads a chirp mismatch, so phantoms that do confirm are
+still labelled real, and M ≥ 2 shapes stay unflagged. Direction is predicted,
+magnitude is not.
+
+**A3 — the counter is untouched.** Skin echoes keep the true chirp, so every
+stale phantom that confirms is still backtracked to its own drone
+(to-own = backtracked).
+
+**A4 — the genuine arm is identical across off, fresh and stale.** It contains
+no repeater.
+
+**If A1 fails**, the mechanism is not the one described here: trace it before
+reading it as physics.
+
 ## What P2 does NOT yet claim
 
 Surviving the co-bearing screen is not deception: Phase 2 must show the phantom
