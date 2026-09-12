@@ -522,6 +522,28 @@ result using it must state the value (3.75 m/s = ±1 bin here).
 
 ---
 
+# J — F9–F15 re-tested on unseen seeds (12 September 2026)
+
+`experiments.verifyClaims` re-ran each headline on seeds 21–30, which no published run
+used, with every pass threshold fixed in code before the run. T0 replays one published
+cell on its original seeds. The four swarm drivers gained `'SeedOffset'` (default 0, so
+every published run is unchanged, T0 included). Log:
+`results/verify/matlab_verify_2026-09-12.log`.
+
+| # | Claim | Status | Source |
+|---|---|---|---|
+| J1 | The 11 Sep swarm results reproduce at HEAD | **STANDS** — the 1×4 rows of `multi_swarm_thermal.log` reproduce exactly (T0 2/2) | `verifyClaims` T0 |
+| J2 | F10, F11, F12 (incl. CFAR self-masking), F14 (incl. the open raw-std false alarm) and F15 hold on seeds they were not measured on | **STANDS** — 20/20 checks, 10 seeds per cell | `verifyClaims` T1–T5 |
+| J3 | F9 (reacting radar: CONFOUNDED) holds on unseen seeds | **STANDS** — seeds 500+ / 10500+: frozen 15/15, reacting 0/15, genuine 0/15, drop bound +0.59. Step-1 sweep 5/6 at −50 and −35 m/s (published 6/6), inside the CI | `kill_switch.py --seed 500`, `results/verify/kill_switch_seed500.log` |
+| J4 | runAllTests is 280/0/49 (F13) | **STALE by two: 282/0/49** across 74 files. The +2 are `test_swarm_rows.m`, added in `0613fd64` after F13 was written. Run it one file per `matlab -batch` process: a single-process run was killed for low memory. Python 220 passed / 18 skipped (`hardware/` excluded) | `results/verify/rat_*.log` |
+
+**Mandatory qualifier for J1–J2:** all of it ran with `runJudge`'s default
+`MeasurementSpace='range'` — the tracker gates on `[R;0;0]` and azimuth rides alongside.
+The Cartesian tracker (S3) exists, but no experiment had used it. Predictions X1–X4 for
+that re-run are in `SWARM_PREDICTIONS.md`.
+
+---
+
 ## The four rules this ledger encodes
 
 1. **Never quote a deception number without the radar configuration.** Every headline in

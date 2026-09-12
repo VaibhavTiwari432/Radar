@@ -19,6 +19,7 @@ function T = motherSpeedSweep(varargin)
     p.addParameter('PlatformRcs', 0.1);
     p.addParameter('NumSeeds', 10);
     p.addParameter('Env', "thermal");
+    p.addParameter('SeedOffset', 0);   % forwarded to skinBacktrackCheck; 0 = the published runs
     p.parse(varargin{:});
     o = p.Results;
 
@@ -33,7 +34,7 @@ function T = motherSpeedSweep(varargin)
             vel = sp * [-cosd(hd), sind(hd)];               % [closing(-x), crossing(+y)]
             r = struct2table(experiments.skinBacktrackCheck('N', 1, 'K', K, ...
                 'DroneStartM', 4000, 'GapM', 2400, 'SpreadDeg', 1, ...
-                'PlatformRcs', o.PlatformRcs, 'NumSeeds', o.NumSeeds, ...
+                'PlatformRcs', o.PlatformRcs, 'NumSeeds', o.NumSeeds, 'SeedOffset', o.SeedOffset, ...
                 'DroneVelocityMps', vel, 'Arms', ["swarm", "genuine"], env{:}), ...
                 'AsArray', true);
             r.speed = repmat(sp, height(r), 1);

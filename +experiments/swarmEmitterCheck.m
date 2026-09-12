@@ -31,6 +31,7 @@ function results = swarmEmitterCheck(varargin)
     p.addParameter('RateMps', -35);
     p.addParameter('CrossSpeedsMps', []);   % [] -> linspace(-3,3,N) for 'moving'
     p.addParameter('UseBaseline2', false, @islogical);   % the radar's swarm counter
+    p.addParameter('SeedOffset', 0);   % seeds SeedOffset+(1:NumSeeds); 0 = the published runs
     p.parse(varargin{:});
     o = p.Results;
 
@@ -74,12 +75,12 @@ function results = swarmEmitterCheck(varargin)
         end
         survivors = zeros(1, o.NumSeeds); radiatedFake = zeros(1, o.NumSeeds);
         for seed = 1:o.NumSeeds
-            rng(seed, 'twister');
+            rng(seed + o.SeedOffset, 'twister');
             jm = renderPhantomScene(ranges, o.RateMps, 'Rcs', rcs, ...
                 'MotherRangeM', o.DroneRangeM, 'NumFrames', 8, 'NumPulses', 32, ...
                 'SourceAzimuthRad', 0, 'PhantomAzimuthRad', az, ...
                 'IncludeSecondBaseline', o.UseBaseline2, ...
-                'Tag', sprintf('swemit_%s_b2%d_%d', mode, o.UseBaseline2, seed));
+                'Tag', sprintf('swemit_%s_b2%d_%d', mode, o.UseBaseline2, seed + o.SeedOffset));
             fb = engine.runJudge(jm);
             lbl = cellstr(fb.track_label);
             survivors(seed) = nnz(strcmp(lbl, 'real'));

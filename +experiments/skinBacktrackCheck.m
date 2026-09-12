@@ -53,6 +53,7 @@ function results = skinBacktrackCheck(varargin)
     p.addParameter('ClutterGammaDB', []);
     p.addParameter('MtiNotchMps', 0);
     p.addParameter('Arms', ["swarm", "genuine", "trailing"]);
+    p.addParameter('SeedOffset', 0);   % seeds SeedOffset+(1:NumSeeds); 0 = the published runs
     p.parse(varargin{:});
     o = p.Results;
 
@@ -114,10 +115,10 @@ function results = skinBacktrackCheck(varargin)
             detByDrone = zeros(1, N);
             ownerOf = [0, 1:N, owner];                    % truth row + 1 -> drone (0 = none)
             for seed = 1:o.NumSeeds
-                rng(seed, 'twister');
+                rng(seed + o.SeedOffset, 'twister');
                 tag = sprintf('skinbt_%s_r%g_g%d_K%d_c%s_m%g_v%s_%d', arm, rcsSkin, gap, ...
                     K, mat2str(o.ClutterGammaDB), o.MtiNotchMps, ...
-                    strjoin(string(o.DroneVelocityMps), '_'), seed);
+                    strjoin(string(o.DroneVelocityMps), '_'), seed + o.SeedOffset);
                 if moving
                     % The builder appends the skin row LAST; map back to drones-first.
                     [jm, truth] = renderPhantomScene(Rp, o.PhantomRateMps, 'Rcs', rcs(N+1:end), ...

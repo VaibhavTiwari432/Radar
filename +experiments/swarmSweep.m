@@ -35,6 +35,7 @@ function results = swarmSweep(varargin)
     p.addParameter('StartRangeM', 2400);
     p.addParameter('SpacingM', 1200);
     p.addParameter('RateMps', -35);
+    p.addParameter('SeedOffset', 0);   % seeds SeedOffset+(1:NumSeeds); 0 = the published runs
     p.parse(varargin{:});
     o = p.Results;
 
@@ -61,11 +62,11 @@ function results = swarmSweep(varargin)
             flagged   = zeros(1, o.NumSeeds);
             allReal   = 0;
             for seed = 1:o.NumSeeds
-                rng(seed, 'twister');
+                rng(seed + o.SeedOffset, 'twister');
                 jm = renderPhantomScene(ranges, o.RateMps, 'Rcs', rcs, ...
                     'MotherRangeM', 900, 'NumFrames', 8, 'NumPulses', 32, ...
                     'SourceAzimuthRad', 0, 'PhantomAzimuthRad', az, ...
-                    'Tag', sprintf('swarm_N%d_s%d_%d', N, round(sDeg*10), seed));
+                    'Tag', sprintf('swarm_N%d_s%d_%d', N, round(sDeg*10), seed + o.SeedOffset));
                 fb = engine.runJudge(jm);
                 lbl = cellstr(fb.track_label);
                 survivors(seed) = nnz(strcmp(lbl, 'real'));
