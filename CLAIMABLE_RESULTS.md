@@ -536,11 +536,11 @@ every published run is unchanged, T0 included). Log:
 | J2 | F10, F11, F12 (incl. CFAR self-masking), F14 (incl. the open raw-std false alarm) and F15 hold on seeds they were not measured on | **STANDS** — 20/20 checks, 10 seeds per cell | `verifyClaims` T1–T5 |
 | J3 | F9 (reacting radar: CONFOUNDED) holds on unseen seeds | **STANDS** — seeds 500+ / 10500+: frozen 15/15, reacting 0/15, genuine 0/15, drop bound +0.59. Step-1 sweep 5/6 at −50 and −35 m/s (published 6/6), inside the CI | `kill_switch.py --seed 500`, `results/verify/kill_switch_seed500.log` |
 | J4 | runAllTests is 280/0/49 (F13) | **STALE by two: 282/0/49** across 74 files. The +2 are `test_swarm_rows.m`, added in `0613fd64` after F13 was written. Run it one file per `matlab -batch` process: a single-process run was killed for low memory. Python 220 passed / 18 skipped (`hardware/` excluded) | `results/verify/rat_*.log` |
+| J5 | F10–F15 depend on the range-only tracker | **NO [SIM, 12 Sep 2026].** Re-run with `MeasurementSpace='cartesian'`: 20/20, every result row identical to range space. The Cartesian path is live (on a 0.01 m² scene only `frame_log` differs, of 45 fields). The screens read raw CFAR peaks, and at ≥ 1200 m row spacing both trackers confirm the same tracks. Scope: well-separated scenes only | `SWARM_RESULTS.md` Phase 9, predictions X1–X4 |
 
 **Mandatory qualifier for J1–J2:** all of it ran with `runJudge`'s default
 `MeasurementSpace='range'` — the tracker gates on `[R;0;0]` and azimuth rides alongside.
-The Cartesian tracker (S3) exists, but no experiment had used it. Predictions X1–X4 for
-that re-run are in `SWARM_PREDICTIONS.md`.
+J5 re-ran them with the Cartesian tracker (S3): every result row is identical.
 
 ---
 

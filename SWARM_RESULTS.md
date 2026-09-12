@@ -344,6 +344,35 @@ The attacker's best shape is therefore many drones × ONE phantom each (4×1),
 with drones too small to see: that is the only cell where the counter falls
 toward half.
 
+## Phase 9 — the Cartesian tracker changes nothing the screens read (12 Sep 2026)
+
+Predictions X1–X4 (`SWARM_PREDICTIONS.md`) were committed first.
+`experiments.verifyClaims('MeasurementSpace','cartesian')` uses the same 20 checks
+and unseen seeds 21–30 as that morning's range-space run.
+Log: `results/verify/matlab_verify_cartesian_2026-09-12.log`.
+
+- **X1 confirmed: 20/20 checks pass.**
+- **X2 confirmed, X3 exceeded: every result row is identical to range space,
+  character for character.** That covers the swarm sweep, the emitter check,
+  the skin backtrack at 1 and 0.01 m², the masking cell, the moving-mother
+  cells and 2×4. X3 allowed ±0.15 at 0.01 m²; nothing moved.
+- **Why, and a check that it is not a no-op.** One saved 0.01 m² genuine scene
+  was judged both ways: 6 confirmed tracks each, and of 45 exported fields only
+  `frame_log` (the tracker's own per-frame state) differs. So the Cartesian path
+  is live. The exported range and azimuth series are raw CFAR peaks, each given
+  to the nearest estimated range, and at 1200 m row spacing both trackers confirm
+  the same tracks and claim the same peaks. That is `runJudge`'s containment rule
+  doing what it says.
+- **X4 confirmed.** A genuine formation crossing at 20 m/s is still flagged,
+  because the co-bearing screen reads raw peak azimuths. A tracker change cannot
+  fix it; detrending would.
+
+**Scope.** The equivalence is structural for these scenes, not general. Every
+swarm scene here spaces its rows ≥ 1200 m apart to clear the CFAR window. Where
+targets share or neighbour a range cell the trackers could differ, but there the
+monopulse measurement is itself one blended angle (`test_cartesian_measurement`'s
+own note). F10–F15 now hold in both measurement spaces.
+
 ## Conclusion — the monopulse wall falls to multi-aperture [SIM]
 
 - The single-aperture monopulse wall (F7) STANDS: one drone's N phantoms share a
