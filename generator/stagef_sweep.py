@@ -465,29 +465,64 @@ def run_cell(bridge, cell, wf, geo, num_frames, rep, scratch_dir):
     export_plan_for_render(exports, wf, pre_mat, num_pulses_per_frame=uc.N_PULSES)
 
     t0 = time.time()
-    bridge.render(pre_mat, judge_mat,
-                  FastTimeSamples=fast_time_samples(
-                      wf, geo, num_frames, cell["walk_rate_mps"],
-                      cell["n_phantoms"]))
-    gate = tracker_gate_m(geo, cell["walk_rate_mps"], wf.frame_interval_s)
-    fb = bridge.run_judge(judge_mat, AssignmentThreshold=[gate, float("inf")])
-    return {
-        "outcome": "judged",
-        "veto_reason": "",
-        "confirmed_tracks": fb["confirmed_tracks"],
-        "eccm_label": fb["eccm_label"],
-        "flagged_decoys": fb["flagged_decoys"],
-        "gate_m": gate,
-        "seconds": time.time() - t0,
-    }
+    try:
+        bridge.render(pre_mat, judge_mat,
+                      FastTimeSamples=fast_time_samples(
+                          wf, geo, num_frames, cell["walk_rate_mps"],
+                          cell["n_phantoms"]))
+        gate = tracker_gate_m(geo, cell["walk_rate_mps"], wf.frame_interval_s)
+        fb = bridge.run_judge(judge_mat, AssignmentThreshold=[gate, float("inf")])
+        return {
+            "outcome": "judged",
+            "veto_reason": "",
+            "confirmed_tracks": fb["confirmed_tracks"],
+            "eccm_label": fb["eccm_label"],
+            "flagged_decoys": fb["flagged_decoys"],
+            "gate_m": gate,
+            "seconds": time.time() - t0,
+        }
+    finally:
+        # A cell's two .mat files are ~9 MB at this bench config; over 420 runs
+        # that is 3.8 GB of scratch that once filled the (C:) temp drive and
+        # made render.m's save() fail mid-sweep. Drop each pair as soon as it is
+        # scored -- the manifest and the verdicts CSV are the only records kept.
+        for _p in (pre_mat, judge_mat):
+            try:
+                os.remove(_p)
+            except OSError:
+                pass
 
 
-def sweep(reps=1, max_cells=None, num_frames=DEFAULT_NUM_FRAMES, out_dir=None):
+VERDICT_FIELDS = ["run_key", "cell_id", "rep", "outcome", "veto_reason",
+                  "confirmed_tracks", "eccm_label", "flagged_decoys",
+                  "gate_m", "seconds"]
+
+
+def _read_verdicts(path):
+    """Rows from an existing verdicts CSV, ints/floats coerced back so a resumed
+    run's rows sort and count identically to freshly measured ones."""
+    with open(path, newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    for r in rows:
+        for k in ("confirmed_tracks", "flagged_decoys"):
+            r[k] = int(r[k]) if r.get(k, "") != "" else 0
+        for k in ("gate_m", "seconds"):
+            r[k] = float(r[k]) if r.get(k, "") != "" else 0.0
+    return rows
+
+
+def sweep(reps=1, max_cells=None, num_frames=DEFAULT_NUM_FRAMES, out_dir=None,
+          resume=None):
     """Run the Tier-1 cell list through the twin. Needs MATLAB.
 
     Imports the bridge lazily so --demo works on a machine with no MATLAB
     engine installed at all -- the cell list and its checks are the part that
     has to stay runnable everywhere.
+
+    Each verdict is written and flushed the instant it is scored, so a crash
+    (a transient MATLAB engine error, a full disk) keeps every completed run.
+    Point --resume at that verdicts CSV to skip the run_keys already in it and
+    finish the sweep; the manifest is not rewritten.
     """
     import tempfile
     from generator.decision.matlab_bridge import MatlabBridge
@@ -497,45 +532,68 @@ def sweep(reps=1, max_cells=None, num_frames=DEFAULT_NUM_FRAMES, out_dir=None):
     cells = tier1_cells(wf, geo)[:max_cells]
     os.makedirs(out_dir, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
-    scratch = tempfile.mkdtemp(prefix="stagef_")
+    # Scratch on the SAME drive as the repo (E:, 140 GB), never the C: temp
+    # drive that ran to 0 bytes mid-sweep. Per-run cleanup keeps it near-empty
+    # regardless; this only removes the drive as a second failure mode.
+    scratch_root = os.path.join(out_dir, "scratch")
+    os.makedirs(scratch_root, exist_ok=True)
+    scratch = tempfile.mkdtemp(prefix="stagef_", dir=scratch_root)
 
     # THE MANIFEST IS WRITTEN BEFORE ANY VERDICT EXISTS. That ordering is the
     # blindness protocol made physical: the generator's parameters are committed
     # to disk first, the judge then scores IQ it cannot trace back to them, and
     # the join happens afterwards on run_key. Nothing can be retro-fitted to a
     # verdict that has already come back.
-    man_path = os.path.join(out_dir, "manifest_%s.csv" % stamp)
-    with open(man_path, "w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=["run_key", "cell_id", "rep"]
-                           + sorted(k for k in cells[0] if k != "cell_id"))
-        w.writeheader()
-        for c in cells:
-            for rep in range(reps):
-                row = {k: v for k, v in c.items() if k != "cell_id"}
-                row.update({"run_key": "%s-r%d" % (cell_hash(c), rep),
-                            "cell_id": c["cell_id"], "rep": rep})
-                w.writerow(row)
+    if resume:
+        ver_path = resume
+        done_rows = _read_verdicts(ver_path)
+        done = {r["run_key"] for r in done_rows}
+        results = list(done_rows)
+        man_path = "(resumed, manifest unchanged)"
+        print("  resuming: %d runs already in %s" % (len(done), ver_path))
+        ver_fh = open(ver_path, "a", newline="", encoding="utf-8")
+        writer = csv.DictWriter(ver_fh, fieldnames=VERDICT_FIELDS)
+    else:
+        man_path = os.path.join(out_dir, "manifest_%s.csv" % stamp)
+        with open(man_path, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=["run_key", "cell_id", "rep"]
+                               + sorted(k for k in cells[0] if k != "cell_id"))
+            w.writeheader()
+            for c in cells:
+                for rep in range(reps):
+                    row = {k: v for k, v in c.items() if k != "cell_id"}
+                    row.update({"run_key": "%s-r%d" % (cell_hash(c), rep),
+                                "cell_id": c["cell_id"], "rep": rep})
+                    w.writerow(row)
+        ver_path = os.path.join(out_dir, "verdicts_%s.csv" % stamp)
+        done = set()
+        results = []
+        ver_fh = open(ver_path, "w", newline="", encoding="utf-8")
+        writer = csv.DictWriter(ver_fh, fieldnames=VERDICT_FIELDS)
+        writer.writeheader()
+        ver_fh.flush()
 
-    results = []
-    with MatlabBridge(project_root=_REPO, scratch_dir=scratch) as bridge:
-        for c in cells:
-            for rep in range(reps):
-                r = run_cell(bridge, c, wf, geo, num_frames, rep, scratch)
-                r.update({"run_key": "%s-r%d" % (cell_hash(c), rep),
-                          "cell_id": c["cell_id"], "rep": rep})
-                results.append(r)
-                print("  %-7s rep %d  %-8s confirmed %d  label %-11s %.1fs"
-                      % (c["cell_id"], rep, r["outcome"], r["confirmed_tracks"],
-                         r["eccm_label"] or "-", r["seconds"]))
-
-    ver_path = os.path.join(out_dir, "verdicts_%s.csv" % stamp)
-    with open(ver_path, "w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=["run_key", "cell_id", "rep", "outcome",
-                                           "veto_reason", "confirmed_tracks",
-                                           "eccm_label", "flagged_decoys",
-                                           "gate_m", "seconds"])
-        w.writeheader()
-        w.writerows(results)
+    try:
+        with MatlabBridge(project_root=_REPO, scratch_dir=scratch) as bridge:
+            for c in cells:
+                for rep in range(reps):
+                    run_key = "%s-r%d" % (cell_hash(c), rep)
+                    if run_key in done:
+                        continue
+                    r = run_cell(bridge, c, wf, geo, num_frames, rep, scratch)
+                    r.update({"run_key": run_key, "cell_id": c["cell_id"],
+                              "rep": rep})
+                    results.append(r)
+                    writer.writerow({k: r.get(k, "") for k in VERDICT_FIELDS})
+                    ver_fh.flush()
+                    print("  %-7s rep %d  %-8s confirmed %d  label %-11s %.1fs"
+                          % (c["cell_id"], rep, r["outcome"],
+                             r["confirmed_tracks"], r["eccm_label"] or "-",
+                             r["seconds"]))
+    finally:
+        ver_fh.close()
+        import shutil
+        shutil.rmtree(scratch, ignore_errors=True)
 
     summarise(results, cells)
     print("  manifest  %s" % man_path)
@@ -731,11 +789,15 @@ def main():
                    help="run only the first N cells (smoke test)")
     p.add_argument("--frames", type=int, default=DEFAULT_NUM_FRAMES,
                    help="dwells per run (default %d)" % DEFAULT_NUM_FRAMES)
+    p.add_argument("--resume", default=None, metavar="VERDICTS_CSV",
+                   help="continue a crashed sweep: skip run_keys already in "
+                        "this verdicts CSV and append the rest")
     a = p.parse_args()
     if a.demo:
         return demo()
     if a.tier1:
-        sweep(reps=a.reps, max_cells=a.max_cells, num_frames=a.frames)
+        sweep(reps=a.reps, max_cells=a.max_cells, num_frames=a.frames,
+              resume=a.resume)
         return 0
     p.print_help()
     return 1
