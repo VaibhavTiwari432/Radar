@@ -373,6 +373,68 @@ targets share or neighbour a range cell the trackers could differ, but there the
 monopulse measurement is itself one blended angle (`test_cartesian_measurement`'s
 own note). F10–F15 now hold in both measurement spaces.
 
+## Phase 10 — the agile radar: a true repeater does not care, a stale one starves the counters (12 Sep 2026)
+
+Predictions A1–A4 were committed first (`03d983ab`, with the one-seed smoke run
+disclosed). The run used `experiments.skinBacktrackCheck` with `'Agility'` on seeds
+21–30, swarm and genuine arms, range space. Agility is per-frame sweep reversal
+on a secret i.i.d. schedule, drawn from its own RandStream so the noise is paired
+with agility-off. Only swarm repeater rows carry the stale belief; drone skins and
+genuine aircraft always carry the true chirp (`render.m` per-row
+`PhantomSweepSchedule`). Log: `results/verify/agile_swarm_2026-09-12.log`.
+
+| cell | arm | off | fresh | stale |
+|---|---|---|---|---|
+| 4×1, 1 m² | swarm: backtracked / real | 40 / 40 of 40 | 39 / 38 | **0 / 26** |
+| 4×1, 1 m² | genuine: backtracked / real | 0 / 40 | 0 / 38 | 0 / 38 |
+| 4×1, 0.01 m² | swarm: backtracked / real | 20 / 40 | 18 / 38 | **0 / 26** |
+| 4×1, 0.01 m² | genuine: backtracked / real | 8 / 40 | 4 / 38 | 4 / 38 |
+| 2×4, 1 m² | swarm: backtracked / real | 80 / 80 of 80 | 75 / 80 | **0 / 52** |
+| 2×4, 1 m² | genuine: backtracked / real | 0 / 80 | 0 / 80 | 0 / 80 |
+
+The off column for 4×1 1 m² was re-run on the edited code and reproduces the
+morning's rows exactly. The other off entries are the morning's T3/T5 rows,
+paired on the same seeds and noise. The co-bearing flag is 0/10 in every cell.
+
+- **A1 confirmed.** Against a true repeater, every cell is within one seed of
+  agility-off. Sweep reversal cannot beat a causal repeater: every phantom sits
+  behind its drone, so the repeater always holds the current pulse.
+- **A2 confirmed.** A stale repeater loses detections: real 40→26, 40→26,
+  80→52. Confirmed stale phantoms are mostly still `real` (4 of 30 confirmed
+  phantom tracks at 1 m² were labelled decoy) and never flagged co-bearing.
+- **A3 FALSIFIED: the counter catches 0 stale phantoms in every cell, and so
+  does emitter attribution** (radiated-fake 40→10). A per-track diagnostic on the
+  ten 1 m² scenes shows why. The stale phantoms are detected only on frames where
+  their stale guess happens to match (P = 0.5), so their exported series hold
+  **1–3 usable azimuths**. `skinBacktrack` needs ≥ 4 (`MIN_COMMON`) and returns
+  `undetermined` for every one; the best bearing-match z is ∞ for lack of shared
+  frames, not because the bearings disagree. The label is not gated on that
+  minimum and calls them `real` on 2–3 points: phantom tracks labelled real per
+  seed, 4+0+4+3+3+4+0+0+4+4 = 26, the table's 26/40. In 3 seeds they never
+  confirmed. The nearest drone (5550 m) is starved the same way, with the same
+  1–3 azimuths as the phantoms in every seed: the stale phantoms' smeared,
+  mismatched energy hides it on exactly the mismatched frames. That is F12's
+  CFAR self-masking, widened by the smear. The drones at 1950–4350 m keep 6
+  azimuths and are correctly `unpaired` with each other (z 22–51).
+- **A4 falsified, slightly.** The genuine arm is identical between fresh and
+  stale, as it must be: it has no repeater. But it is not identical to
+  agility-off: agility itself costs 2/40 real on BOTH arms at 4×1 and halves the
+  0.01 m² genuine false alarms (8→4). The cost is sweep reversal, not the
+  repeater. The mechanism is NOT traced; one candidate is LFM range–Doppler
+  coupling, which shifts an up- and a down-chirp's apparent range in opposite
+  directions, so per-frame reversal jitters the range series.
+
+**Reading.** An agile radar changes nothing against a repeater that copies the
+current pulse. Against one that replays a stale chirp it makes the phantoms
+intermittent, and intermittency is what beats the counters. It is not a
+physical escape: the counters abstain below 4 samples while the label still
+passes 2–3 point tracks. That gap is a judge-side one. Requiring the label to
+abstain (`unscreened`) below the counters' own sample minimum would close it,
+but that label change would move results, so it is left for a decision. It
+also names an attacker lever that does not need an agile radar: a repeater that
+deliberately blinks its phantoms, keeping each track confirmed but under 4
+usable frames, would starve the same counters. Not measured.
+
 ## Conclusion — the monopulse wall falls to multi-aperture [SIM]
 
 - The single-aperture monopulse wall (F7) STANDS: one drone's N phantoms share a
