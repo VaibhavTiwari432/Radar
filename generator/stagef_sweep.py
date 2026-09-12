@@ -251,22 +251,40 @@ def anchor_amplitude(plan, snr_db=STAGE_E_SNR_DB,
 # ---------------------------------------------------------------------------
 
 TRAJECTORIES = ("static", "walk_out", "walk_in")
-AMPLITUDE_LAWS = ("physical", "constant")
+# The plan's three range-law levels, as the AMPLITUDE exponent the phantom
+# obeys: physical = the skin-echo law A ~ 1/R^2 (derived, the honest arm);
+# one_way = A ~ 1/R, a repeater that compensates only its one-way path (the
+# realistic half-right mistake); constant = a repeater that does not scale.
+AMPLITUDE_LAWS = ("physical", "one_way", "constant")
+LAW_EXPONENT = {"one_way": 1.0, "constant": 0.0}
+# Duty patterns for the blink cells: period p -> the phantom is OFF on every
+# p-th dwell. Same endpoints as the continuous cell, so they ask Stage F
+# section 5's "does trajectory SHAPE matter?" directly.
+BLINK_PERIOD = {"alt": 2, "2of3": 3}
+SNR_LADDER_DB = (41.0, 36.0, 31.0, 26.0)     # plus the 46 dB main grid = 20 dB span
 DEFAULT_WALK_RATE_MPS = 300.0
 DEFAULT_NUM_FRAMES = 12
 
 
 def tier1_cells(wf, geo, walk_rate_mps=DEFAULT_WALK_RATE_MPS):
-    """The Tier-1 cell list as plain dicts. Pure -- no MATLAB, no files."""
+    """The Tier-1 cell list as plain dicts. Pure -- no MATLAB, no files.
+
+    The FULL Tier-1 grid of Stage F section 3 (12 Sep 2026): trajectory x
+    velocity x range law at the 46 dB anchor, the amplitude ladder and the
+    N->N cell on the best-guess honest configuration, plus two blink cells.
+    The plan's fourth trajectory, `naive` (walk without Doppler), IS the
+    intra_v = 0 row of each walk, so it is not listed twice.
+    """
     v_cap = geo["v_unambiguous"]
-    # 0.0 is the Screen 2 NEGATIVE CONTROL (range moves, phase frozen); the
-    # other two straddle the window so the bin edges are exercised too.
-    intra_choices = (0.0, -v_cap / 3.0, -v_cap * 0.95)
+    # 0.0 is the Screen 2 NEGATIVE CONTROL (range moves, phase frozen); +-1/3
+    # and +-0.95 of the window put Doppler both with and against the walk, and
+    # 0.95 exercises the bin edge without folding.
+    intra_choices = (0.0, v_cap / 3.0, -v_cap / 3.0, v_cap * 0.95, -v_cap * 0.95)
     cells = []
     for traj in TRAJECTORIES:
         for intra_v in intra_choices:
             for law in AMPLITUDE_LAWS:
-                if traj == "static" and law == "physical":
+                if traj == "static" and law != "constant":
                     # A static phantom holds ONE range, so the physical law
                     # yields a constant amplitude anyway -- identical to the
                     # `constant` arm by construction. Dropping it keeps the two
@@ -280,16 +298,22 @@ def tier1_cells(wf, geo, walk_rate_mps=DEFAULT_WALK_RATE_MPS):
                     "amplitude_law": law,
                     "rcs_m2": 1.0,
                     "n_phantoms": 1,
+                    "snr_db": STAGE_E_SNR_DB,
+                    "blink": "none",
                 })
-    # The N->N tracker cell, on the best-guess honest configuration. F0.2's own
-    # gate is already measured at the SIMULATION config
-    # (tests/test_generator_phantom_count.m, 4/4 and 8/8); this asks the same
-    # question at the bench's config, where the range bin is 3.2x coarser.
-    cells.append({
-        "trajectory": "walk_out", "walk_rate_mps": walk_rate_mps,
-        "intra_v_mps": -v_cap / 3.0, "amplitude_law": "physical",
-        "rcs_m2": 1.0, "n_phantoms": 4,
-    })
+    # The best-guess honest configuration: opening walk, Doppler opening too
+    # (+v/3, the same sign as the walk), physical amplitude law.
+    honest = {"trajectory": "walk_out", "walk_rate_mps": walk_rate_mps,
+              "intra_v_mps": v_cap / 3.0, "amplitude_law": "physical",
+              "rcs_m2": 1.0, "n_phantoms": 1, "snr_db": STAGE_E_SNR_DB,
+              "blink": "none"}
+    cells += [dict(honest, snr_db=s) for s in SNR_LADDER_DB]
+    # The N->N tracker cell. F0.2's own gate is already measured at the
+    # SIMULATION config (tests/test_generator_phantom_count.m, 4/4 and 8/8);
+    # this asks the same question at the bench's config, where the range bin is
+    # 3.2x coarser.
+    cells.append(dict(honest, n_phantoms=4))
+    cells += [dict(honest, blink=b) for b in BLINK_PERIOD]
     for i, c in enumerate(cells):
         c["cell_id"] = "T1-%02d" % i
     return cells
@@ -390,18 +414,41 @@ def cell_plan(cell, wf, geo, num_frames, start_range_m=None):
         )
         if not plan.feasible:
             return None, plan.veto_reason
-        if cell["amplitude_law"] == "constant":
-            # THE DECOY ARM: a repeater that does not scale its power with the
-            # range it claims. Amplitude pinned at the trajectory's first value
-            # while the range walks -- exactly the log(A)-vs-log(R) slope
-            # Screen 1 fits, and it should score 0.
-            amp = np.full_like(plan.amplitude.value, plan.amplitude.value[0])
+        # DECOY ARMS: a repeater whose amplitude does not obey the skin-echo
+        # A ~ 1/R^2 law. LAW_EXPONENT gives the 1/R exponent it DOES obey --
+        # one_way = 1 (compensates only its one-way path), constant = 0 (does
+        # not scale at all). The shape is normalised to the physical value at
+        # frame 0, so anchor_amplitude's absolute rescale is untouched and only
+        # the log(A)-vs-log(R) SLOPE Screen 1 fits differs (physical -2,
+        # one_way -1, constant 0).
+        if cell["amplitude_law"] in LAW_EXPONENT:
+            R = np.asarray(plan.range_m, dtype=float)
+            shape = (R[0] / R) ** LAW_EXPONENT[cell["amplitude_law"]]
+            amp = float(plan.amplitude.value[0]) * shape
             plan = dataclasses.replace(plan, amplitude=tag(
                 amp, Provenance.ASSUMED,
-                "Stage F Tier-1 decoy arm: constant amplitude, deliberately "
-                "violating A ~ 1/R^2 so Screen 1 has something to catch"))
-        exports.append(PhantomExport(plan=anchor_amplitude(plan),
-                                     rcs_m2=cell["rcs_m2"]))
+                "Stage F Tier-1 decoy arm '%s': A ~ 1/R^%g, deliberately not the "
+                "skin-echo 1/R^2 so Screen 1 has something to catch"
+                % (cell["amplitude_law"], LAW_EXPONENT[cell["amplitude_law"]])))
+        # BLINK: the phantom is OFF on every p-th dwell (its samples zeroed on
+        # those frames), same endpoints as the continuous cell. Stage F section
+        # 5's "does trajectory SHAPE matter?" and the intermittent attacker the
+        # stale-repeater result exposed (SWARM_RESULTS Phase 10): a track that
+        # confirms but carries few usable frames. Frame 0 is never blinked, so
+        # anchor_amplitude's frame-0 reference stays nonzero.
+        if cell.get("blink", "none") != "none":
+            period = BLINK_PERIOD[cell["blink"]]
+            amp = np.array(plan.amplitude.value, dtype=float)
+            for f in range(num_frames):
+                if (f + 1) % period == 0:
+                    amp[f * uc.N_PULSES:(f + 1) * uc.N_PULSES] = 0.0
+            plan = dataclasses.replace(plan, amplitude=tag(
+                amp, Provenance.ASSUMED,
+                "Stage F Tier-1 blink '%s': phantom OFF every %d dwells"
+                % (cell["blink"], period)))
+        exports.append(PhantomExport(
+            plan=anchor_amplitude(plan, snr_db=cell.get("snr_db", STAGE_E_SNR_DB)),
+            rcs_m2=cell["rcs_m2"]))
     return exports, None
 
 
@@ -590,11 +637,13 @@ def demo():
     for c in cells:
         assert abs(c["intra_v_mps"]) <= geo["v_unambiguous"] + 1e-9, c
 
-    # Both arms present and genuinely different, or there is no negative control.
-    assert set(c["amplitude_law"] for c in cells) == {"physical", "constant"}
+    # All three amplitude laws present, or a decoy arm is missing its control.
+    assert set(c["amplitude_law"] for c in cells) == {"physical", "one_way", "constant"}
     assert any(c["intra_v_mps"] == 0.0 for c in cells), "no Screen 2 control"
     assert any(c["intra_v_mps"] != 0.0 for c in cells), "no Screen 2 signal"
     assert any(c["n_phantoms"] == 4 for c in cells), "no N->N cell"
+    assert any(c["blink"] != "none" for c in cells), "no blink cell"
+    assert len(set(c["snr_db"] for c in cells)) == 1 + len(SNR_LADDER_DB), "SNR ladder missing"
 
     # The receive window must reach past the walk. 400 (render.m's default) does
     # not, and computing it rather than trusting the default is the point.
