@@ -36,6 +36,7 @@ function results = swarmSweep(varargin)
     p.addParameter('SpacingM', 1200);
     p.addParameter('RateMps', -35);
     p.addParameter('SeedOffset', 0);   % seeds SeedOffset+(1:NumSeeds); 0 = the published runs
+    p.addParameter('MeasurementSpace', 'range');   % runJudge's; 'range' = the published runs
     p.parse(varargin{:});
     o = p.Results;
 
@@ -67,7 +68,7 @@ function results = swarmSweep(varargin)
                     'MotherRangeM', 900, 'NumFrames', 8, 'NumPulses', 32, ...
                     'SourceAzimuthRad', 0, 'PhantomAzimuthRad', az, ...
                     'Tag', sprintf('swarm_N%d_s%d_%d', N, round(sDeg*10), seed + o.SeedOffset));
-                fb = engine.runJudge(jm);
+                fb = engine.runJudge(jm, 'MeasurementSpace', o.MeasurementSpace);
                 lbl = cellstr(fb.track_label);
                 survivors(seed) = nnz(strcmp(lbl, 'real'));
                 flagged(seed)   = nnz(strcmp(lbl, 'decoy'));

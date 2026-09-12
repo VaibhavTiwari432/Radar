@@ -32,6 +32,7 @@ function results = swarmEmitterCheck(varargin)
     p.addParameter('CrossSpeedsMps', []);   % [] -> linspace(-3,3,N) for 'moving'
     p.addParameter('UseBaseline2', false, @islogical);   % the radar's swarm counter
     p.addParameter('SeedOffset', 0);   % seeds SeedOffset+(1:NumSeeds); 0 = the published runs
+    p.addParameter('MeasurementSpace', 'range');   % runJudge's; 'range' = the published runs
     p.parse(varargin{:});
     o = p.Results;
 
@@ -81,7 +82,7 @@ function results = swarmEmitterCheck(varargin)
                 'SourceAzimuthRad', 0, 'PhantomAzimuthRad', az, ...
                 'IncludeSecondBaseline', o.UseBaseline2, ...
                 'Tag', sprintf('swemit_%s_b2%d_%d', mode, o.UseBaseline2, seed + o.SeedOffset));
-            fb = engine.runJudge(jm);
+            fb = engine.runJudge(jm, 'MeasurementSpace', o.MeasurementSpace);
             lbl = cellstr(fb.track_label);
             survivors(seed) = nnz(strcmp(lbl, 'real'));
             verdict = track.emitterAttribution(fb);

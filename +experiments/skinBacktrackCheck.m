@@ -54,6 +54,7 @@ function results = skinBacktrackCheck(varargin)
     p.addParameter('MtiNotchMps', 0);
     p.addParameter('Arms', ["swarm", "genuine", "trailing"]);
     p.addParameter('SeedOffset', 0);   % seeds SeedOffset+(1:NumSeeds); 0 = the published runs
+    p.addParameter('MeasurementSpace', 'range');   % runJudge's; 'range' = the published runs
     p.parse(varargin{:});
     o = p.Results;
 
@@ -89,11 +90,12 @@ function results = skinBacktrackCheck(varargin)
         b = 0; v = vel(2); vg = -v * ones(N*K, 1); t0 = t(end) / 2;
     end
     tt = t - t0;
-    judgeArgs = {};
-    if o.MtiNotchMps > 0; judgeArgs = {'MtiNotchMps', o.MtiNotchMps}; end
+    judgeArgs = {'MeasurementSpace', o.MeasurementSpace};
+    if o.MtiNotchMps > 0; judgeArgs = [judgeArgs, {'MtiNotchMps', o.MtiNotchMps}]; end
 
-    fprintf('\n=== SKIN BACKTRACK CHECK [SIM] === N=%d K=%d, %d seeds, drones %g-%g m, clutter %s, MTI %g, vel %s\n', ...
-        N, K, o.NumSeeds, Rd(1), Rd(end), mat2str(o.ClutterGammaDB), o.MtiNotchMps, mat2str(o.DroneVelocityMps));
+    fprintf('\n=== SKIN BACKTRACK CHECK [SIM] === N=%d K=%d, %d seeds, drones %g-%g m, clutter %s, MTI %g, vel %s, space %s\n', ...
+        N, K, o.NumSeeds, Rd(1), Rd(end), mat2str(o.ClutterGammaDB), o.MtiNotchMps, mat2str(o.DroneVelocityMps), ...
+        char(o.MeasurementSpace));
     fprintf('%-9s %8s %10s %16s %10s %22s %8s %8s %6s\n', 'arm', 'rcs', 'skin det', ...
         'far backtracked', 'to own', 'far real / flagged CI', 'cob', 'EA fake', 'unm');
     results = struct('arm', {}, 'rcs', {}, 'K', {}, 'skinByDrone', {}, 'skinDetected', {}, ...

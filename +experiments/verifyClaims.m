@@ -11,28 +11,34 @@ function V = verifyClaims(varargin)
 %
 %   'NumSeeds'   10
 %   'SeedOffset' 20     the published runs used seeds 1-20
+%   'MeasurementSpace' 'range'   runJudge's tracker space. 'cartesian' skips
+%                       T0, whose log was measured in range space.
 %
 %   Returns V, a struct array (name, ok); prints PASS/FAIL per check.
 
     p = inputParser;
     p.addParameter('NumSeeds', 10);
     p.addParameter('SeedOffset', 20);
+    p.addParameter('MeasurementSpace', 'range');
     p.parse(varargin{:});
     ns = p.Results.NumSeeds; off = p.Results.SeedOffset;
-    held = {'NumSeeds', ns, 'SeedOffset', off};
+    ms = char(p.Results.MeasurementSpace);
+    held = {'NumSeeds', ns, 'SeedOffset', off, 'MeasurementSpace', ms};
     V = struct('name', {}, 'ok', {});
 
     % T0 -- determinism: the 1x4 rows of multi_swarm_thermal.log, seeds 1-20.
-    try
-        r = experiments.skinBacktrackCheck('N', 1, 'K', 4, 'PlatformRcs', 1, 'GapM', 2400, ...
-            'NumSeeds', 20, 'Arms', ["swarm", "genuine"]);
-        s = r(1); g = r(2);
-        V(end+1) = chk('T0 replay 1x4 swarm == log: 80/80 backtracked to own, 0/80 real, cob 20/20, EA 80', ...
-            s.k == 80 && s.toOwnDrone == 80 && s.farReal == 0 && s.cobFlagged == 1 && round(s.farFake * s.n) == 80);
-        V(end+1) = chk('T0 replay 1x4 genuine == log: 0/80 backtracked, 80/80 real, cob 0/20, EA 3', ...
-            g.k == 0 && g.farReal == 1 && g.cobFlagged == 0 && round(g.farFake * g.n) == 3);
-    catch e
-        V(end+1) = chk(['T0 crashed: ' e.message], false);
+    if strcmpi(ms, 'range')
+        try
+            r = experiments.skinBacktrackCheck('N', 1, 'K', 4, 'PlatformRcs', 1, 'GapM', 2400, ...
+                'NumSeeds', 20, 'Arms', ["swarm", "genuine"]);
+            s = r(1); g = r(2);
+            V(end+1) = chk('T0 replay 1x4 swarm == log: 80/80 backtracked to own, 0/80 real, cob 20/20, EA 80', ...
+                s.k == 80 && s.toOwnDrone == 80 && s.farReal == 0 && s.cobFlagged == 1 && round(s.farFake * s.n) == 80);
+            V(end+1) = chk('T0 replay 1x4 genuine == log: 0/80 backtracked, 80/80 real, cob 0/20, EA 3', ...
+                g.k == 0 && g.farReal == 1 && g.cobFlagged == 0 && round(g.farFake * g.n) == 3);
+        catch e
+            V(end+1) = chk(['T0 crashed: ' e.message], false);
+        end
     end
 
     % T1 -- F10: one aperture's phantoms never survive; a spread swarm does.
@@ -121,8 +127,8 @@ function V = verifyClaims(varargin)
         V(end+1) = chk(['T5 crashed: ' e.message], false);
     end
 
-    fprintf('\n=== VERIFY CLAIMS [SIM]: %d/%d checks pass (unseen seeds %d-%d; T0 on 1-20) ===\n', ...
-        nnz([V.ok]), numel(V), off + 1, off + ns);
+    fprintf('\n=== VERIFY CLAIMS [SIM, %s space]: %d/%d checks pass (unseen seeds %d-%d) ===\n', ...
+        ms, nnz([V.ok]), numel(V), off + 1, off + ns);
     for v = V(~[V.ok]); fprintf('  FAIL: %s\n', v.name); end
 end
 

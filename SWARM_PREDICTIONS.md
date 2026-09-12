@@ -175,6 +175,40 @@ above the upper bound of the cells where the skin survives. Success (multi): in
 every shape, the swarm's backtrack CI lower bound is above the genuine arm's
 upper bound.
 
+## Cartesian tracker — predictions X1–X4 (committed before its measurement)
+
+Every swarm result so far used `runJudge`'s default `MeasurementSpace='range'`.
+The re-run is `experiments.verifyClaims('MeasurementSpace','cartesian')` with the
+same checks, thresholds and unseen seeds 21–30 as the 12 Sep range-space run,
+which is the baseline (T0 is skipped: it replays a range-space log).
+
+What 'cartesian' changes, read from the code: the tracker state becomes
+[x vx y vy z vz], gated with the spherical→Cartesian Jacobian covariance. What it
+does NOT change: the exported per-track range and azimuth series are still raw CFAR
+peaks, each given to the track whose estimated range is nearest (`runJudge`
+series rebuild). So the co-bearing screen, the skin backtrack and emitter attribution
+see the same kind of input. The change reaches them only through WHICH tracks confirm
+and WHICH peak a track claims.
+
+**X1 — no conclusion moves.** All 20 T1–T5 checks pass in Cartesian space.
+
+**X2 — high-SNR cells are unchanged.** Rows sit 1200 m apart (25 range cells), so
+association is unambiguous wherever every row confirms: T1, T2, T3 at 1 m², T3b
+and T5 give the same counts as range space, to within one seed per cell.
+
+**X3 — low SNR is where it could move, and not far.** At 0.01 m² and in the
+trailing arm the cross-range gate (R·σ_az, growing with range) may confirm a faint
+skin track differently. Fractions stay within ±0.15 of range space, and the
+conclusion (swarm catch ≥ 0.2 above genuine) holds.
+
+**X4 — the F14 formation false alarm persists.** The co-bearing screen reads the
+raw peak azimuth std, not the filter state, so a genuine formation crossing at
+20 m/s is still flagged ≥ 0.8. A Cartesian tracker does not fix it; detrending would.
+
+**If a check fails:** report the check, put it next to the same cell in the
+range-space log, and trace it to confirmation or peak assignment before calling it
+a physics result.
+
 ## What P2 does NOT yet claim
 
 Surviving the co-bearing screen is not deception: Phase 2 must show the phantom
